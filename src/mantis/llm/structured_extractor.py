@@ -26,8 +26,9 @@ try:
     PYDANTIC_AI_AVAILABLE = True
 except ImportError:
     PYDANTIC_AI_AVAILABLE = False
-    Agent = Any
-    Model = Any
+    # Create placeholder aliases to avoid type errors
+    Agent = Any  # type: ignore
+    Model = Any  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -318,14 +319,30 @@ class StructuredExtractor:
                 # Make optional if has default
                 annotations[field.name] = Optional[field_type] if field_type is not type(None) else field_type
             else:
-                default_value = Field(default=None)
-                annotations[field.name] = Optional[field_type] if field_type is not type(None) else field_type
+                # Check if this is a list type and provide appropriate default
+                from typing import get_origin
+
+                try:
+                    if get_origin(field_type) is list:
+                        default_value = Field(default_factory=list)
+                        annotations[field.name] = field_type
+                    else:
+                        default_value = Field(default=None)  # type: ignore
+                        annotations[field.name] = Optional[field_type] if field_type is not type(None) else field_type
+                except (TypeError, AttributeError):
+                    # Fallback for simple types
+                    if hasattr(field_type, "__origin__") and field_type.__origin__ is list:
+                        default_value = Field(default_factory=list)
+                        annotations[field.name] = field_type
+                    else:
+                        default_value = Field(default=None)  # type: ignore
+                        annotations[field.name] = Optional[field_type] if field_type is not type(None) else field_type
 
             fields[field.name] = default_value
 
         # Create dynamic pydantic model class with proper annotations
         # Need to set annotations before creating the class
-        fields["__annotations__"] = annotations
+        fields["__annotations__"] = annotations  # type: ignore
         model_class = type(f"{protobuf_type.__name__}Pydantic", (BaseModel,), fields)
 
         return model_class

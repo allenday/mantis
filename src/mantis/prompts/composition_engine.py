@@ -76,7 +76,7 @@ class PromptCompositionEngine:
 
         # Generate content from each module
         module_contents = []
-        variables_resolved = {}
+        variables_resolved: dict[str, Any] = {}
 
         for module in applicable_modules:
             try:

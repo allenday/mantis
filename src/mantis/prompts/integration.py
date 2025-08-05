@@ -9,7 +9,6 @@ from typing import Optional, Dict, Any, List
 import logging
 
 from .composition_engine import PromptCompositionEngine, CompositionContext, CompositionStrategy
-from .variables import VariableSystem
 from ..agent.card import ensure_mantis_agent_card
 from ..proto.mantis.v1.mantis_core_pb2 import SimulationInput, AgentSpec
 from ..proto.mantis.v1.mantis_persona_pb2 import MantisAgentCard, RolePreference
@@ -27,7 +26,6 @@ class PromptIntegrationService:
 
     def __init__(self):
         self._composition_engine = PromptCompositionEngine()
-        self._variable_system = VariableSystem()
 
     def generate_agent_prompt(
         self,
@@ -98,22 +96,28 @@ class PromptIntegrationService:
         )
         requires_coordination = team_size > 1
 
-        # Create context
+        # Create context - add role and execution info to execution_context dict
+        enhanced_execution_context = execution_context.copy()
+        enhanced_execution_context.update(
+            {
+                "current_depth": current_depth,
+                "max_depth": max_depth,
+                "team_size": team_size,
+                "agent_index": Agent_index,
+                "is_leader": role_assignment["is_leader"],
+                "is_follower": role_assignment["is_follower"],
+                "is_narrator": role_assignment["is_narrator"],
+                "team_composition": team_composition,
+                "requires_delegation": requires_delegation,
+                "requires_coordination": requires_coordination,
+            }
+        )
+
         context = CompositionContext(
-            agent_card=agent_card,
+            mantis_card=agent_card,
             simulation_input=simulation_input,
             agent_spec=agent_spec,
-            current_depth=current_depth,
-            max_depth=max_depth,
-            team_size=team_size,
-            agent_index=Agent_index,
-            is_leader=role_assignment["is_leader"],
-            is_follower=role_assignment["is_follower"],
-            is_narrator=role_assignment["is_narrator"],
-            team_composition=team_composition,
-            requires_delegation=requires_delegation,
-            requires_coordination=requires_coordination,
-            execution_context=execution_context,
+            execution_context=enhanced_execution_context,
         )
 
         return context
@@ -150,7 +154,7 @@ class PromptIntegrationService:
                 "follower": role_adaptation.follower_score,
                 "narrator": role_adaptation.narrator_score,
             }
-            best_role = max(scores, key=scores.get)
+            best_role = max(scores, key=lambda k: scores[k])
 
             return {
                 "is_leader": best_role == "leader",

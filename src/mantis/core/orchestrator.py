@@ -115,6 +115,7 @@ class DirectExecutor(ExecutionStrategy):
         try:
             from ..tools.web_fetch import WebFetchTool, WebFetchConfig
             from ..tools.web_search import WebSearchTool, WebSearchConfig
+            from ..tools.git_operations import GitOperationsTool, GitOperationsConfig
 
             # Initialize WebFetchTool with secure defaults
             web_fetch_config = WebFetchConfig(
@@ -136,6 +137,18 @@ class DirectExecutor(ExecutionStrategy):
                 enable_suggestions=True,
             )
             self._tools["web_search"] = WebSearchTool(web_search_config)
+
+            # Initialize GitOperationsTool with secure defaults
+            git_config = GitOperationsConfig(
+                max_repo_size_mb=100.0,
+                max_files=1000,
+                allowed_schemes=["https"],
+                blocked_domains=["localhost", "127.0.0.1", "0.0.0.0", "192.168.", "10.", "172."],
+                clone_timeout=300.0,
+                temp_cleanup=True,
+                max_search_results=50,
+            )
+            self._tools["git_operations"] = GitOperationsTool(git_config)
 
         except ImportError:
             # Tools not available, continue without them
