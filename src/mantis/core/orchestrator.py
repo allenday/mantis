@@ -5,11 +5,9 @@ Core simulation orchestrator for executing multi-agent scenarios.
 import time
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, List
-from dataclasses import dataclass
-from pydantic import BaseModel
 
 from ..proto.mantis.v1 import mantis_core_pb2
-from ..proto.mantis.v1.prompt_composition_pb2 import ExecutionContext as ProtoExecutionContext
+from ..proto.mantis.v1.prompt_composition_pb2 import ExecutionContext as ProtoExecutionContext, SimulationContext
 from ..config import DEFAULT_MODEL, DEFAULT_TEMPERATURE
 
 
@@ -187,13 +185,7 @@ class A2AExecutor(ExecutionStrategy):
         return mantis_core_pb2.EXECUTION_STRATEGY_A2A
 
 
-@dataclass
-class ExecutionContext:
-    """Context information for a simulation execution."""
-    start_time: float
-    strategy: ExecutionStrategy
-    simulation_input: mantis_core_pb2.SimulationInput
-    current_depth: int = 0
+# Removed dataclass ExecutionContext - using proto SimulationContext instead
 
 
 class SimulationOrchestrator:
@@ -262,13 +254,12 @@ class SimulationOrchestrator:
             # Convert to SimulationInput
             simulation_input = self.user_request_to_simulation_input(user_request)
             
-            # Create execution context
-            context = ExecutionContext(
-                start_time=start_time,
-                strategy=self._strategies[simulation_input.execution_strategy],
-                simulation_input=simulation_input,
-                current_depth=0
-            )
+            # Create execution context using proto
+            context = SimulationContext()
+            context.start_time = start_time
+            context.strategy = simulation_input.execution_strategy
+            context.simulation_input.CopyFrom(simulation_input)
+            context.current_depth = 0
             
             # Execute simulation
             simulation_output = await self._execute_simulation_internal(context)
@@ -311,10 +302,10 @@ class SimulationOrchestrator:
             
             return simulation_output
     
-    async def _execute_simulation_internal(self, context: ExecutionContext) -> mantis_core_pb2.SimulationOutput:
+    async def _execute_simulation_internal(self, context: SimulationContext) -> mantis_core_pb2.SimulationOutput:
         """Internal simulation execution logic."""
         simulation_input = context.simulation_input
-        strategy = context.strategy
+        strategy = self._strategies[context.strategy]
         
         # For now, execute all agents independently (no recursion yet)
         agent_responses: List[mantis_core_pb2.AgentResponse] = []
