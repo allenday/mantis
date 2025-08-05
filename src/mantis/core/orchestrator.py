@@ -157,7 +157,7 @@ class DirectExecutor(ExecutionStrategy):
         """Initialize available tools for direct execution."""
         try:
             from ..tools import GitLabTool, GitLabConfig
-            
+
             # Create GitLab tool with placeholder config (agents can reconfigure as needed)
             gitlab_config = GitLabConfig(personal_access_token="", read_only_mode=True)
             gitlab_tool = GitLabTool(gitlab_config)
@@ -165,6 +165,7 @@ class DirectExecutor(ExecutionStrategy):
         except Exception as e:
             # GitLab tool initialization failed, log but continue
             import logging
+
             logger = logging.getLogger(__name__)
             logger.warning(f"Failed to initialize GitLab tool: {e}")
 
