@@ -26,7 +26,7 @@ from google.api import annotations_pb2 as google_dot_api_dot_annotations__pb2
 from google.api import client_pb2 as google_dot_api_dot_client__pb2
 from google.api import field_behavior_pb2 as google_dot_api_dot_field__behavior__pb2
 from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
-from mantis.v1 from . import mantis_core_pb2 as mantis_dot_v1_dot_mantis__core__pb2
+from . import mantis_core_pb2 as mantis_dot_v1_dot_mantis__core__pb2
 from ... import registry_pb2 as registry__pb2
 
 
