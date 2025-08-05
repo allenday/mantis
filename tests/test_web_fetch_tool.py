@@ -1,5 +1,5 @@
 """
-Tests for WebFetchTool functionality.
+Tests for WebFetchTool with security features and rate limiting.
 """
 
 import asyncio
@@ -7,423 +7,454 @@ import json
 import pytest
 from unittest.mock import AsyncMock, Mock, patch
 from typing import Dict, Any
+import aiohttp
 
-import httpx
-
-from mantis.tools.web_fetch import WebFetchTool, WebFetchConfig, WebResponse, RateLimiter
+from mantis.tools.web_fetch import (
+    WebFetchTool,
+    WebFetchConfig,
+    WebResponse,
+    RateLimiter,
+)
 
 
 class TestRateLimiter:
-    """Test the rate limiter component."""
-    
+    """Test suite for RateLimiter."""
+
     @pytest.mark.asyncio
-    async def test_rate_limit_allow_initial_requests(self):
-        """Test that initial requests within limit are allowed."""
+    async def test_rate_limiter_allows_requests_within_limit(self):
+        """Test that rate limiter allows requests within the limit."""
         limiter = RateLimiter(max_requests=5, window_seconds=60)
         
         # First 5 requests should be allowed
         for _ in range(5):
-            allowed = await limiter.acquire()
-            assert allowed is True
-    
-    @pytest.mark.asyncio
-    async def test_rate_limit_block_excess_requests(self):
-        """Test that requests exceeding limit are blocked."""
-        limiter = RateLimiter(max_requests=2, window_seconds=60)
+            assert await limiter.acquire() is True
         
-        # First 2 requests should be allowed
-        assert await limiter.acquire() is True
-        assert await limiter.acquire() is True
-        
-        # Third request should be blocked
+        # 6th request should be denied
         assert await limiter.acquire() is False
-    
+
     @pytest.mark.asyncio
-    async def test_rate_limit_window_reset(self):
-        """Test that rate limit resets after window expires."""
-        limiter = RateLimiter(max_requests=1, window_seconds=1)
+    async def test_rate_limiter_window_sliding(self):
+        """Test that rate limiter window slides correctly."""
+        limiter = RateLimiter(max_requests=2, window_seconds=1)
         
-        # First request allowed
+        # Use up the limit
         assert await limiter.acquire() is True
-        
-        # Second request blocked
+        assert await limiter.acquire() is True
         assert await limiter.acquire() is False
         
-        # Wait for window to reset
+        # Wait for window to slide
         await asyncio.sleep(1.1)
         
-        # Request should be allowed again
+        # Should be able to make requests again
         assert await limiter.acquire() is True
 
 
-class TestWebFetchConfig:
-    """Test WebFetchConfig model."""
-    
-    def test_default_config(self):
+class TestWebFetchTool:
+    """Test suite for WebFetchTool."""
+
+    @pytest.fixture
+    def config(self):
+        """Create test configuration."""
+        return WebFetchConfig(
+            timeout=10.0,
+            rate_limit_requests=10,
+            rate_limit_window=60,
+            verify_ssl=True,
+            max_content_size=1024 * 1024,  # 1MB for tests
+        )
+
+    @pytest.fixture
+    def web_fetch_tool(self, config):
+        """Create WebFetchTool instance."""
+        return WebFetchTool(config)
+
+    @pytest.fixture
+    def mock_session_response(self):
+        """Create mock aiohttp response."""
+        mock_response = Mock()
+        mock_response.status = 200
+        mock_response.headers = {"content-type": "text/html", "content-length": "100"}
+        mock_response.url = "https://example.com"
+        
+        # Mock content iteration
+        mock_content = Mock()
+        mock_content.iter_chunked.return_value = [b"test content"].__iter__()
+        mock_response.content = mock_content
+        
+        return mock_response
+
+    def test_url_validation_valid_urls(self, web_fetch_tool):
+        """Test URL validation with valid URLs."""
+        valid_urls = [
+            "https://example.com",
+            "http://example.com/path",
+            "https://subdomain.example.com:8080/path?query=value",
+        ]
+        
+        for url in valid_urls:
+            assert web_fetch_tool._validate_url(url) is True
+
+    def test_url_validation_invalid_urls(self, web_fetch_tool):
+        """Test URL validation with invalid URLs."""
+        invalid_urls = [
+            "ftp://example.com",  # Invalid scheme
+            "https://localhost",  # Blocked domain
+            "http://127.0.0.1",   # Blocked IP
+            "invalid-url",        # Invalid format
+            "",                   # Empty URL
+        ]
+        
+        for url in invalid_urls:
+            assert web_fetch_tool._validate_url(url) is False
+
+    def test_url_validation_with_allowed_domains(self):
+        """Test URL validation with allowed domains."""
+        config = WebFetchConfig(allowed_domains=["example.com", "trusted.org"])
+        tool = WebFetchTool(config)
+        
+        assert tool._validate_url("https://example.com") is True
+        assert tool._validate_url("https://trusted.org") is True
+        assert tool._validate_url("https://untrusted.com") is False
+
+    def test_url_validation_private_ips(self, web_fetch_tool):
+        """Test URL validation blocks private IP ranges."""
+        private_ips = [
+            "http://10.0.0.1",
+            "https://192.168.1.1",
+            "http://172.16.0.1",
+        ]
+        
+        for url in private_ips:
+            assert web_fetch_tool._validate_url(url) is False
+
+    @pytest.mark.asyncio
+    async def test_context_manager(self, web_fetch_tool):
+        """Test async context manager functionality."""
+        async with web_fetch_tool as tool:
+            assert tool is web_fetch_tool
+            assert tool._session is not None
+            assert isinstance(tool._session, aiohttp.ClientSession)
+
+    @pytest.mark.asyncio
+    async def test_fetch_url_without_session(self, web_fetch_tool):
+        """Test fetch_url fails without initialized session."""
+        response = await web_fetch_tool.fetch_url("https://example.com")
+        
+        assert response.success is False
+        assert "Session not initialized" in response.error_message
+
+    @pytest.mark.asyncio
+    async def test_fetch_url_invalid_url(self, web_fetch_tool):
+        """Test fetch_url with invalid URL."""
+        async with web_fetch_tool:
+            response = await web_fetch_tool.fetch_url("https://localhost")
+        
+        assert response.success is False
+        assert "URL validation failed" in response.error_message
+
+    @pytest.mark.asyncio
+    async def test_fetch_url_success(self, web_fetch_tool, mock_session_response):
+        """Test successful URL fetch."""
+        with patch('aiohttp.ClientSession') as mock_session_class:
+            mock_session = Mock()
+            mock_session_class.return_value = mock_session
+            
+            # Setup context manager for session
+            mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session.__aexit__ = AsyncMock()
+            mock_session.close = AsyncMock()
+            
+            # Setup request method
+            mock_session.request = AsyncMock()
+            mock_session.request.return_value.__aenter__ = AsyncMock(return_value=mock_session_response)
+            mock_session.request.return_value.__aexit__ = AsyncMock()
+            
+            async with web_fetch_tool:
+                response = await web_fetch_tool.fetch_url("https://example.com")
+            
+            assert response.status_code == 200
+            assert response.success is True
+            assert "test content" in response.content
+            assert response.response_time_ms > 0
+
+    @pytest.mark.asyncio
+    async def test_fetch_url_timeout(self, web_fetch_tool):
+        """Test fetch_url timeout handling."""
+        with patch('aiohttp.ClientSession') as mock_session_class:
+            mock_session = Mock()
+            mock_session_class.return_value = mock_session
+            
+            mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session.__aexit__ = AsyncMock()
+            mock_session.close = AsyncMock()
+            
+            # Make request raise timeout
+            mock_session.request = AsyncMock(side_effect=asyncio.TimeoutError())
+            
+            async with web_fetch_tool:
+                response = await web_fetch_tool.fetch_url("https://example.com")
+            
+            assert response.success is False
+            assert "Request timeout" in response.error_message
+
+    @pytest.mark.asyncio
+    async def test_fetch_url_content_too_large(self, web_fetch_tool):
+        """Test fetch_url with content too large."""
+        # Create config with very small max size
+        small_config = WebFetchConfig(max_content_size=10)
+        small_tool = WebFetchTool(small_config)
+        
+        with patch('aiohttp.ClientSession') as mock_session_class:
+            mock_session = Mock()
+            mock_session_class.return_value = mock_session
+            
+            mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session.__aexit__ = AsyncMock()
+            mock_session.close = AsyncMock()
+            
+            # Mock response with large content-length
+            mock_response = Mock()
+            mock_response.status = 200
+            mock_response.headers = {"content-length": "1000000"}  # 1MB
+            mock_response.url = "https://example.com"
+            
+            mock_session.request = AsyncMock()
+            mock_session.request.return_value.__aenter__ = AsyncMock(return_value=mock_response)
+            mock_session.request.return_value.__aexit__ = AsyncMock()
+            
+            async with small_tool:
+                response = await small_tool.fetch_url("https://example.com")
+            
+            assert response.success is False
+            assert "Content too large" in response.error_message
+
+    @pytest.mark.asyncio
+    async def test_fetch_json_success(self, web_fetch_tool):
+        """Test successful JSON fetch."""
+        test_data = {"key": "value", "number": 42}
+        
+        with patch.object(web_fetch_tool, 'fetch_url') as mock_fetch:
+            mock_fetch.return_value = WebResponse(
+                status_code=200,
+                content=json.dumps(test_data),
+                headers={"content-type": "application/json"},
+                success=True,
+                url="https://example.com/api",
+                error_message=None,
+                response_time_ms=100.0
+            )
+            
+            async with web_fetch_tool:
+                result = await web_fetch_tool.fetch_json("https://example.com/api")
+            
+            assert result == test_data
+
+    @pytest.mark.asyncio
+    async def test_fetch_json_invalid_json(self, web_fetch_tool):
+        """Test fetch_json with invalid JSON."""
+        with patch.object(web_fetch_tool, 'fetch_url') as mock_fetch:
+            mock_fetch.return_value = WebResponse(
+                status_code=200,
+                content="invalid json",
+                headers={"content-type": "application/json"},
+                success=True,
+                url="https://example.com/api",
+                error_message=None,
+                response_time_ms=100.0
+            )
+            
+            async with web_fetch_tool:
+                with pytest.raises(Exception, match="Invalid JSON response"):
+                    await web_fetch_tool.fetch_json("https://example.com/api")
+
+    @pytest.mark.asyncio
+    async def test_fetch_json_request_failure(self, web_fetch_tool):
+        """Test fetch_json with request failure."""
+        with patch.object(web_fetch_tool, 'fetch_url') as mock_fetch:
+            mock_fetch.return_value = WebResponse(
+                status_code=404,
+                content="",
+                headers={},
+                success=False,
+                url="https://example.com/api",
+                error_message="HTTP 404",
+                response_time_ms=100.0
+            )
+            
+            async with web_fetch_tool:
+                with pytest.raises(Exception, match="Failed to fetch URL"):
+                    await web_fetch_tool.fetch_json("https://example.com/api")
+
+    @pytest.mark.asyncio
+    async def test_fetch_text_success(self, web_fetch_tool):
+        """Test successful text fetch."""
+        test_text = "Hello, world!"
+        
+        with patch.object(web_fetch_tool, 'fetch_url') as mock_fetch:
+            mock_fetch.return_value = WebResponse(
+                status_code=200,
+                content=test_text,
+                headers={"content-type": "text/plain"},
+                success=True,
+                url="https://example.com/text",
+                error_message=None,
+                response_time_ms=100.0
+            )
+            
+            async with web_fetch_tool:
+                result = await web_fetch_tool.fetch_text("https://example.com/text")
+            
+            assert result == test_text
+
+    @pytest.mark.asyncio
+    async def test_post_data_success(self, web_fetch_tool):
+        """Test successful POST data."""
+        test_data = {"name": "test", "value": 123}
+        
+        with patch.object(web_fetch_tool, 'fetch_url') as mock_fetch:
+            mock_fetch.return_value = WebResponse(
+                status_code=201,
+                content='{"id": 1, "status": "created"}',
+                headers={"content-type": "application/json"},
+                success=True,
+                url="https://example.com/api",
+                error_message=None,
+                response_time_ms=200.0
+            )
+            
+            async with web_fetch_tool:
+                response = await web_fetch_tool.post_data("https://example.com/api", test_data)
+            
+            assert response.success is True
+            assert response.status_code == 201
+            
+            # Verify fetch_url was called with correct parameters
+            mock_fetch.assert_called_once()
+            call_args = mock_fetch.call_args
+            assert call_args[0][0] == "https://example.com/api"  # URL
+            assert call_args[1]['method'] == "POST"
+            assert call_args[1]['headers']['Content-Type'] == 'application/json'
+            assert json.loads(call_args[1]['data']) == test_data
+
+    def test_configuration_defaults(self):
         """Test default configuration values."""
         config = WebFetchConfig()
         
         assert config.timeout == 30.0
+        assert config.max_redirects == 10
         assert config.max_content_size == 10 * 1024 * 1024
-        assert config.user_agent == "Mantis-Agent/1.0 (Web Fetch Tool)"
-        assert config.follow_redirects is True
-        assert config.verify_ssl is True
-        assert config.allowed_schemes == ["http", "https"]
-        assert config.blocked_domains == []
-        assert config.allowed_domains is None
         assert config.rate_limit_requests == 60
         assert config.rate_limit_window == 60
-    
-    def test_custom_config(self):
-        """Test custom configuration values."""
-        config = WebFetchConfig(
-            timeout=10.0,
-            max_content_size=1024,
-            blocked_domains=["evil.com"],
-            allowed_domains=["safe.com"]
+        assert config.verify_ssl is True
+        assert "localhost" in config.blocked_domains
+        assert "127.0.0.1" in config.blocked_domains
+
+    def test_web_response_model(self):
+        """Test WebResponse pydantic model."""
+        response = WebResponse(
+            status_code=200,
+            content="test content",
+            headers={"content-type": "text/html"},
+            success=True,
+            url="https://example.com",
+            error_message=None,
+            response_time_ms=150.0
         )
         
-        assert config.timeout == 10.0
-        assert config.max_content_size == 1024
-        assert config.blocked_domains == ["evil.com"]
-        assert config.allowed_domains == ["safe.com"]
+        assert response.status_code == 200
+        assert response.content == "test content"
+        assert response.headers["content-type"] == "text/html"
+        assert response.success is True
+        assert response.url == "https://example.com"
+        assert response.error_message is None
+        assert response.response_time_ms == 150.0
 
+    def test_get_tools_method(self, web_fetch_tool):
+        """Test get_tools method for pydantic-ai integration."""
+        tools = web_fetch_tool.get_tools()
+        
+        assert isinstance(tools, dict)
+        assert 'fetch_url' in tools
+        assert 'fetch_json' in tools
+        assert 'fetch_text' in tools
+        assert 'post_data' in tools
+        assert tools['fetch_url'] is web_fetch_tool
 
-class TestWebFetchTool:
-    """Test WebFetchTool functionality."""
-    
-    @pytest.fixture
-    def web_tool(self):
-        """Create WebFetchTool instance for testing."""
-        config = WebFetchConfig(
-            rate_limit_requests=100,  # High limit for testing
-            timeout=5.0
-        )
-        return WebFetchTool(config)
-    
-    @pytest.fixture
-    def mock_response(self):
-        """Create mock HTTP response."""
-        response = Mock()
-        response.status_code = 200
-        response.is_success = True
-        response.reason_phrase = "OK"
-        response.headers = {"content-type": "text/html"}
-        response.text = "<html><body>Test content</body></html>"
-        response.content = b"<html><body>Test content</body></html>"
-        response.url = "https://example.com"
-        return response
-    
-    def test_url_validation_allowed(self):
-        """Test URL validation for allowed URLs."""
-        tool = WebFetchTool()
-        
-        assert tool._validate_url("https://example.com") is True
-        assert tool._validate_url("http://test.org") is True
-    
-    def test_url_validation_blocked_scheme(self):
-        """Test URL validation blocks disallowed schemes."""
-        config = WebFetchConfig(allowed_schemes=["https"])
-        tool = WebFetchTool(config)
-        
-        assert tool._validate_url("https://example.com") is True
-        assert tool._validate_url("http://example.com") is False
-        assert tool._validate_url("ftp://example.com") is False
-    
-    def test_url_validation_blocked_domain(self):
-        """Test URL validation blocks forbidden domains."""
-        config = WebFetchConfig(blocked_domains=["evil.com", "malware.org"])
-        tool = WebFetchTool(config)
-        
-        assert tool._validate_url("https://example.com") is True
-        assert tool._validate_url("https://evil.com") is False
-        assert tool._validate_url("https://sub.malware.org") is False
-    
-    def test_url_validation_allowed_domain_only(self):
-        """Test URL validation with allowed domains list."""
-        config = WebFetchConfig(allowed_domains=["safe.com", "trusted.org"])
-        tool = WebFetchTool(config)
-        
-        assert tool._validate_url("https://safe.com") is True
-        assert tool._validate_url("https://sub.trusted.org") is True
-        assert tool._validate_url("https://example.com") is False
-    
-    def test_content_parsing_json(self):
-        """Test JSON content parsing."""
-        tool = WebFetchTool()
-        json_data = '{"key": "value", "number": 42}'
-        
-        parsed = tool._parse_content(json_data, "application/json")
-        expected = json.dumps({"key": "value", "number": 42}, indent=2, ensure_ascii=False)
-        
-        assert parsed == expected
-    
-    def test_content_parsing_xml(self):
-        """Test XML content parsing."""
-        tool = WebFetchTool()
-        xml_data = "<root><item>value</item></root>"
-        
-        parsed = tool._parse_content(xml_data, "text/xml")
-        assert "<root>" in parsed
-        assert "<item>value</item>" in parsed
-    
-    def test_content_parsing_invalid_json(self):
-        """Test that invalid JSON returns original content."""
-        tool = WebFetchTool()
-        invalid_json = '{"key": invalid}'
-        
-        parsed = tool._parse_content(invalid_json, "application/json")
-        assert parsed == invalid_json
-    
     @pytest.mark.asyncio
-    async def test_fetch_url_success(self, web_tool, mock_response):
-        """Test successful URL fetch."""
-        with patch.object(web_tool, '_ensure_client') as mock_ensure:
-            web_tool._client = AsyncMock()
-            web_tool._client.request.return_value = mock_response
-            
-            response = await web_tool.fetch_url("https://example.com")
-            
-            assert response.success is True
-            assert response.status_code == 200
-            assert response.url == "https://example.com"
-            assert response.content_type == "text/html"
-            assert "Test content" in response.content
-            assert response.error_message is None
-    
-    @pytest.mark.asyncio
-    async def test_fetch_url_invalid_url(self, web_tool):
-        """Test fetch with invalid URL."""
-        response = await web_tool.fetch_url("invalid://bad-url")
+    async def test_rate_limiting_integration(self, web_fetch_tool):
+        """Test rate limiting integration in fetch_url."""
+        # Create tool with very low rate limit
+        low_limit_config = WebFetchConfig(rate_limit_requests=1, rate_limit_window=60)
+        low_limit_tool = WebFetchTool(low_limit_config)
         
-        assert response.success is False
-        assert response.status_code == 400
-        assert "URL validation failed" in response.error_message
-    
-    @pytest.mark.asyncio
-    async def test_fetch_url_timeout(self, web_tool):
-        """Test fetch with timeout."""
-        with patch.object(web_tool, '_ensure_client'):
-            web_tool._client = AsyncMock()
-            web_tool._client.request.side_effect = httpx.TimeoutException("Timeout")
+        with patch('aiohttp.ClientSession') as mock_session_class:
+            mock_session = Mock()
+            mock_session_class.return_value = mock_session
             
-            response = await web_tool.fetch_url("https://example.com")
+            mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session.__aexit__ = AsyncMock()
+            mock_session.close = AsyncMock()
             
-            assert response.success is False
-            assert response.status_code == 408
-            assert response.error_message == "Request timeout"
-    
-    @pytest.mark.asyncio
-    async def test_fetch_url_network_error(self, web_tool):
-        """Test fetch with network error."""
-        with patch.object(web_tool, '_ensure_client'):
-            web_tool._client = AsyncMock()
-            web_tool._client.request.side_effect = httpx.NetworkError("Connection failed")
-            
-            response = await web_tool.fetch_url("https://example.com")
-            
-            assert response.success is False
-            assert response.status_code == 0
-            assert "Network error" in response.error_message
-    
-    @pytest.mark.asyncio
-    async def test_fetch_url_content_too_large(self, web_tool):
-        """Test fetch with content exceeding size limit."""
-        # Configure small content limit
-        web_tool.config.max_content_size = 10
-        
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.is_success = True
-        mock_response.headers = {"content-type": "text/plain"}
-        mock_response.text = "This content is too long for the limit"
-        mock_response.content = b"This content is too long for the limit"
-        mock_response.url = "https://example.com"
-        
-        with patch.object(web_tool, '_ensure_client'):
-            web_tool._client = AsyncMock()
-            web_tool._client.request.return_value = mock_response
-            
-            response = await web_tool.fetch_url("https://example.com")
-            
-            assert response.success is False
-            assert response.status_code == 413
-            assert "Content too large" in response.error_message
-    
-    @pytest.mark.asyncio
-    async def test_fetch_json_success(self, web_tool):
-        """Test successful JSON fetch."""
-        json_data = {"message": "Hello, World!", "status": "success"}
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.is_success = True
-        mock_response.headers = {"content-type": "application/json"}
-        mock_response.text = json.dumps(json_data)
-        mock_response.content = json.dumps(json_data).encode()
-        mock_response.url = "https://api.example.com/data"
-        
-        with patch.object(web_tool, '_ensure_client'):
-            web_tool._client = AsyncMock()
-            web_tool._client.request.return_value = mock_response
-            
-            result = await web_tool.fetch_json("https://api.example.com/data")
-            
-            assert result == json_data
-    
-    @pytest.mark.asyncio
-    async def test_fetch_json_invalid_json(self, web_tool):
-        """Test JSON fetch with invalid JSON response."""
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.is_success = True
-        mock_response.headers = {"content-type": "application/json"}
-        mock_response.text = "not valid json"
-        mock_response.content = b"not valid json"
-        mock_response.url = "https://api.example.com/data"
-        
-        with patch.object(web_tool, '_ensure_client'):
-            web_tool._client = AsyncMock()
-            web_tool._client.request.return_value = mock_response
-            
-            with pytest.raises(ValueError, match="Invalid JSON response"):
-                await web_tool.fetch_json("https://api.example.com/data")
-    
-    @pytest.mark.asyncio
-    async def test_fetch_json_request_failed(self, web_tool):
-        """Test JSON fetch with failed request."""
-        with patch.object(web_tool, 'fetch_url') as mock_fetch:
-            mock_fetch.return_value = WebResponse(
-                url="https://api.example.com/data",
-                status_code=404,
-                content_type="text/plain",
-                content="Not Found",
-                response_time_ms=100,
-                success=False,
-                error_message="HTTP 404: Not Found"
-            )
-            
-            with pytest.raises(ValueError, match="Failed to fetch URL"):
-                await web_tool.fetch_json("https://api.example.com/data")
-    
-    @pytest.mark.asyncio
-    async def test_fetch_text_success(self, web_tool):
-        """Test successful text fetch."""
-        text_content = "This is plain text content"
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.is_success = True
-        mock_response.headers = {"content-type": "text/plain"}
-        mock_response.text = text_content
-        mock_response.content = text_content.encode()
-        mock_response.url = "https://example.com/text"
-        
-        with patch.object(web_tool, '_ensure_client'):
-            web_tool._client = AsyncMock()
-            web_tool._client.request.return_value = mock_response
-            
-            result = await web_tool.fetch_text("https://example.com/text")
-            
-            assert result == text_content
-    
-    @pytest.mark.asyncio
-    async def test_post_data_success(self, web_tool):
-        """Test successful POST request."""
-        post_data = {"key": "value", "number": 42}
-        mock_response = Mock()
-        mock_response.status_code = 201
-        mock_response.is_success = True
-        mock_response.reason_phrase = "Created"
-        mock_response.headers = {"content-type": "application/json"}
-        mock_response.text = '{"id": 123, "created": true}'
-        mock_response.content = b'{"id": 123, "created": true}'
-        mock_response.url = "https://api.example.com/create"
-        
-        with patch.object(web_tool, '_ensure_client'):
-            web_tool._client = AsyncMock()
-            web_tool._client.request.return_value = mock_response
-            
-            response = await web_tool.post_data("https://api.example.com/create", post_data)
-            
-            assert response.success is True
-            assert response.status_code == 201
-            assert "created" in response.content
-            
-            # Verify the request was called with correct parameters
-            web_tool._client.request.assert_called_once()
-            call_args = web_tool._client.request.call_args
-            assert call_args[1]["method"] == "POST"
-            assert call_args[1]["url"] == "https://api.example.com/create"
-            assert json.loads(call_args[1]["content"]) == post_data
-    
-    @pytest.mark.asyncio
-    async def test_rate_limiting(self):
-        """Test rate limiting functionality."""
-        config = WebFetchConfig(rate_limit_requests=2, rate_limit_window=60)
-        tool = WebFetchTool(config)
-        
-        # Mock both URL validation and HTTP client to test rate limiting
-        with patch.object(tool, '_validate_url', return_value=True), \
-             patch.object(tool, '_ensure_client'), \
-             patch.object(tool, '_client', new=AsyncMock()) as mock_client:
-            
-            # Mock successful responses
+            # Mock successful response
             mock_response = Mock()
-            mock_response.status_code = 200
-            mock_response.is_success = True
-            mock_response.headers = {"content-type": "text/plain"}
-            mock_response.text = "success"
-            mock_response.content = b"success"
+            mock_response.status = 200
+            mock_response.headers = {"content-type": "text/html"}
             mock_response.url = "https://example.com"
-            mock_client.request.return_value = mock_response
-             
-            # First two requests should succeed
-            response1 = await tool.fetch_url("https://example.com")
-            response2 = await tool.fetch_url("https://example.com")
-            response3 = await tool.fetch_url("https://example.com")
+            mock_content = Mock()
+            mock_content.iter_chunked.return_value = [b"content"].__iter__()
+            mock_response.content = mock_content
             
-            # First two should succeed
-            assert response1.success is True
-            assert response2.success is True
+            mock_session.request = AsyncMock()
+            mock_session.request.return_value.__aenter__ = AsyncMock(return_value=mock_response)
+            mock_session.request.return_value.__aexit__ = AsyncMock()
             
-            # Third should fail due to rate limit
-            assert response3.status_code == 429
-            assert "Rate limit exceeded" in response3.error_message
-    
-    @pytest.mark.asyncio
-    async def test_context_manager(self, web_tool):
-        """Test WebFetchTool as async context manager."""
-        async with web_tool as tool:
-            assert tool._client is not None
-        
-        # Client should be closed after context exit
-        assert web_tool._client is None
-    
-    def test_get_tools(self, web_tool):
-        """Test tools dictionary for pydantic-ai integration."""
-        tools = web_tool.get_tools()
-        
-        expected_tools = ['fetch_url', 'fetch_json', 'fetch_text', 'post_data']
-        assert all(tool_name in tools for tool_name in expected_tools)
-        assert all(tools[tool_name] == web_tool for tool_name in expected_tools)
-
-
-@pytest.mark.asyncio
-async def test_integration_with_httpbin():
-    """Integration test with httpbin.org (if available)."""
-    try:
-        tool = WebFetchTool()
-        
-        # Test basic GET request
-        async with tool:
-            response = await tool.fetch_url("https://httpbin.org/get")
-            
-            if response.success:
-                assert response.status_code == 200
-                assert "httpbin.org" in response.content
-            else:
-                # Skip if httpbin is not available
-                pytest.skip("httpbin.org not available for integration test")
+            async with low_limit_tool:
+                # First request should succeed immediately
+                response1 = await low_limit_tool.fetch_url("https://example.com")
+                assert response1.success is True
                 
-    except Exception:
-        # Skip integration test if network issues
-        pytest.skip("Network not available for integration test")
+                # Second request should be rate limited and take longer
+                import time
+                start_time = time.time()
+                response2 = await low_limit_tool.fetch_url("https://example.com")
+                elapsed = time.time() - start_time
+                
+                # Should have been delayed by rate limiter
+                assert elapsed > 0.05  # At least some delay
+                assert response2.success is True
+
+    @pytest.mark.asyncio
+    async def test_concurrent_requests(self, web_fetch_tool):
+        """Test concurrent request handling."""
+        with patch('aiohttp.ClientSession') as mock_session_class:
+            mock_session = Mock()
+            mock_session_class.return_value = mock_session
+            
+            mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session.__aexit__ = AsyncMock()
+            mock_session.close = AsyncMock()
+            
+            # Mock response
+            mock_response = Mock()
+            mock_response.status = 200
+            mock_response.headers = {"content-type": "text/html"}
+            mock_response.url = "https://example.com"
+            mock_content = Mock()
+            mock_content.iter_chunked.return_value = [b"content"].__iter__()
+            mock_response.content = mock_content
+            
+            mock_session.request = AsyncMock()
+            mock_session.request.return_value.__aenter__ = AsyncMock(return_value=mock_response)
+            mock_session.request.return_value.__aexit__ = AsyncMock()
+            
+            async with web_fetch_tool:
+                # Make multiple concurrent requests
+                tasks = [
+                    web_fetch_tool.fetch_url(f"https://example{i}.com")
+                    for i in range(3)
+                ]
+                responses = await asyncio.gather(*tasks)
+                
+                # All should succeed
+                for response in responses:
+                    assert response.success is True

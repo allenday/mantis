@@ -1,10 +1,20 @@
 """
-Agent tools for external service integration.
+Tools package for Mantis agents.
 
-This module provides tools that agents can use to interact with external
-services and data sources, supporting both pydantic-ai and FastA2A execution.
+This package contains various tools that agents can use for external operations
+like web fetching, searching, and other integrations.
 """
 
-from .web_fetch import WebFetchTool
+from .web_fetch import WebFetchTool, WebFetchConfig, WebResponse
+from .web_search import WebSearchTool, WebSearchConfig, SearchResult, SearchResponse, SearchFilters
 
-__all__ = ["WebFetchTool"]
+__all__ = [
+    "WebFetchTool",
+    "WebFetchConfig",
+    "WebResponse",
+    "WebSearchTool",
+    "WebSearchConfig",
+    "SearchResult",
+    "SearchResponse",
+    "SearchFilters",
+]
