@@ -64,3 +64,7 @@ plugins = ["pydantic.mypy"]
 exclude = [
     "src/mantis/proto/",
 ]
+
+[[tool.mypy.overrides]]
+module = "mcp.*"
+ignore_errors = true

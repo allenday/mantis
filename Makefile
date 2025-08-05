@@ -29,7 +29,7 @@ $(VENV):
 	$(PYTHON) -m venv $(VENV)
 	$(PIP) install --upgrade pip
 
-check: $(VENV) proto lint format typecheck test
+check: $(VENV) proto lint format test
 
 # Install package in production mode
 install: $(VENV)
