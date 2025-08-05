@@ -110,6 +110,64 @@ class DirectExecutor(ExecutionStrategy):
     def get_strategy_type(self) -> mantis_core_pb2.ExecutionStrategy:
         return mantis_core_pb2.EXECUTION_STRATEGY_DIRECT
 
+    def _initialize_tools(self):
+        """Initialize available tools for agent execution."""
+        try:
+            from ..tools.web_fetch import WebFetchTool, WebFetchConfig
+            from ..tools.web_search import WebSearchTool, WebSearchConfig
+            from ..tools.git_operations import GitOperationsTool, GitOperationsConfig
+            from ..tools.gitlab_integration import GitLabTool, GitLabConfig
+
+            # Initialize WebFetchTool with secure defaults
+            web_fetch_config = WebFetchConfig(
+                timeout=30.0,
+                user_agent="Mantis-Agent/1.0 (DirectExecutor)",
+                rate_limit_requests=60,
+                rate_limit_window=60,
+                verify_ssl=True,
+                max_content_size=10 * 1024 * 1024,  # 10MB limit
+            )
+            self._tools["web_fetch"] = WebFetchTool(web_fetch_config)
+
+            # Initialize WebSearchTool
+            web_search_config = WebSearchConfig(
+                max_results=10,
+                timeout=30.0,
+                rate_limit_requests=30,
+                rate_limit_window=60,
+                enable_suggestions=True,
+            )
+            self._tools["web_search"] = WebSearchTool(web_search_config)
+
+            # Initialize GitOperationsTool with secure defaults
+            git_config = GitOperationsConfig(
+                max_repo_size_mb=100.0,
+                max_files=1000,
+                allowed_schemes=["https"],
+                blocked_domains=["localhost", "127.0.0.1", "0.0.0.0", "192.168.", "10.", "172."],
+                clone_timeout=300.0,
+                temp_cleanup=True,
+                max_search_results=50,
+            )
+            self._tools["git_operations"] = GitOperationsTool(git_config)
+
+            # Initialize GitLabTool with secure defaults
+            gitlab_config = GitLabConfig(
+                personal_access_token="",  # Placeholder - agents can reconfigure as needed
+                read_only_mode=True,
+                timeout=30.0,
+            )
+            gitlab_tool = GitLabTool(gitlab_config)
+            self._tools.update(gitlab_tool.get_tools())
+
+        except ImportError:
+            # Tools not available, continue without them
+            pass
+
+    def get_available_tools(self) -> Dict[str, Any]:
+        """Get dictionary of available tools."""
+        return self._tools.copy()
+
     def _create_minimal_agent_card(self):
         """Create a minimal agent card for generic execution."""
         from ..proto.mantis.v1.mantis_persona_pb2 import MantisAgentCard

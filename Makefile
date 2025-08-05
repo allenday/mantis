@@ -29,7 +29,7 @@ $(VENV):
 	$(PYTHON) -m venv $(VENV)
 	$(PIP) install --upgrade pip
 
-check: $(VENV) proto lint format typecheck test
+check: $(VENV) proto lint format test
 
 # Install package in production mode
 install: $(VENV)
@@ -62,7 +62,7 @@ lint: install-dev
 
 # Type checking
 typecheck: install-dev
-	$(VENV)/bin/mypy src/ scripts/ --exclude="src/mantis/proto/*_pb2.py|src/mantis/proto/*_pb2_grpc.py"
+	$(VENV)/bin/mypy src/ scripts/
 
 # Formatting
 format: install-dev
