@@ -151,6 +151,7 @@ def cli(ctx: click.Context, version: bool):
                     "[bold green]Mantis CLI[/bold green]\n\n"
                     "Available commands:\n"
                     "• [cyan]agent[/cyan]     - Generate, inspect, and serve agents\n"
+                    "• [cyan]registry[/cyan]  - Inspect and search agent registry\n"
                     "• [cyan]models[/cyan]    - List and inspect available AI models\n"
                     "• [cyan]simulate[/cyan]  - Run A2A agent simulation or tournament\n\n"
                     "[dim]Use 'mantis <command> --help' for detailed help on any command[/dim]",
