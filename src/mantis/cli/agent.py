@@ -38,146 +38,7 @@ def display_agent_card_summary(agent_card, verbose: bool = False) -> None:
 """
     console.print(Panel(basic_info.strip(), title="Agent Overview", border_style="blue"))
 
-    # Persona Characteristics
-    char = mantis_card.persona_characteristics
-
-    # Core principles
-    if char.core_principles:
-        principles_text = "\n".join([f"• {p}" for p in char.core_principles])
-        console.print(Panel(principles_text, title="🎯 Core Principles", border_style="cyan"))
-
-    # Communication style and thinking patterns in columns
-    panels = []
-    if char.communication_style:
-        panels.append(Panel(char.communication_style, title="💬 Communication Style", border_style="green"))
-    if char.thinking_patterns:
-        patterns_text = "\n".join([f"• {p}" for p in char.thinking_patterns])
-        panels.append(Panel(patterns_text, title="🧠 Thinking Patterns", border_style="yellow"))
-
-    if panels:
-        console.print(Columns(panels, equal=True, expand=True))
-
-    # Original persona prompt
-    if char.original_content:
-        from rich.syntax import Syntax
-
-        syntax = Syntax(char.original_content, "markdown", theme="monokai", word_wrap=True)
-        console.print(Panel(syntax, title="📜 Original Persona Prompt", border_style="dim", expand=True))
-
-    # Competency Scores and Role Adaptation
-    comp = mantis_card.competency_scores
-
-    # Competency scores and role adaptation combined table
-    if comp.competency_scores or comp.role_adaptation:
-        comp_table = Table(title="📊 Competency & Role Scores", show_header=True, header_style="bold blue")
-        comp_table.add_column("Competency", style="cyan", width=60)
-        comp_table.add_column("Score", style="green", justify="right", width=7)
-        comp_table.add_column("Bar", style="blue", width=22)
-
-        # Add competency scores
-        if comp.competency_scores:
-            for comp_name, score in comp.competency_scores.items():
-                # Create visual bar chart
-                bar_length = 20
-                filled_length = int(score * bar_length)
-                bar = "█" * filled_length + "░" * (bar_length - filled_length)
-
-                # Clean up competency name for better display
-                clean_name = comp_name.title().replace("_", " ")
-
-                # Dynamic score color based on value
-                if score >= 0.9:
-                    score_color = "bright_green"
-                elif score >= 0.8:
-                    score_color = "green"
-                elif score >= 0.7:
-                    score_color = "yellow"
-                elif score >= 0.5:
-                    score_color = "orange3"
-                else:
-                    score_color = "red"
-
-                comp_table.add_row(clean_name, f"[{score_color}]{score:.2f}[/{score_color}]", bar)
-
-            # Add section break after competency scores
-            if comp.role_adaptation and (
-                comp.role_adaptation.leader_score
-                or comp.role_adaptation.follower_score
-                or comp.role_adaptation.narrator_score
-            ):
-                comp_table.add_section()
-
-        # Add role adaptation scores
-        role = comp.role_adaptation
-        if role.leader_score or role.follower_score or role.narrator_score:
-            # Add section header
-            comp_table.add_row(
-                "[bold magenta]Role Adaptation Scores[/bold magenta]",
-                "[bold magenta]Score[/bold magenta]",
-                "[bold magenta]Bar[/bold magenta]",
-                style="bold magenta",
-                end_section=True,
-            )
-
-            roles = [
-                ("• Leader Role", role.leader_score),
-                ("• Follower Role", role.follower_score),
-                ("• Narrator Role", role.narrator_score),
-            ]
-
-            for role_name, score in roles:
-                if score > 0:  # Only show roles with scores
-                    # Create visual bar chart for roles
-                    bar_length = 20
-                    filled_length = int(score * bar_length)
-                    bar = "█" * filled_length + "░" * (bar_length - filled_length)
-
-                    # Dynamic score color based on value
-                    if score >= 0.8:
-                        score_color = "bright_green"
-                    elif score >= 0.6:
-                        score_color = "green"
-                    elif score >= 0.4:
-                        score_color = "yellow"
-                    else:
-                        score_color = "red"
-
-                    comp_table.add_row(role_name, f"[{score_color}]{score:.2f}[/{score_color}]", bar)
-
-            if role.preferred_role:
-                # Use the proper enum from protobuf
-                from ..proto.mantis.v1.mantis_persona_pb2 import RolePreference
-
-                role_names = {
-                    RolePreference.ROLE_PREFERENCE_LEADER: "Leader",
-                    RolePreference.ROLE_PREFERENCE_FOLLOWER: "Follower",
-                    RolePreference.ROLE_PREFERENCE_NARRATOR: "Narrator",
-                }
-                role_name = role_names.get(role.preferred_role, f"Role {role.preferred_role}")
-                comp_table.add_row(
-                    "• Preferred Role", f"[bold bright_cyan]{role_name}[/bold bright_cyan]", "✨ Primary"
-                )
-
-        console.print(comp_table)
-
-    # Domain expertise in separate 2-column table
-    domain = mantis_card.domain_expertise
-    if domain.primary_domains or domain.methodologies:
-        domain_table = Table(title="🎯 Domain Expertise", show_header=True, header_style="bold cyan")
-        domain_table.add_column("Primary Domains", style="red", width=60)
-        domain_table.add_column("Methodologies", style="blue", width=60)
-
-        # Get max length to align rows
-        primary_count = len(domain.primary_domains) if domain.primary_domains else 0
-        method_count = len(domain.methodologies) if domain.methodologies else 0
-        max_rows = max(primary_count, method_count)
-
-        for i in range(max_rows):
-            primary_item = f"• {domain.primary_domains[i].strip()}" if i < primary_count else ""
-            method_item = f"• {domain.methodologies[i].strip()}" if i < method_count else ""
-            domain_table.add_row(primary_item, method_item)
-
-        console.print(domain_table)
+    # We'll show extension data after the base AgentCard information
 
     # A2A Skills as bulleted list
     if mantis_card.agent_card.skills:
@@ -195,13 +56,231 @@ def display_agent_card_summary(agent_card, verbose: bool = False) -> None:
             )
         )
 
-    # Extensions summary
-    console.print(
-        f"\n[bold magenta]Extensions:[/bold magenta] {len(mantis_card.agent_card.capabilities.extensions)} total"
-    )
+    # Extension Data section (removed redundant Extensions listing)
     if mantis_card.agent_card.capabilities.extensions:
-        for ext in mantis_card.agent_card.capabilities.extensions:
-            console.print(f"  • [bold]{ext.uri}[/bold] - {ext.description}")
+        console.print(f"\n[bold cyan]📋 Extension Data ({len(mantis_card.agent_card.capabilities.extensions)} extensions):[/bold cyan]")
+        
+        # Persona Characteristics from extension
+        char = mantis_card.persona_characteristics
+        if char.core_principles or char.communication_style or char.thinking_patterns:
+            # Find the persona-characteristics extension for header info
+            persona_ext = None
+            for ext in mantis_card.agent_card.capabilities.extensions:
+                if ext.uri == "https://mantis.ai/extensions/persona-characteristics/v1":
+                    persona_ext = ext
+                    break
+            
+            if persona_ext:
+                console.print(f"\n• [bold]{persona_ext.description}:[/bold]")
+                console.print(f"  [dim]AgentExtension URI:[/dim] {persona_ext.uri}")
+                console.print(f"  [dim]Required:[/dim] {persona_ext.required}")
+                console.print("")  # Empty line before data
+            
+            # Original persona prompt as part of persona-characteristics extension
+            if char.original_content:
+                console.print("  [dim]↳ Original source content from persona-characteristics extension:[/dim]")
+                from rich.syntax import Syntax
+                syntax = Syntax(char.original_content, "markdown", theme="monokai", word_wrap=True)
+                console.print(Panel(syntax, title="📜 Original Persona Prompt", border_style="dim", expand=True))
+                console.print("")  # Empty line before table
+            
+            # Create a single consolidated persona characteristics table
+            persona_table = Table(title="🎭 Persona Characteristics", show_header=True, header_style="bold magenta", show_lines=True)
+            persona_table.add_column("Attribute", style="cyan", width=25)
+            persona_table.add_column("Details", style="white", width=95)
+
+            # Add core principles
+            if char.core_principles:
+                principles_text = "\n".join([f"• {p}" for p in char.core_principles])
+                persona_table.add_row("Core Principles", principles_text)
+
+            # Add communication style
+            if char.communication_style:
+                persona_table.add_row("Communication Style", char.communication_style)
+
+            # Add thinking patterns  
+            if char.thinking_patterns:
+                patterns_text = "\n".join([f"• {p}" for p in char.thinking_patterns])
+                persona_table.add_row("Thinking Patterns", patterns_text)
+
+            # Add characteristic phrases
+            if char.characteristic_phrases:
+                phrases_text = "\n".join([f"• \"{p}\"" for p in char.characteristic_phrases])
+                persona_table.add_row("Characteristic Phrases", phrases_text)
+
+            # Add behavioral tendencies
+            if char.behavioral_tendencies:
+                tendencies_text = "\n".join([f"• {t}" for t in char.behavioral_tendencies])
+                persona_table.add_row("Behavioral Tendencies", tendencies_text)
+
+            # Add decision framework
+            if char.decision_framework:
+                persona_table.add_row("Decision Framework", char.decision_framework)
+
+            console.print(persona_table)
+
+        # Competency Scores from extension
+        comp = mantis_card.competency_scores
+        if comp.competency_scores or comp.role_adaptation:
+            # Find the competency-scores extension for header info
+            competency_ext = None
+            for ext in mantis_card.agent_card.capabilities.extensions:
+                if ext.uri == "https://mantis.ai/extensions/competency-scores/v1":
+                    competency_ext = ext
+                    break
+            
+            if competency_ext:
+                console.print(f"\n• [bold]{competency_ext.description}:[/bold]")
+                console.print(f"  [dim]AgentExtension URI:[/dim] {competency_ext.uri}")
+                console.print(f"  [dim]Required:[/dim] {competency_ext.required}")
+                console.print("")  # Empty line before data
+            
+            # Create separate tables for competency scores and role adaptation
+            
+            # Competency Scores Table
+            if comp.competency_scores:
+                comp_table = Table(title="📊 Competency Scores", show_header=True, header_style="bold blue")
+                comp_table.add_column("Competency", style="cyan", width=60)
+                comp_table.add_column("Score", style="green", justify="right", width=7)
+                comp_table.add_column("Bar", style="blue", width=22)
+
+                for comp_name, score in comp.competency_scores.items():
+                    # Create visual bar chart
+                    bar_length = 20
+                    filled_length = int(score * bar_length)
+                    bar = "█" * filled_length + "░" * (bar_length - filled_length)
+
+                    # Clean up competency name for better display
+                    clean_name = comp_name.title().replace("_", " ")
+
+                    # Dynamic score color based on value
+                    if score >= 0.9:
+                        score_color = "bright_green"
+                    elif score >= 0.8:
+                        score_color = "green"
+                    elif score >= 0.7:
+                        score_color = "yellow"
+                    elif score >= 0.5:
+                        score_color = "orange3"
+                    else:
+                        score_color = "red"
+
+                    comp_table.add_row(clean_name, f"[{score_color}]{score:.2f}[/{score_color}]", bar)
+
+                console.print(comp_table)
+
+            # Role Adaptation Table  
+            role = comp.role_adaptation
+            if role.leader_score or role.follower_score or role.narrator_score or role.preferred_role:
+                role_table = Table(title="🎭 Role Adaptation", show_header=True, header_style="bold magenta")
+                role_table.add_column("Role Aspect", style="cyan", width=60)
+                role_table.add_column("Score/Value", style="green", justify="right", width=7)
+                role_table.add_column("Indicator", style="magenta", width=22)
+
+                # Add role scores
+                roles = [
+                    ("Leader Score", role.leader_score),
+                    ("Follower Score", role.follower_score),
+                    ("Narrator Score", role.narrator_score),
+                ]
+
+                for role_name, score in roles:
+                    if score is not None:  # Show all roles with defined scores (including 0.0)
+                        # Create visual bar chart for roles
+                        bar_length = 20
+                        filled_length = int(score * bar_length)
+                        bar = "█" * filled_length + "░" * (bar_length - filled_length)
+
+                        # Dynamic score color based on value
+                        if score >= 0.8:
+                            score_color = "bright_green"
+                        elif score >= 0.6:
+                            score_color = "green"
+                        elif score >= 0.4:
+                            score_color = "yellow"
+                        else:
+                            score_color = "red"
+
+                        role_table.add_row(role_name, f"[{score_color}]{score:.2f}[/{score_color}]", bar)
+
+                # Add preferred role if exists
+                if role.preferred_role:
+                    # Use the proper enum from protobuf
+                    from ..proto.mantis.v1.mantis_persona_pb2 import RolePreference
+
+                    role_names = {
+                        RolePreference.ROLE_PREFERENCE_LEADER: "Leader",
+                        RolePreference.ROLE_PREFERENCE_FOLLOWER: "Follower",
+                        RolePreference.ROLE_PREFERENCE_NARRATOR: "Narrator",
+                    }
+                    preferred_role_name = role_names.get(role.preferred_role, f"Role {role.preferred_role}")
+                    role_table.add_row(
+                        "Preferred Role", f"[bold bright_cyan]{preferred_role_name}[/bold bright_cyan]", "✨ Primary"
+                    )
+
+                console.print(role_table)
+
+        # Domain Expertise from extension
+        domain = mantis_card.domain_expertise
+        if domain.primary_domains or domain.methodologies or domain.secondary_domains or domain.tools_and_frameworks:
+            # Find the domain-expertise extension for header info
+            domain_ext = None
+            for ext in mantis_card.agent_card.capabilities.extensions:
+                if ext.uri == "https://mantis.ai/extensions/domain-expertise/v1":
+                    domain_ext = ext
+                    break
+            
+            if domain_ext:
+                console.print(f"\n• [bold]{domain_ext.description}:[/bold]")
+                console.print(f"  [dim]AgentExtension URI:[/dim] {domain_ext.uri}")
+                console.print(f"  [dim]Required:[/dim] {domain_ext.required}")
+                console.print("")  # Empty line before data
+            
+            # Create a single 2x2 table for all domain expertise data
+            domain_table = Table(title="🎯 Domain Expertise", show_header=True, header_style="bold cyan")
+            domain_table.add_column("Primary Domains", style="red", width=60)
+            domain_table.add_column("Secondary Domains", style="blue", width=60)
+
+            # Get max length to align rows for domains section
+            primary_count = len(domain.primary_domains) if domain.primary_domains else 0
+            secondary_count = len(domain.secondary_domains) if domain.secondary_domains else 0
+            max_domain_rows = max(primary_count, secondary_count)
+
+            # Add domain rows
+            for i in range(max_domain_rows):
+                primary_item = f"• {domain.primary_domains[i].strip()}" if i < primary_count else ""
+                secondary_item = f"• {domain.secondary_domains[i].strip()}" if i < secondary_count else ""
+                domain_table.add_row(primary_item, secondary_item)
+
+            # Add section break if we have both domains and methodologies/tools
+            if (domain.primary_domains or domain.secondary_domains) and (domain.methodologies or domain.tools_and_frameworks):
+                domain_table.add_section()
+
+            # Add section header for methodologies and tools
+            if domain.methodologies or domain.tools_and_frameworks:
+                domain_table.add_row(
+                    "[bold cyan]Methodologies[/bold cyan]",
+                    "[bold cyan]Tools & Frameworks[/bold cyan]",
+                    style="bold cyan",
+                    end_section=True,
+                )
+
+                # Get max length for methodologies and tools section
+                method_count = len(domain.methodologies) if domain.methodologies else 0
+                tools_count = len(domain.tools_and_frameworks) if domain.tools_and_frameworks else 0
+                max_method_rows = max(method_count, tools_count)
+
+                # Add methodology and tools rows
+                for i in range(max_method_rows):
+                    method_item = f"• {domain.methodologies[i].strip()}" if i < method_count else ""
+                    tools_item = f"• {domain.tools_and_frameworks[i].strip()}" if i < tools_count else ""
+                    domain_table.add_row(method_item, tools_item)
+
+            console.print(domain_table)
+            
+    else:
+        console.print(f"\n[bold cyan]📋 Extension Data (0 extensions):[/bold cyan]")
+        console.print("[dim]No extensions defined[/dim]")
 
     if verbose:
         # Show full AgentCard as JSON
