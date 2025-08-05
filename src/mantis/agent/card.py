@@ -80,18 +80,41 @@ def _create_base_agent_card(name: str, content: str, path: Path):
     capabilities.push_notifications = False
     capabilities.streaming = True
 
-    # Add basic persona extension
-    extension = AgentExtension()
-    extension.uri = "https://mantis.ai/extensions/persona-characteristics/v1"
-    extension.description = f"Persona characteristics for {name}"
-    extension.required = False
+    # Add basic persona-characteristics extension
+    persona_extension = AgentExtension()
+    persona_extension.uri = "https://mantis.ai/extensions/persona-characteristics/v1"
+    persona_extension.description = f"Persona characteristics for {name}"
+    persona_extension.required = False
 
     # Add basic persona data
-    params = Struct()
-    params.update({"name": name, "original_content": content[:1000], "source_file": str(path.name)})  # First 1000 chars
-    extension.params.CopyFrom(params)
+    persona_params = Struct()
+    persona_params.update({"name": name, "original_content": content[:1000], "source_file": str(path.name)})  # First 1000 chars
+    persona_extension.params.CopyFrom(persona_params)
+    capabilities.extensions.append(persona_extension)
 
-    capabilities.extensions.append(extension)
+    # Add competency-scores extension
+    competency_extension = AgentExtension()
+    competency_extension.uri = "https://mantis.ai/extensions/competency-scores/v1"
+    competency_extension.description = f"Competency scores for {name}"
+    competency_extension.required = False
+
+    # Add placeholder competency data
+    competency_params = Struct()
+    competency_params.update({"name": name, "source_file": str(path.name)})
+    competency_extension.params.CopyFrom(competency_params)
+    capabilities.extensions.append(competency_extension)
+
+    # Add domain-expertise extension
+    domain_extension = AgentExtension()
+    domain_extension.uri = "https://mantis.ai/extensions/domain-expertise/v1"
+    domain_extension.description = f"Domain expertise for {name}"
+    domain_extension.required = False
+
+    # Add placeholder domain data
+    domain_params = Struct()
+    domain_params.update({"name": name, "source_file": str(path.name)})
+    domain_extension.params.CopyFrom(domain_params)
+    capabilities.extensions.append(domain_extension)
     agent_card.capabilities.CopyFrom(capabilities)
 
     return agent_card
@@ -181,6 +204,31 @@ Be specific to the persona. Focus on what makes them uniquely valuable.""",
         # Add skill tags from domain expertise
         for domain in expertise.primary_domains[:3]:  # Top 3 domains
             mantis_card.skill_tags.append(domain.lower().replace(" ", "_"))
+
+        # Update the extensions with full LLM-extracted data
+        from google.protobuf.json_format import MessageToDict
+        
+        for extension in mantis_card.agent_card.capabilities.extensions:
+            if extension.uri == "https://mantis.ai/extensions/persona-characteristics/v1":
+                # Update persona extension with full characteristics data
+                persona_dict = MessageToDict(characteristics, preserving_proto_field_name=True)
+                persona_dict.update({"name": persona_name, "source_file": str(Path(content[:100]).stem if content else "generated")})
+                extension.params.Clear()
+                extension.params.update(persona_dict)
+                
+            elif extension.uri == "https://mantis.ai/extensions/competency-scores/v1":
+                # Update competency extension with full competency data
+                competency_dict = MessageToDict(competencies, preserving_proto_field_name=True)
+                competency_dict.update({"name": persona_name, "source_file": str(Path(content[:100]).stem if content else "generated")})
+                extension.params.Clear()
+                extension.params.update(competency_dict)
+                
+            elif extension.uri == "https://mantis.ai/extensions/domain-expertise/v1":
+                # Update domain extension with full expertise data
+                domain_dict = MessageToDict(expertise, preserving_proto_field_name=True)
+                domain_dict.update({"name": persona_name, "source_file": str(Path(content[:100]).stem if content else "generated")})
+                extension.params.Clear()
+                extension.params.update(domain_dict)
 
         return mantis_card
 
