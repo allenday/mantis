@@ -89,8 +89,8 @@ def parse_extension_data(extension_uri: str, extension_params: Dict[str, Any]) -
                 message.characteristic_phrases.extend(extension_params["characteristic_phrases"])
             if "behavioral_tendencies" in extension_params:
                 message.behavioral_tendencies.extend(extension_params["behavioral_tendencies"])
-            if "original_markdown_content" in extension_params:
-                message.original_content = extension_params["original_markdown_content"]
+            if "original_content" in extension_params:
+                message.original_content = extension_params["original_content"]
                 
         elif message_type_name == "CompetencyScores":
             if "competency_scores" in extension_params:
@@ -177,8 +177,8 @@ def ensure_mantis_agent_card(agent_card) -> "MantisAgentCard":
     
     mantis_card.persona_title = agent_card.name
     
-    for skill in agent_card.capabilities.skills:
-        mantis_card.skill_tags.append(skill.skill_name)
+    for skill in agent_card.skills:
+        mantis_card.skill_tags.append(skill.name)
     
     return mantis_card
 
@@ -194,3 +194,98 @@ def ensure_agent_card(mantis_agent_card):
         Base AgentCard object
     """
     return mantis_agent_card.agent_card
+
+
+from enum import Enum
+
+class FieldNamingConvention(Enum):
+    """Field naming conventions for JSON/protobuf conversion."""
+    CAMEL_CASE = "camelCase"
+    SNAKE_CASE = "snake_case"
+
+
+def json_to_protobuf_agent_card(
+    agent_data: Dict[str, Any], 
+    input_convention: FieldNamingConvention = FieldNamingConvention.CAMEL_CASE
+) -> "AgentCard":
+    """
+    Convert JSON agent data to protobuf AgentCard with flexible field name handling.
+    
+    Args:
+        agent_data: Dict with agent card data
+        input_convention: Naming convention of input JSON fields
+        
+    Returns:
+        Protobuf AgentCard object
+    """
+    from ..proto.a2a_pb2 import AgentCard
+    from google.protobuf.json_format import ParseDict
+    
+    def convert_keys(obj):
+        if isinstance(obj, dict):
+            new_obj = {}
+            for key, value in obj.items():
+                # Handle field name conversion based on input convention
+                if input_convention == FieldNamingConvention.CAMEL_CASE:
+                    # Convert known camelCase fields to snake_case
+                    if key == "stateTransitionHistory":
+                        # Skip - not in current protobuf spec
+                        continue
+                    elif key == "pushNotifications":
+                        new_key = "push_notifications"
+                    else:
+                        new_key = key
+                else:
+                    # Already snake_case, use as-is
+                    new_key = key
+                    
+                new_obj[new_key] = convert_keys(value)
+            return new_obj
+        elif isinstance(obj, list):
+            return [convert_keys(item) for item in obj]
+        else:
+            return obj
+    
+    converted_data = convert_keys(agent_data)
+    return ParseDict(converted_data, AgentCard(), ignore_unknown_fields=True)
+
+
+def protobuf_to_json_agent_card(
+    agent_card: "AgentCard",
+    output_convention: FieldNamingConvention = FieldNamingConvention.SNAKE_CASE
+) -> Dict[str, Any]:
+    """
+    Convert protobuf AgentCard to JSON dict with flexible field name handling.
+    
+    Args:
+        agent_card: Protobuf AgentCard object
+        output_convention: Desired naming convention for output JSON
+        
+    Returns:
+        Dict with agent card data in specified convention
+    """
+    from google.protobuf.json_format import MessageToDict
+    
+    # Convert to dict with snake_case (protobuf default)
+    data = MessageToDict(agent_card, preserving_proto_field_name=True)
+    
+    if output_convention == FieldNamingConvention.CAMEL_CASE:
+        # Convert snake_case to camelCase
+        def convert_keys(obj):
+            if isinstance(obj, dict):
+                new_obj = {}
+                for key, value in obj.items():
+                    if key == "push_notifications":
+                        new_key = "pushNotifications"
+                    else:
+                        new_key = key
+                    new_obj[new_key] = convert_keys(value)
+                return new_obj
+            elif isinstance(obj, list):
+                return [convert_keys(item) for item in obj]
+            else:
+                return obj
+        
+        return convert_keys(data)
+    else:
+        return data
