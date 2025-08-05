@@ -1,0 +1,178 @@
+syntax = "proto3";
+
+package mantis.core;
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "a2a.proto";
+
+// Core user request - everything the user can specify
+message UserRequest {
+  // Required: the main query/prompt text
+  string query = 1;
+
+  // Optional: original query/prompt, passed through in cases request chaining.
+  optional string context = 2;
+
+  // Optional: structured data as JSON string
+  optional string structured_data = 3;
+  
+  // Optional: model specification (falls back to default)
+  optional ModelSpec model_spec = 4;
+  
+  // Optional: maximum recursion depth (default 1)
+  optional int32 max_depth = 5;
+  
+  // Agent specifications
+  repeated AgentSpec agents = 6;
+}
+
+// Model specification - reusable across user request and agents
+message ModelSpec {
+  // Optional: model name (falls back to default)
+  optional string model = 1;
+  
+  // Optional: temperature (default 0.7)
+  optional double temperature = 2;
+}
+
+// Recursion policy enum - RFC 2119 terminology
+enum RecursionPolicy {
+  RECURSION_POLICY_UNSPECIFIED = 0;
+  RECURSION_POLICY_MAY = 1;      // Agent may recurse (default for leaders)
+  RECURSION_POLICY_MUST = 2;     // Agent must recurse
+  RECURSION_POLICY_MUST_NOT = 3; // Agent must not recurse (default for followers)
+}
+
+// Unified agent specification
+message AgentSpec {
+  // Optional: count (default 1)
+  optional int32 count = 1;
+  
+  // Optional: model specification
+  optional ModelSpec model_spec = 2;
+  
+  // Optional: recursion policy
+  optional RecursionPolicy recursion_policy = 3;
+  
+  // Optional: current depth (set during execution)
+  optional int32 current_depth = 4;
+}
+
+// Processed simulation input
+message SimulationInput {
+  // The query to process
+  string query = 1;
+    
+  // Optional context
+  optional string context = 2;
+  
+  // Optional: structured data as JSON string
+  optional string structured_data = 3;
+  
+  // Optional: model specification (falls back to default)
+  optional ModelSpec model_spec = 4;
+  
+  // Optional: maximum recursion depth (default 1)
+  optional int32 max_depth = 5;
+  
+  // Agent specifications
+  repeated AgentSpec agents = 6;
+  
+  // Execution strategy
+  ExecutionStrategy execution_strategy = 7;
+}
+
+// Execution strategy enum
+enum ExecutionStrategy {
+  EXECUTION_STRATEGY_UNSPECIFIED = 0;
+  EXECUTION_STRATEGY_DIRECT = 1;
+  EXECUTION_STRATEGY_A2A = 2;
+}
+
+// Status enumeration for execution results
+enum ExecutionStatus {
+  EXECUTION_STATUS_UNSPECIFIED = 0;
+  EXECUTION_STATUS_SUCCESS = 1;
+  EXECUTION_STATUS_FAILED = 2;
+  EXECUTION_STATUS_CANCELLED = 3;
+  EXECUTION_STATUS_TIMEOUT = 4;
+}
+
+// Error types for structured error handling
+enum ErrorType {
+  ERROR_TYPE_UNSPECIFIED = 0;
+  ERROR_TYPE_NETWORK = 1;
+  ERROR_TYPE_MODEL = 2;
+  ERROR_TYPE_VALIDATION = 3;
+  ERROR_TYPE_TIMEOUT = 4;
+  ERROR_TYPE_AUTHENTICATION = 5;
+  ERROR_TYPE_RECURSION_LIMIT = 6;
+}
+
+// Recursion conditions for hierarchical policy
+enum RecursionCondition {
+  RECURSION_CONDITION_UNSPECIFIED = 0;  
+  RECURSION_CONDITION_REENTRANT = 1;    // Can recurse (like leaders)
+  RECURSION_CONDITION_TERMINAL = 2;     // Cannot recurse (like followers)
+}
+
+// Structured error information
+message ErrorInfo {
+  ErrorType error_type = 1;
+  string error_message = 2;
+  optional google.protobuf.Struct error_details = 3;
+}
+
+// Combined status and error information
+message ExecutionResult {
+  ExecutionStatus status = 1;
+  optional ErrorInfo error_info = 2;
+}
+
+// Structured agent response - mirrors A2A AgentCard capabilities with extensions
+message AgentResponse {
+  // Primary textual response (markdown, advice, reasoning)
+  string text_response = 1;
+  
+  // Structured extensions - like competency scores, role adaptations, domain expertise
+  repeated a2a.v1.AgentExtension extensions = 2;
+  
+  // Output modalities used (text/plain, text/markdown, application/json)
+  repeated string output_modes = 3;
+  
+  // Skills that were activated for this response
+  repeated a2a.v1.AgentSkill activated_skills = 4;
+}
+
+
+
+// Unified simulation result - represents both individual agent output and complete simulation
+message SimulationOutput {
+  // A2A agent URL from AgentCard (e.g., "http://agent.example.com/") - empty for root simulation
+  optional string agent_url = 1;
+  
+  // Recursion condition this agent operated under - only set for individual agents
+  optional RecursionCondition recursion_condition = 2;
+  
+  // Nested agent results if this agent/simulation spawned sub-agents
+  repeated SimulationOutput results = 3;
+  
+  // Final synthesized response - can contain both text and structured data like A2A AgentCard extensions
+  AgentResponse response = 4;
+  
+  // Total execution time for this agent/simulation (in seconds)
+  double total_time = 5;
+  
+  // Which execution strategy was used at each recursion level
+  repeated ExecutionStrategy execution_strategies = 6;
+  
+  // Total number of agents that participated in this simulation branch
+  int32 team_size = 7;
+  
+  // Current recursion depth for this agent/simulation
+  int32 recursion_depth = 8;
+  
+  // Combined execution status and error information
+  ExecutionResult execution_result = 9;
+}
