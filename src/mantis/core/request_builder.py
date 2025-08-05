@@ -2,7 +2,7 @@
 UserRequest builder for converting CLI arguments to protobuf messages.
 """
 
-from typing import List, Optional, Union, Dict, Any, TYPE_CHECKING
+from typing import List, Optional, Union, Dict, Any, TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from ..proto.mantis.v1 import mantis_core_pb2
@@ -112,7 +112,8 @@ class UserRequestBuilder:
                     raise ValueError(f"Invalid recursion policy '{recursion_policy}'. Valid options: {valid_policies}")
                 spec.recursion_policy = policy
             else:
-                spec.recursion_policy = recursion_policy
+                # recursion_policy is an int (enum value)  
+                spec.recursion_policy = recursion_policy  # type: ignore[assignment]
 
         self._agents.append(spec)
         return self
