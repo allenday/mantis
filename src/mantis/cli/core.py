@@ -118,6 +118,8 @@ class ModelParameter(click.ParamType):
     def convert(self, value: Any, param: Optional[click.Parameter], ctx: Optional[click.Context]) -> Any:
         if value is None:
             return value
+        if ctx is None or param is None:
+            return str(value)  # Skip validation if context is missing
         return validate_model_string(ctx, param, str(value))
 
 

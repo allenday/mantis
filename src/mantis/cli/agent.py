@@ -19,7 +19,6 @@ def display_agent_card_summary(agent_card, verbose: bool = False) -> None:
     """Display a rich summary of AgentCard information with persona extensions."""
     from rich.panel import Panel
     from rich.table import Table
-    from rich.columns import Columns
     from ..agent.card import ensure_mantis_agent_card
 
     # Always ensure we have a MantisAgentCard for rich display
@@ -58,8 +57,10 @@ def display_agent_card_summary(agent_card, verbose: bool = False) -> None:
 
     # Extension Data section (removed redundant Extensions listing)
     if mantis_card.agent_card.capabilities.extensions:
-        console.print(f"\n[bold cyan]📋 Extension Data ({len(mantis_card.agent_card.capabilities.extensions)} extensions):[/bold cyan]")
-        
+        console.print(
+            f"\n[bold cyan]📋 Extension Data ({len(mantis_card.agent_card.capabilities.extensions)} extensions):[/bold cyan]"
+        )
+
         # Persona Characteristics from extension
         char = mantis_card.persona_characteristics
         if char.core_principles or char.communication_style or char.thinking_patterns:
@@ -69,23 +70,26 @@ def display_agent_card_summary(agent_card, verbose: bool = False) -> None:
                 if ext.uri == "https://mantis.ai/extensions/persona-characteristics/v1":
                     persona_ext = ext
                     break
-            
+
             if persona_ext:
                 console.print(f"\n• [bold]{persona_ext.description}:[/bold]")
                 console.print(f"  [dim]AgentExtension URI:[/dim] {persona_ext.uri}")
                 console.print(f"  [dim]Required:[/dim] {persona_ext.required}")
                 console.print("")  # Empty line before data
-            
+
             # Original persona prompt as part of persona-characteristics extension
             if char.original_content:
                 console.print("  [dim]↳ Original source content from persona-characteristics extension:[/dim]")
                 from rich.syntax import Syntax
+
                 syntax = Syntax(char.original_content, "markdown", theme="monokai", word_wrap=True)
                 console.print(Panel(syntax, title="📜 Original Persona Prompt", border_style="dim", expand=True))
                 console.print("")  # Empty line before table
-            
+
             # Create a single consolidated persona characteristics table
-            persona_table = Table(title="🎭 Persona Characteristics", show_header=True, header_style="bold magenta", show_lines=True)
+            persona_table = Table(
+                title="🎭 Persona Characteristics", show_header=True, header_style="bold magenta", show_lines=True
+            )
             persona_table.add_column("Attribute", style="cyan", width=25)
             persona_table.add_column("Details", style="white", width=95)
 
@@ -98,14 +102,14 @@ def display_agent_card_summary(agent_card, verbose: bool = False) -> None:
             if char.communication_style:
                 persona_table.add_row("Communication Style", char.communication_style)
 
-            # Add thinking patterns  
+            # Add thinking patterns
             if char.thinking_patterns:
                 patterns_text = "\n".join([f"• {p}" for p in char.thinking_patterns])
                 persona_table.add_row("Thinking Patterns", patterns_text)
 
             # Add characteristic phrases
             if char.characteristic_phrases:
-                phrases_text = "\n".join([f"• \"{p}\"" for p in char.characteristic_phrases])
+                phrases_text = "\n".join([f'• "{p}"' for p in char.characteristic_phrases])
                 persona_table.add_row("Characteristic Phrases", phrases_text)
 
             # Add behavioral tendencies
@@ -128,15 +132,15 @@ def display_agent_card_summary(agent_card, verbose: bool = False) -> None:
                 if ext.uri == "https://mantis.ai/extensions/competency-scores/v1":
                     competency_ext = ext
                     break
-            
+
             if competency_ext:
                 console.print(f"\n• [bold]{competency_ext.description}:[/bold]")
                 console.print(f"  [dim]AgentExtension URI:[/dim] {competency_ext.uri}")
                 console.print(f"  [dim]Required:[/dim] {competency_ext.required}")
                 console.print("")  # Empty line before data
-            
+
             # Create separate tables for competency scores and role adaptation
-            
+
             # Competency Scores Table
             if comp.competency_scores:
                 comp_table = Table(title="📊 Competency Scores", show_header=True, header_style="bold blue")
@@ -169,7 +173,7 @@ def display_agent_card_summary(agent_card, verbose: bool = False) -> None:
 
                 console.print(comp_table)
 
-            # Role Adaptation Table  
+            # Role Adaptation Table
             role = comp.role_adaptation
             if role.leader_score or role.follower_score or role.narrator_score or role.preferred_role:
                 role_table = Table(title="🎭 Role Adaptation", show_header=True, header_style="bold magenta")
@@ -229,13 +233,13 @@ def display_agent_card_summary(agent_card, verbose: bool = False) -> None:
                 if ext.uri == "https://mantis.ai/extensions/domain-expertise/v1":
                     domain_ext = ext
                     break
-            
+
             if domain_ext:
                 console.print(f"\n• [bold]{domain_ext.description}:[/bold]")
                 console.print(f"  [dim]AgentExtension URI:[/dim] {domain_ext.uri}")
                 console.print(f"  [dim]Required:[/dim] {domain_ext.required}")
                 console.print("")  # Empty line before data
-            
+
             # Create a single 2x2 table for all domain expertise data
             domain_table = Table(title="🎯 Domain Expertise", show_header=True, header_style="bold cyan")
             domain_table.add_column("Primary Domains", style="red", width=60)
@@ -253,7 +257,9 @@ def display_agent_card_summary(agent_card, verbose: bool = False) -> None:
                 domain_table.add_row(primary_item, secondary_item)
 
             # Add section break if we have both domains and methodologies/tools
-            if (domain.primary_domains or domain.secondary_domains) and (domain.methodologies or domain.tools_and_frameworks):
+            if (domain.primary_domains or domain.secondary_domains) and (
+                domain.methodologies or domain.tools_and_frameworks
+            ):
                 domain_table.add_section()
 
             # Add section header for methodologies and tools
@@ -277,9 +283,9 @@ def display_agent_card_summary(agent_card, verbose: bool = False) -> None:
                     domain_table.add_row(method_item, tools_item)
 
             console.print(domain_table)
-            
+
     else:
-        console.print(f"\n[bold cyan]📋 Extension Data (0 extensions):[/bold cyan]")
+        console.print("\n[bold cyan]📋 Extension Data (0 extensions):[/bold cyan]")
         console.print("[dim]No extensions defined[/dim]")
 
     if verbose:

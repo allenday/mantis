@@ -60,3 +60,7 @@ warn_unused_configs = true
 disallow_untyped_defs = false
 ignore_missing_imports = true
 no_implicit_optional = false
+plugins = ["pydantic.mypy"]
+exclude = [
+    "src/mantis/proto/",
+]

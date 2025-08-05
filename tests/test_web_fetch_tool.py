@@ -78,7 +78,12 @@ class TestWebFetchTool:
         
         # Mock content iteration
         mock_content = Mock()
-        mock_content.iter_chunked.return_value = [b"test content"].__iter__()
+        
+        # Create async iterator for iter_chunked
+        async def mock_iter_chunked(chunk_size):
+            yield b"test content"
+        
+        mock_content.iter_chunked = mock_iter_chunked
         mock_response.content = mock_content
         
         return mock_response
@@ -164,10 +169,11 @@ class TestWebFetchTool:
             mock_session.__aexit__ = AsyncMock()
             mock_session.close = AsyncMock()
             
-            # Setup request method
-            mock_session.request = AsyncMock()
-            mock_session.request.return_value.__aenter__ = AsyncMock(return_value=mock_session_response)
-            mock_session.request.return_value.__aexit__ = AsyncMock()
+            # Setup request method - create a proper async context manager mock
+            mock_request_context = Mock()
+            mock_request_context.__aenter__ = AsyncMock(return_value=mock_session_response)
+            mock_request_context.__aexit__ = AsyncMock()
+            mock_session.request = Mock(return_value=mock_request_context)
             
             async with web_fetch_tool:
                 response = await web_fetch_tool.fetch_url("https://example.com")
@@ -188,8 +194,14 @@ class TestWebFetchTool:
             mock_session.__aexit__ = AsyncMock()
             mock_session.close = AsyncMock()
             
-            # Make request raise timeout
-            mock_session.request = AsyncMock(side_effect=asyncio.TimeoutError())
+            # Make request raise timeout - create context manager that raises
+            class TimeoutContextManager:
+                async def __aenter__(self):
+                    raise asyncio.TimeoutError()
+                async def __aexit__(self, exc_type, exc_val, exc_tb):
+                    pass
+            
+            mock_session.request = Mock(return_value=TimeoutContextManager())
             
             async with web_fetch_tool:
                 response = await web_fetch_tool.fetch_url("https://example.com")
@@ -218,9 +230,11 @@ class TestWebFetchTool:
             mock_response.headers = {"content-length": "1000000"}  # 1MB
             mock_response.url = "https://example.com"
             
-            mock_session.request = AsyncMock()
-            mock_session.request.return_value.__aenter__ = AsyncMock(return_value=mock_response)
-            mock_session.request.return_value.__aexit__ = AsyncMock()
+            # Setup request method - create a proper async context manager mock
+            mock_request_context = Mock()
+            mock_request_context.__aenter__ = AsyncMock(return_value=mock_response)
+            mock_request_context.__aexit__ = AsyncMock()
+            mock_session.request = Mock(return_value=mock_request_context)
             
             async with small_tool:
                 response = await small_tool.fetch_url("https://example.com")
@@ -401,12 +415,19 @@ class TestWebFetchTool:
             mock_response.headers = {"content-type": "text/html"}
             mock_response.url = "https://example.com"
             mock_content = Mock()
-            mock_content.iter_chunked.return_value = [b"content"].__iter__()
+            
+            # Create async iterator for iter_chunked
+            async def mock_iter_chunked(chunk_size):
+                yield b"content"
+            
+            mock_content.iter_chunked = mock_iter_chunked
             mock_response.content = mock_content
             
-            mock_session.request = AsyncMock()
-            mock_session.request.return_value.__aenter__ = AsyncMock(return_value=mock_response)
-            mock_session.request.return_value.__aexit__ = AsyncMock()
+            # Setup request method - create a proper async context manager mock
+            mock_request_context = Mock()
+            mock_request_context.__aenter__ = AsyncMock(return_value=mock_response)
+            mock_request_context.__aexit__ = AsyncMock()
+            mock_session.request = Mock(return_value=mock_request_context)
             
             async with low_limit_tool:
                 # First request should succeed immediately
@@ -440,12 +461,19 @@ class TestWebFetchTool:
             mock_response.headers = {"content-type": "text/html"}
             mock_response.url = "https://example.com"
             mock_content = Mock()
-            mock_content.iter_chunked.return_value = [b"content"].__iter__()
+            
+            # Create async iterator for iter_chunked
+            async def mock_iter_chunked(chunk_size):
+                yield b"content"
+            
+            mock_content.iter_chunked = mock_iter_chunked
             mock_response.content = mock_content
             
-            mock_session.request = AsyncMock()
-            mock_session.request.return_value.__aenter__ = AsyncMock(return_value=mock_response)
-            mock_session.request.return_value.__aexit__ = AsyncMock()
+            # Setup request method - create a proper async context manager mock
+            mock_request_context = Mock()
+            mock_request_context.__aenter__ = AsyncMock(return_value=mock_response)
+            mock_request_context.__aexit__ = AsyncMock()
+            mock_session.request = Mock(return_value=mock_request_context)
             
             async with web_fetch_tool:
                 # Make multiple concurrent requests

@@ -167,7 +167,7 @@ class UserRequestBuilder:
             raise ValueError(f"Validation failed: {'; '.join(errors)}")
 
         request = mantis_core_pb2.UserRequest()
-        request.query = self._query
+        request.query = self._query  # type: ignore  # Validated above
 
         if self._context:
             request.context = self._context
