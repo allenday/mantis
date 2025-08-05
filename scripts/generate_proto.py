@@ -129,16 +129,20 @@ def main():
         if not output_dir.exists():
             return
 
-        pb2_files = list(output_dir.glob("*_pb2.py"))
-        grpc_files = list(output_dir.glob("*_pb2_grpc.py"))
+        pb2_files = list(output_dir.rglob("*_pb2.py"))
+        grpc_files = list(output_dir.rglob("*_pb2_grpc.py"))
         all_files = pb2_files + grpc_files
         
         if not all_files:
             print("⚠️  No generated files found to fix")
             return
 
-        # Get list of all generated pb2 module names (without .py extension)
-        pb2_modules = {f.stem for f in pb2_files}
+        # Build a mapping of module names to their relative paths
+        pb2_modules = {}
+        for f in pb2_files:
+            # Get relative path from output_dir
+            rel_path = f.relative_to(output_dir)
+            pb2_modules[f.stem] = rel_path.parent
 
         for proto_file in all_files:
             print(f"  Fixing imports in {proto_file.name}")
@@ -146,14 +150,25 @@ def main():
             # Read the file
             content = proto_file.read_text()
             original_content = content
+            
+            # Get the directory of this proto file relative to output_dir
+            proto_file_dir = proto_file.relative_to(output_dir).parent
 
-            # Fix imports for each pb2 module that's in the same package
-            for module_name in pb2_modules:
+            # Fix imports for each pb2 module
+            for module_name, module_dir in pb2_modules.items():
                 if module_name != proto_file.stem:  # Don't fix self-imports
-                    # Replace "import module_pb2 as" with "from . import module_pb2 as"
-                    import_pattern = f"import {module_name} as"
-                    relative_import = f"from . import {module_name} as"
-                    content = content.replace(import_pattern, relative_import)
+                    # Calculate the relative import path
+                    if module_dir == proto_file_dir:
+                        # Same directory - use simple relative import
+                        import_pattern = f"import {module_name} as"
+                        relative_import = f"from . import {module_name} as"
+                        content = content.replace(import_pattern, relative_import)
+                    elif module_dir == Path("."):
+                        # Module is in root, we're in subdirectory - need to go up
+                        dots = "." + "." * len(proto_file_dir.parts)  # One dot per directory level up
+                        import_pattern = f"import {module_name} as"
+                        relative_import = f"from {dots} import {module_name} as"
+                        content = content.replace(import_pattern, relative_import)
 
             # Write back if changed
             if content != original_content:
@@ -166,11 +181,13 @@ def main():
 
     # List generated files
     if output_dir.exists():
-        generated_files = list(output_dir.glob("*.py"))
+        generated_files = list(output_dir.rglob("*.py"))
         if generated_files:
             print("\nGenerated files:")
             for f in sorted(generated_files):
-                print(f"  - {f.name}")
+                # Show relative path from output_dir
+                rel_path = f.relative_to(output_dir)
+                print(f"  - {rel_path}")
         else:
             print("⚠️  No Python files were generated")
 

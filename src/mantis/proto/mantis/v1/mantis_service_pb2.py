@@ -26,8 +26,8 @@ from google.api import annotations_pb2 as google_dot_api_dot_annotations__pb2
 from google.api import client_pb2 as google_dot_api_dot_client__pb2
 from google.api import field_behavior_pb2 as google_dot_api_dot_field__behavior__pb2
 from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
-from mantis.v1 import mantis_core_pb2 as mantis_dot_v1_dot_mantis__core__pb2
-import registry_pb2 as registry__pb2
+from mantis.v1 from . import mantis_core_pb2 as mantis_dot_v1_dot_mantis__core__pb2
+from ... import registry_pb2 as registry__pb2
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1emantis/v1/mantis_service.proto\x12\x0emantis.service\x1a\x1cgoogle/api/annotations.proto\x1a\x17google/api/client.proto\x1a\x1fgoogle/api/field_behavior.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1bmantis/v1/mantis_core.proto\x1a\x0eregistry.protoBa\n\x15\x63om.mantis.service.v1B\rMantisServiceP\x01Z#google.golang.org/mantis/service/v1\xaa\x02\x11Mantis.Service.V1b\x06proto3')

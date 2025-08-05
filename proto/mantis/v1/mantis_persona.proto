@@ -2,6 +2,23 @@ syntax = "proto3";
 
 package mantis.persona.v1;
 
+import "a2a.proto";
+
+// Enriched AgentCard that includes parsed persona extension data
+message MantisAgentCard {
+  // The base A2A AgentCard
+  a2a.v1.AgentCard agent_card = 1;
+  
+  // Parsed persona extension data (optional)
+  optional PersonaCharacteristics persona_characteristics = 2;
+  optional CompetencyScores competency_scores = 3;
+  optional DomainExpertise domain_expertise = 4;
+  
+  // Computed/derived fields for display
+  optional string persona_title = 10;      // e.g., "Master Strategist"
+  repeated string skill_tags = 11;         // Extracted from skills for domain hints
+}
+
 // Persona characteristics and behavioral patterns extension
 // URI: https://mantis.ai/extensions/persona-characteristics/v1
 message PersonaCharacteristics {
