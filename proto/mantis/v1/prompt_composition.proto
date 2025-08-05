@@ -75,6 +75,21 @@ message ExecutionContext {
   repeated string available_agents = 7;
 }
 
+// Simulation orchestration context (replaces dataclass)
+message SimulationContext {
+  // Start time as Unix timestamp
+  double start_time = 1;
+  
+  // Execution strategy being used
+  mantis.core.ExecutionStrategy strategy = 2;
+  
+  // The simulation input being processed
+  mantis.core.SimulationInput simulation_input = 3;
+  
+  // Current recursion depth for the simulation
+  int32 current_depth = 4;
+}
+
 // Composition strategy enumeration  
 enum CompositionStrategy {
   COMPOSITION_STRATEGY_UNSPECIFIED = 0;
