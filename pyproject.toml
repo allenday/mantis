@@ -22,7 +22,7 @@ dependencies = [
     "click>=8.0.0",
     "uvicorn>=0.24.0",
     "fasta2a>=0.0.1",
-    "a2a-sdk>=0.3.0",
+    "protoc-gen-validate>=1.2.0",
 ]
 
 [project.optional-dependencies]
