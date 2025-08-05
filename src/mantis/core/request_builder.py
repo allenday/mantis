@@ -7,7 +7,7 @@ from typing import List, Optional, Union, Dict, Any
 from pathlib import Path
 
 from ..proto.mantis.v1 import mantis_core_pb2
-from ..config import DEFAULT_MODEL, DEFAULT_TEMPERATURE
+from ..config import DEFAULT_MODEL, DEFAULT_TEMPERATURE, DEFAULT_MAX_DEPTH
 
 
 class UserRequestBuilder:
@@ -179,6 +179,8 @@ class UserRequestBuilder:
 
         if self._max_depth is not None:
             request.max_depth = self._max_depth
+        else:
+            request.max_depth = DEFAULT_MAX_DEPTH
 
         # Add agents
         for agent_spec in self._agents:
@@ -254,8 +256,8 @@ class UserRequestBuilder:
         if self._max_depth is not None:
             if self._max_depth < 1:
                 errors.append(f"Max depth must be at least 1, got {self._max_depth}")
-            elif self._max_depth > 10:
-                errors.append(f"Max depth cannot exceed 10 for safety, got {self._max_depth}")
+            elif self._max_depth > DEFAULT_MAX_DEPTH:
+                errors.append(f"Max depth cannot exceed {DEFAULT_MAX_DEPTH} for safety, got {self._max_depth}")
 
         # Validate model spec if present
         if self._model_spec:

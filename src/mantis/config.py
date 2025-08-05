@@ -5,6 +5,7 @@ Configuration settings for Mantis A2A system.
 # Default model configuration - matches cli.py default
 DEFAULT_MODEL = "anthropic:claude-3-5-haiku-20241022"
 DEFAULT_TEMPERATURE = 0.7
+DEFAULT_MAX_DEPTH = 3
 
 # Server configuration
 DEFAULT_HOST = "0.0.0.0"

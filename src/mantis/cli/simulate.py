@@ -11,7 +11,7 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 
 from .core import cli, use_global_options, error_handler
-from ..core import UserRequestBuilder
+from ..core import UserRequestBuilder, SimulationOrchestrator
 from ..proto.mantis.v1 import mantis_core_pb2
 
 console = Console()
@@ -22,7 +22,7 @@ console = Console()
 @click.option("--context", "-c", help="Additional context for the simulation")
 @click.option("--structured-data", "--data", help="Structured data as JSON string")
 @click.option("--agents", "-a", help="Comma-separated agent specifications (e.g., 'leader:1:may,follower:2:must_not')")
-@click.option("--max-depth", "-d", type=int, help="Maximum recursion depth (1-10)")
+@click.option("--max-depth", "-d", type=int, help=f"Maximum recursion depth (1-3, default: 3)")
 @click.option("--strategy", type=click.Choice(["direct", "a2a"]), default="a2a", help="Execution strategy")
 @click.option("--temperature", "-t", type=float, help="Model temperature (0.0-2.0)")
 @click.option("--dry-run", is_flag=True, help="Show the UserRequest without executing")
@@ -83,19 +83,31 @@ def simulate(
             _display_user_request(user_request, verbose)
             return
 
-        # TODO: This is where we would call the actual simulation orchestrator
-        console.print("[yellow]⚠️  Simulation orchestrator not yet implemented[/yellow]")
-        console.print("[blue]ℹ️  This would execute the simulation with the following request:[/blue]")
-        _display_user_request(user_request, verbose=True)
+        # Execute the simulation using the orchestrator
+        console.print("[blue]ℹ️  Starting simulation...[/blue]")
         
-        console.print(Panel(
-            "[bold yellow]Implementation Status[/bold yellow]\n\n"
-            "The UserRequest builder is complete, but the simulation orchestrator\n"
-            "still needs to be implemented (Issues #3-4).\n\n"
-            "[dim]Use --dry-run to see the generated UserRequest structure.[/dim]",
-            title="Next Steps",
-            border_style="yellow"
-        ))
+        orchestrator = SimulationOrchestrator()
+        
+        # Run the simulation (handle async)
+        import asyncio
+        try:
+            simulation_output = asyncio.run(orchestrator.execute_simulation(user_request))
+            
+            # Display results
+            _display_simulation_output(simulation_output, verbose)
+            
+            # Check for errors
+            if simulation_output.execution_result.status == mantis_core_pb2.EXECUTION_STATUS_FAILED:
+                console.print("[red]❌ Simulation completed with errors[/red]")
+                return 1
+            else:
+                console.print("[green]✅ Simulation completed successfully[/green]")
+                
+        except Exception as e:
+            console.print(f"[red]❌ Simulation execution failed: {e}[/red]")
+            if verbose:
+                console.print_exception()
+            return 1
 
     except ValueError as e:
         console.print(f"[red]❌ Validation Error: {e}[/red]")
@@ -105,6 +117,42 @@ def simulate(
         if verbose:
             console.print_exception()
         return 1
+
+
+def _display_simulation_output(simulation_output: mantis_core_pb2.SimulationOutput, verbose: bool = False):
+    """Display SimulationOutput in a formatted way."""
+    # Display main response
+    console.print(Panel(
+        simulation_output.response.text_response,
+        title="Simulation Result",
+        border_style="green" if simulation_output.execution_result.status == mantis_core_pb2.EXECUTION_STATUS_SUCCESS else "red"
+    ))
+    
+    # Display metadata
+    status_name = mantis_core_pb2.ExecutionStatus.Name(simulation_output.execution_result.status)
+    console.print(f"\n[bold]Execution Summary:[/bold]")
+    console.print(f"  Status: {status_name.replace('EXECUTION_STATUS_', '')}")
+    console.print(f"  Duration: {simulation_output.total_time:.2f}s")
+    console.print(f"  Team Size: {simulation_output.team_size}")
+    console.print(f"  Recursion Depth: {simulation_output.recursion_depth}")
+    
+    if simulation_output.execution_strategies:
+        strategy_names = [
+            mantis_core_pb2.ExecutionStrategy.Name(s).replace('EXECUTION_STRATEGY_', '')
+            for s in simulation_output.execution_strategies
+        ]
+        console.print(f"  Strategies: {', '.join(strategy_names)}")
+    
+    # Display error info if present
+    if simulation_output.execution_result.HasField("error_info"):
+        error_info = simulation_output.execution_result.error_info
+        error_type = mantis_core_pb2.ErrorType.Name(error_info.error_type).replace('ERROR_TYPE_', '')
+        console.print(f"\n[red]Error Details:[/red]")
+        console.print(f"  Type: {error_type}")
+        console.print(f"  Message: {error_info.error_message}")
+    
+    if verbose and simulation_output.response.output_modes:
+        console.print(f"\n[dim]Output Modes: {', '.join(simulation_output.response.output_modes)}[/dim]")
 
 
 def _display_user_request(user_request: mantis_core_pb2.UserRequest, verbose: bool = False):
