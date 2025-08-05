@@ -2,18 +2,16 @@
 UserRequest builder for converting CLI arguments to protobuf messages.
 """
 
-import re
 from typing import List, Optional, Union, Dict, Any
-from pathlib import Path
 
 from ..proto.mantis.v1 import mantis_core_pb2
-from ..config import DEFAULT_MODEL, DEFAULT_TEMPERATURE, DEFAULT_MAX_DEPTH
+from ..config import DEFAULT_MAX_DEPTH
 
 
 class UserRequestBuilder:
     """
     Builds UserRequest protobuf messages from CLI arguments.
-    
+
     Handles conversion from command-line arguments to structured protobuf
     messages, including validation and default value handling.
     """
@@ -44,6 +42,7 @@ class UserRequestBuilder:
             self._structured_data = None
         elif isinstance(data, dict):
             import json
+
             self._structured_data = json.dumps(data)
         else:
             self._structured_data = str(data)
@@ -118,7 +117,7 @@ class UserRequestBuilder:
     def parse_agents_string(self, agents_str: Optional[str]) -> "UserRequestBuilder":
         """
         Parse agent specifications from comma-separated string.
-        
+
         Formats supported:
         - "agent1,agent2" - Simple agent names (count=1 each)
         - "agent1:2,agent2:3" - Agent names with counts
@@ -128,10 +127,10 @@ class UserRequestBuilder:
             return self
 
         agent_specs = [spec.strip() for spec in agents_str.split(",") if spec.strip()]
-        
+
         for spec in agent_specs:
             parts = spec.split(":")
-            
+
             if len(parts) == 1:
                 # Simple format: just agent name
                 self.add_agent(count=1)
@@ -154,7 +153,9 @@ class UserRequestBuilder:
                     else:
                         raise e
             else:
-                raise ValueError(f"Invalid agent specification format: '{spec}'. Use 'name', 'name:count', or 'name:count:policy'")
+                raise ValueError(
+                    f"Invalid agent specification format: '{spec}'. Use 'name', 'name:count', or 'name:count:policy'"
+                )
 
         return self
 
@@ -179,8 +180,6 @@ class UserRequestBuilder:
 
         if self._max_depth is not None:
             request.max_depth = self._max_depth
-        else:
-            request.max_depth = DEFAULT_MAX_DEPTH
 
         # Add agents
         for agent_spec in self._agents:
@@ -208,7 +207,7 @@ class UserRequestBuilder:
     ) -> mantis_core_pb2.UserRequest:
         """
         Convenience method to build UserRequest from CLI arguments.
-        
+
         Args:
             query: Main query/prompt text
             context: Optional context
@@ -217,34 +216,34 @@ class UserRequestBuilder:
             temperature: Optional temperature (0.0-2.0)
             max_depth: Optional recursion depth limit (1-10)
             agents: Optional comma-separated agent specifications
-            
+
         Returns:
             UserRequest protobuf message
         """
         builder = cls()
         builder.query(query)
-        
+
         if context:
             builder.context(context)
-            
+
         if structured_data:
             builder.structured_data(structured_data)
-            
+
         if model or temperature is not None:
             builder.model_spec(model, temperature)
-            
+
         if max_depth is not None:
             builder.max_depth(max_depth)
-            
+
         if agents:
             builder.parse_agents_string(agents)
-            
+
         return builder.build()
 
     def validate(self) -> List[str]:
         """
         Validate the current builder state and return any errors.
-        
+
         Returns:
             List of error messages, empty if valid
         """
@@ -270,7 +269,7 @@ class UserRequestBuilder:
         for i, agent in enumerate(self._agents):
             if agent.HasField("count") and agent.count < 1:
                 errors.append(f"Agent {i} count must be at least 1, got {agent.count}")
-                
+
             if agent.HasField("model_spec") and agent.model_spec.HasField("temperature"):
                 temp = agent.model_spec.temperature
                 if not 0.0 <= temp <= 2.0:
