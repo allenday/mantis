@@ -3,6 +3,15 @@ syntax = "proto3";
 package mantis.persona.v1;
 
 import "a2a.proto";
+import "validate/validate.proto";
+
+// Role preferences for multi-agent scenarios
+enum RolePreference {
+  ROLE_PREFERENCE_UNSPECIFIED = 0;
+  ROLE_PREFERENCE_LEADER = 1;
+  ROLE_PREFERENCE_FOLLOWER = 2;
+  ROLE_PREFERENCE_NARRATOR = 3;
+}
 
 // Enriched AgentCard that includes parsed persona extension data
 message MantisAgentCard {
@@ -47,25 +56,30 @@ message PersonaCharacteristics {
 // Role adaptation scores and preferences
 message RoleAdaptation {
   // Score for effectiveness as a leader (0.0 - 1.0)
-  float leader_score = 1;
+  // 0.0-0.3: Poor leadership, 0.4-0.6: Moderate, 0.7-0.8: Strong, 0.9-1.0: Exceptional
+  float leader_score = 1 [(validate.rules).float = {gte: 0.0, lte: 1.0}];
   
   // Score for effectiveness as a follower (0.0 - 1.0)
-  float follower_score = 2;
+  // 0.0-0.3: Poor execution, 0.4-0.6: Moderate, 0.7-0.8: Strong, 0.9-1.0: Exceptional
+  float follower_score = 2 [(validate.rules).float = {gte: 0.0, lte: 1.0}];
   
   // Score for effectiveness as a narrator/observer (0.0 - 1.0)
-  float narrator_score = 3;
+  // 0.0-0.3: Poor facilitation, 0.4-0.6: Moderate, 0.7-0.8: Strong, 0.9-1.0: Exceptional
+  float narrator_score = 3 [(validate.rules).float = {gte: 0.0, lte: 1.0}];
   
   // Preferred role in team dynamics
-  string preferred_role = 4;
+  RolePreference preferred_role = 4 [(validate.rules).enum = {defined_only: true, not_in: [0]}];
   
   // Flexibility in adapting to different roles (0.0 - 1.0)
-  float role_flexibility = 5;
+  // 0.0-0.3: Rigid, 0.4-0.6: Moderate flexibility, 0.7-0.8: Highly flexible, 0.9-1.0: Chameleon-like
+  float role_flexibility = 5 [(validate.rules).float = {gte: 0.0, lte: 1.0}];
 }
 
 // Competency scores across key skill areas
 // URI: https://mantis.ai/extensions/competency-scores/v1
 message CompetencyScores {
   // Map of competency name to score (0.0 - 1.0)
+  // Scoring guidelines: 0.0-0.3: Limited/weak, 0.4-0.6: Moderate, 0.7-0.8: Strong, 0.9-1.0: Exceptional/legendary
   // Common competencies include:
   // - "strategic planning and long-term vision"
   // - "team leadership and inspiring others"
@@ -77,7 +91,7 @@ message CompetencyScores {
   // - "stakeholder relationship management"
   // - "domain expertise and technical knowledge"
   // - "adaptability to changing circumstances"
-  map<string, float> competency_scores = 1;
+  map<string, float> competency_scores = 1 [(validate.rules).map.values.float = {gte: 0.0, lte: 1.0}];
   
   // Role adaptation scores and preferences
   RoleAdaptation role_adaptation = 2;

@@ -22,19 +22,19 @@ def display_agent_card_summary(agent_card, verbose: bool = False) -> None:
     from rich.columns import Columns
     from ..agent.card import ensure_mantis_agent_card
     
-    # Convert to MantisAgentCard to get parsed persona data
+    # Always ensure we have a MantisAgentCard for rich display
     mantis_card = ensure_mantis_agent_card(agent_card)
     
     # Header with persona title
-    title = mantis_card.persona_title if mantis_card.persona_title else agent_card.name
+    title = mantis_card.persona_title if mantis_card.persona_title else mantis_card.agent_card.name
     console.print(f"\n[bold magenta]✨ {title}[/bold magenta]")
     
     # Basic info panel
     basic_info = f"""
-[bold]Version:[/bold] {agent_card.version}
-[bold]Provider:[/bold] [yellow]{agent_card.provider.organization}[/yellow]
-[bold]A2A URL:[/bold] {agent_card.url}
-[bold]Protocol:[/bold] {agent_card.protocol_version} via {agent_card.preferred_transport}
+[bold]Version:[/bold] {mantis_card.agent_card.version}
+[bold]Provider:[/bold] [yellow]{mantis_card.agent_card.provider.organization}[/yellow]
+[bold]A2A URL:[/bold] {mantis_card.agent_card.url}
+[bold]Protocol:[/bold] {mantis_card.agent_card.protocol_version} via {mantis_card.agent_card.preferred_transport}
 """
     console.print(Panel(basic_info.strip(), title="Agent Overview", border_style="blue"))
     
@@ -134,7 +134,15 @@ def display_agent_card_summary(agent_card, verbose: bool = False) -> None:
                     comp_table.add_row(role_name, f"[{score_color}]{score:.2f}[/{score_color}]", bar)
             
             if role.preferred_role:
-                comp_table.add_row("• Preferred Role", f"[bold bright_cyan]{role.preferred_role.title()}[/bold bright_cyan]", "✨ Primary")
+                # Use the proper enum from protobuf
+                from ..proto.mantis.v1.mantis_persona_pb2 import RolePreference
+                role_names = {
+                    RolePreference.ROLE_PREFERENCE_LEADER: "Leader",
+                    RolePreference.ROLE_PREFERENCE_FOLLOWER: "Follower", 
+                    RolePreference.ROLE_PREFERENCE_NARRATOR: "Narrator"
+                }
+                role_name = role_names.get(role.preferred_role, f"Role {role.preferred_role}")
+                comp_table.add_row("• Preferred Role", f"[bold bright_cyan]{role_name}[/bold bright_cyan]", "✨ Primary")
             
         console.print(comp_table)
     
@@ -158,21 +166,21 @@ def display_agent_card_summary(agent_card, verbose: bool = False) -> None:
         console.print(domain_table)
     
     # A2A Skills as bulleted list
-    if agent_card.skills:
+    if mantis_card.agent_card.skills:
         skills_lines = []
-        for skill in agent_card.skills:
+        for skill in mantis_card.agent_card.skills:
             skills_lines.append(f"• [bold]{skill.name}[/bold] - {skill.description}")
             if skill.examples:
                 for example in skill.examples:
                     skills_lines.append(f"    [dim]Example: {example}[/dim]")
         
         skills_text = "\n".join(skills_lines)
-        console.print(Panel(skills_text, title=f"🎯 A2A Skills ({len(agent_card.skills)} total)", border_style="green"))
+        console.print(Panel(skills_text, title=f"🎯 A2A Skills ({len(mantis_card.agent_card.skills)} total)", border_style="green"))
     
     # Extensions summary
-    console.print(f"\n[bold magenta]Extensions:[/bold magenta] {len(agent_card.capabilities.extensions)} total")
-    if agent_card.capabilities.extensions:
-        for ext in agent_card.capabilities.extensions:
+    console.print(f"\n[bold magenta]Extensions:[/bold magenta] {len(mantis_card.agent_card.capabilities.extensions)} total")
+    if mantis_card.agent_card.capabilities.extensions:
+        for ext in mantis_card.agent_card.capabilities.extensions:
             console.print(f"  • [bold]{ext.uri}[/bold] - {ext.description}")
     
     if verbose:
@@ -182,13 +190,13 @@ def display_agent_card_summary(agent_card, verbose: bool = False) -> None:
         from google.protobuf.json_format import MessageToJson
         
         syntax = Syntax(
-            MessageToJson(agent_card, preserving_proto_field_name=True, indent=2),
+            MessageToJson(mantis_card.agent_card, preserving_proto_field_name=True, indent=2),
             "json",
             theme="monokai",
             line_numbers=True,
             word_wrap=True,
         )
-        console.print(Panel(syntax, title=f"AgentCard: {agent_card.name}", border_style="dim", expand=False))
+        console.print(Panel(syntax, title=f"AgentCard: {mantis_card.agent_card.name}", border_style="dim", expand=False))
 
 
 @cli.group()
@@ -317,13 +325,12 @@ def inspect(
             with open(file_path, 'r') as f:
                 agent_data = json.load(f)
 
-            # Convert JSON to protobuf AgentCard
-            from ..agent.card import json_to_protobuf_agent_card
-            
-            agent_card = json_to_protobuf_agent_card(agent_data)
+            # Load AgentCard from JSON (handles both formats)
+            from ..agent.card import load_agent_card_from_json
+            agent_card = load_agent_card_from_json(agent_data)
 
             if verbose:
-                console.print(f"[dim]✅ Valid AgentCard loaded: {agent_card.name}[/dim]")
+                console.print(f"[dim]✅ Valid AgentCard loaded: {agent_card.agent_card.name}[/dim]")
 
             # Display or output the AgentCard
             if format == "json":
@@ -387,7 +394,9 @@ def generate(
         agent_card = generate(str(actual_input), model=model)
 
         if not quiet:
-            console.print(f"\n[bold green]✅ Successfully generated AgentCard: {agent_card.name}[/bold green]")
+            # Get the name from the appropriate source
+            agent_name = agent_card.agent_card.name if hasattr(agent_card, 'agent_card') else agent_card.name
+            console.print(f"\n[bold green]✅ Successfully generated AgentCard: {agent_name}[/bold green]")
 
             # Display AgentCard information
             display_agent_card_summary(agent_card, verbose)
@@ -398,25 +407,34 @@ def generate(
                 # Directory output - create file based on persona name
                 output_dir = output if output.is_dir() else Path(output)
                 output_dir.mkdir(parents=True, exist_ok=True)
-                filename = f"{agent_card.name.lower().replace(' ', '_')}_persona.json"
+                # Get name from appropriate source
+                persona_name = agent_card.agent_card.name if hasattr(agent_card, 'agent_card') else agent_card.name
+                filename = f"{persona_name.lower().replace(' ', '_')}_persona.json"
                 output_file = output_dir / filename
             else:
                 # File output
                 output_file = output
-                output_file.parent.mkdir(parents=True, exist_ok=True)
+                if output_file.parent != Path("."):
+                    output_file.parent.mkdir(parents=True, exist_ok=True)
 
             # Save AgentCard data (final A2A protocol format)
+            from google.protobuf.json_format import MessageToJson
             with open(output_file, "w") as f:
-                json.dump(agent_card.model_dump(), f, indent=2, default=str)
+                json_str = MessageToJson(agent_card, preserving_proto_field_name=True, indent=2)
+                f.write(json_str)
 
             if not quiet:
                 console.print(f"\n[bold green]✅ AgentCard saved to: {output_file}[/bold green]")
 
                 if verbose:
+                    # Get appropriate references for MantisAgentCard vs AgentCard
+                    base_card = agent_card.agent_card if hasattr(agent_card, 'agent_card') else agent_card
+                    skills_count = len(base_card.skills)
+                    extensions_count = len(base_card.capabilities.extensions)
                     console.print(
-                        f"[dim]Saved A2A AgentCard with {len(agent_card.skills)} skills and {len(agent_card.capabilities.extensions)} extensions[/dim]"
+                        f"[dim]Saved A2A AgentCard with {skills_count} skills and {extensions_count} extensions[/dim]"
                     )
-                    console.print(f"[dim]A2A URL: {agent_card.url}[/dim]")
+                    console.print(f"[dim]A2A URL: {base_card.url}[/dim]")
 
         return 0
 

@@ -58,8 +58,9 @@ def main():
 
     # Proto files to generate
     proto_files = [
+        "validate/validate.proto",  # Generate validation support first
         "mantis/v1/mantis_core.proto",
-        "mantis/v1/mantis_service.proto",
+        "mantis/v1/mantis_service.proto", 
         "mantis/v1/mantis_persona.proto",
     ]
 
@@ -154,9 +155,16 @@ def main():
             # Get the directory of this proto file relative to output_dir
             proto_file_dir = proto_file.relative_to(output_dir).parent
 
-            # Fix imports for each pb2 module
+            # Fix specific validate import (only for files in mantis/v1 subdirectory)
+            if "mantis/v1" in str(proto_file):
+                content = content.replace(
+                    "from validate import validate_pb2 as validate_dot_validate__pb2",
+                    "from ...validate import validate_pb2 as validate_dot_validate__pb2"
+                )
+            
+            # Fix imports for each pb2 module (skip validate_pb2 as it's handled above)
             for module_name, module_dir in pb2_modules.items():
-                if module_name != proto_file.stem:  # Don't fix self-imports
+                if module_name != proto_file.stem and module_name != "validate_pb2":  # Don't fix self-imports or validate
                     # Calculate the relative import path
                     if module_dir == proto_file_dir:
                         # Same directory - use simple relative import

@@ -10,27 +10,184 @@ from rich.console import Console
 
 def generate(input_path: str, model: Optional[str] = None):
     """
-    Generate AgentCard from markdown file.
+    Generate MantisAgentCard from markdown file using LLM enhancement.
     
     Args:
         input_path: Path to markdown persona file
-        model: Optional model specification
+        model: Optional model specification (e.g., "anthropic:claude-3-5-haiku-20241022")
         
     Returns:
-        AgentCard object
+        MantisAgentCard protobuf object with rich LLM-extracted persona data
     """
-    # Import persona creation function and AgentCard conversion
-    from ..personas.personas import create_persona_from_markdown
-    from ..registry.agent_cards import create_agent_card_from_persona
+    from pathlib import Path
 
-    # Create persona (pass model if specified)
-    agent = create_persona_from_markdown(input_path, model=model)
-    structured_persona = agent.structured_persona
+    path = Path(input_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Persona file not found: {input_path}")
+    
+    # Read markdown content
+    content = path.read_text(encoding='utf-8')
+    persona_name = path.stem.replace('_', ' ').title()
+    
+    # Create base AgentCard
+    base_card = _create_base_agent_card(persona_name, content, path)
+    
+    # Enhance with LLM (required)
+    enhanced_card = _enhance_with_llm(base_card, content, persona_name, model)
+    return enhanced_card
 
-    # Convert to AgentCard format (the final output format)
-    agent_card = create_agent_card_from_persona(structured_persona)
+
+def _create_base_agent_card(name: str, content: str, path: Path):
+    """Create base AgentCard using existing logic."""
+    from ..proto.a2a_pb2 import AgentCard, AgentSkill, AgentCapabilities, AgentExtension, AgentProvider
+    from google.protobuf.struct_pb2 import Struct
+
+    description_lines = [line.strip() for line in content.split('\n') if line.strip()]
+    description = description_lines[0] if description_lines else f"Persona: {name}"
+    
+    # Create AgentCard
+    agent_card = AgentCard()
+    agent_card.name = name
+    agent_card.description = description
+    agent_card.url = f"https://agents.mantis.ai/persona/{name.lower().replace(' ', '_')}"
+    agent_card.version = "1.0.0"
+    agent_card.protocol_version = "0.3.0"
+    agent_card.preferred_transport = "JSONRPC"
+    agent_card.documentation_url = f"https://mantis.ai/personas/{name.lower().replace(' ', '_')}"
+    
+    # Create provider
+    provider = AgentProvider()
+    provider.organization = "Mantis AI"
+    provider.url = "https://mantis.ai"
+    agent_card.provider.CopyFrom(provider)
+    
+    # Create basic skill based on persona
+    skill = AgentSkill()
+    skill.id = f"{name.lower().replace(' ', '_')}_primary_skill"
+    skill.name = f"{name} Expertise"
+    skill.description = description
+    skill.tags.extend(["strategic_thinking", "analysis", "advice"])
+    skill.examples.append(f"What would {name} think about this situation?")
+    skill.input_modes.extend(["text/plain", "application/json"])
+    skill.output_modes.extend(["text/plain", "text/markdown"])
+    agent_card.skills.append(skill)
+    
+    # Create capabilities
+    capabilities = AgentCapabilities()
+    capabilities.push_notifications = False
+    capabilities.streaming = True
+    
+    # Add basic persona extension
+    extension = AgentExtension()
+    extension.uri = "https://mantis.ai/extensions/persona-characteristics/v1"
+    extension.description = f"Persona characteristics for {name}"
+    extension.required = False
+    
+    # Add basic persona data
+    params = Struct()
+    params.update({
+        "name": name,
+        "original_content": content[:1000],  # First 1000 chars
+        "source_file": str(path.name)
+    })
+    extension.params.CopyFrom(params)
+    
+    capabilities.extensions.append(extension)
+    agent_card.capabilities.CopyFrom(capabilities)
     
     return agent_card
+
+
+def _enhance_with_llm(base_card, content: str, persona_name: str, model_spec: Optional[str] = None):
+    """Enhance AgentCard with LLM-extracted persona data."""
+    from ..llm.structured_extractor import get_structured_extractor
+    from ..proto.mantis.v1.mantis_persona_pb2 import (
+        MantisAgentCard, PersonaCharacteristics, CompetencyScores,
+        DomainExpertise, RoleAdaptation, RolePreference
+    )
+    
+    try:
+        extractor = get_structured_extractor(model_spec)
+        
+        # Extract persona characteristics
+        characteristics = extractor.extract_protobuf_sync(
+            content=content,
+            protobuf_type=PersonaCharacteristics,
+            system_prompt="""Extract persona characteristics from markdown content. Focus on:
+- Core principles that guide decision-making (3-5 key principles)
+- Decision framework: How the persona approaches choices and problems
+- Communication style: Their typical tone, language patterns, and approach
+- Thinking patterns: Characteristic ways of processing information
+- Characteristic phrases: Typical expressions or sayings they would use
+- Behavioral tendencies: Common behavioral patterns and habits
+
+Be specific to the persona described, not generic. Extract authentic characteristics.""",
+            user_prompt=f"Analyze this persona and extract detailed characteristics:\n\n{content}"
+        )
+        
+        # Extract competency scores and role adaptation
+        competencies = extractor.extract_protobuf_sync(
+            content=content,
+            protobuf_type=CompetencyScores,
+            system_prompt="""Score competencies 0.0-1.0 based on persona description:
+- strategic planning and long-term vision
+- team leadership and inspiring others  
+- decisive decision making under pressure
+- clear and persuasive communication
+- analytical thinking and logical reasoning
+- creative innovation and design thinking
+- risk assessment and mitigation planning
+- stakeholder relationship management
+- domain expertise and technical knowledge
+- adaptability to changing circumstances
+
+Scoring: 0.0-0.3 Limited/weak, 0.4-0.6 Moderate, 0.7-0.8 Strong, 0.9-1.0 Exceptional
+
+Also assess role adaptation (all scores 0.0-1.0):
+- Leader score: How well they guide, make decisions, set vision
+- Follower score: How well they execute, specialize, support others
+- Narrator score: How well they facilitate, synthesize, communicate stories
+- Preferred role: 1=LEADER, 2=FOLLOWER, 3=NARRATOR based on strengths
+- Role flexibility: Ability to adapt between roles""",
+            user_prompt=f"Score this persona's competencies and role adaptation:\n\n{content}"
+        )
+        
+        # Extract domain expertise
+        expertise = extractor.extract_protobuf_sync(
+            content=content,
+            protobuf_type=DomainExpertise,
+            system_prompt="""Extract domain expertise including:
+- Primary domains: Main areas of deep expertise (3-5 domains)
+- Secondary domains: Supporting knowledge areas (2-4 domains)
+- Methodologies: Preferred approaches, frameworks, methods they use
+- Tools and frameworks: Specific tools, systems, technologies they know
+
+Be specific to the persona. Focus on what makes them uniquely valuable.""",
+            user_prompt=f"Extract domain expertise from:\n\n{content}"
+        )
+        
+        # Create enhanced MantisAgentCard
+        mantis_card = MantisAgentCard()
+        mantis_card.agent_card.CopyFrom(base_card)
+        mantis_card.persona_characteristics.CopyFrom(characteristics)
+        mantis_card.competency_scores.CopyFrom(competencies)
+        mantis_card.domain_expertise.CopyFrom(expertise)
+        mantis_card.persona_title = persona_name
+        
+        # Set original_content directly with full fidelity
+        mantis_card.persona_characteristics.original_content = content
+        
+        # Add skill tags from domain expertise
+        for domain in expertise.primary_domains[:3]:  # Top 3 domains
+            mantis_card.skill_tags.append(domain.lower().replace(" ", "_"))
+        
+        return mantis_card
+        
+    except ImportError:
+        # LLM dependencies not available
+        raise Exception("LLM dependencies not available")
+    except Exception as e:
+        raise Exception(f"LLM enhancement failed: {e}")
 
 
 def parse_extension_data(extension_uri: str, extension_params: Dict[str, Any]) -> Optional[Any]:
@@ -147,18 +304,45 @@ def get_parsed_extensions(agent_card) -> Dict[str, Any]:
     return parsed_extensions
 
 
+def load_agent_card_from_json(agent_data: Dict[str, Any]) -> "MantisAgentCard":
+    """
+    Load AgentCard from JSON data, handling both MantisAgentCard and basic AgentCard formats.
+    
+    Args:
+        agent_data: Dict with agent card JSON data
+        
+    Returns:
+        MantisAgentCard object
+    """
+    from ..proto.mantis.v1.mantis_persona_pb2 import MantisAgentCard
+    from google.protobuf.json_format import ParseDict
+    
+    # If this has persona data, it's a MantisAgentCard JSON - load directly
+    if "persona_characteristics" in agent_data or "competency_scores" in agent_data or "domain_expertise" in agent_data:
+        return ParseDict(agent_data, MantisAgentCard(), ignore_unknown_fields=True)
+    
+    # Otherwise, load as basic AgentCard and convert
+    base_card = json_to_protobuf_agent_card(agent_data)
+    return ensure_mantis_agent_card(base_card)
+
+
 def ensure_mantis_agent_card(agent_card) -> "MantisAgentCard":
     """
     Convert an AgentCard to a MantisAgentCard with parsed extension data.
+    If already a MantisAgentCard, return as-is.
     
     Args:
-        agent_card: AgentCard object (from a2a proto)
+        agent_card: AgentCard or MantisAgentCard object
         
     Returns:
         MantisAgentCard with parsed extension data
     """
     from ..proto.mantis.v1.mantis_persona_pb2 import MantisAgentCard
     from ..config import PERSONA_EXTENSION_REGISTRY
+    
+    # If already a MantisAgentCard, return as-is
+    if isinstance(agent_card, MantisAgentCard):
+        return agent_card
     
     mantis_card = MantisAgentCard()
     mantis_card.agent_card.CopyFrom(agent_card)
@@ -212,7 +396,7 @@ def json_to_protobuf_agent_card(
     Convert JSON agent data to protobuf AgentCard with flexible field name handling.
     
     Args:
-        agent_data: Dict with agent card data
+        agent_data: Dict with agent card data (can be MantisAgentCard or basic AgentCard JSON)
         input_convention: Naming convention of input JSON fields
         
     Returns:
@@ -220,6 +404,10 @@ def json_to_protobuf_agent_card(
     """
     from ..proto.a2a_pb2 import AgentCard
     from google.protobuf.json_format import ParseDict
+    
+    # If this is MantisAgentCard JSON, extract the nested agent_card
+    if "agent_card" in agent_data:
+        agent_data = agent_data["agent_card"]
     
     def convert_keys(obj):
         if isinstance(obj, dict):

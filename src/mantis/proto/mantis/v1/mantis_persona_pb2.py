@@ -23,27 +23,42 @@ _sym_db = _symbol_database.Default()
 
 
 from ... import a2a_pb2 as a2a__pb2
+from ...validate import validate_pb2 as validate_dot_validate__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1emantis/v1/mantis_persona.proto\x12\x11mantis.persona.v1\x1a\ta2a.proto\"\x9a\x03\n\x0fMantisAgentCard\x12%\n\nagent_card\x18\x01 \x01(\x0b\x32\x11.a2a.v1.AgentCard\x12O\n\x17persona_characteristics\x18\x02 \x01(\x0b\x32).mantis.persona.v1.PersonaCharacteristicsH\x00\x88\x01\x01\x12\x43\n\x11\x63ompetency_scores\x18\x03 \x01(\x0b\x32#.mantis.persona.v1.CompetencyScoresH\x01\x88\x01\x01\x12\x41\n\x10\x64omain_expertise\x18\x04 \x01(\x0b\x32\".mantis.persona.v1.DomainExpertiseH\x02\x88\x01\x01\x12\x1a\n\rpersona_title\x18\n \x01(\tH\x03\x88\x01\x01\x12\x12\n\nskill_tags\x18\x0b \x03(\tB\x1a\n\x18_persona_characteristicsB\x14\n\x12_competency_scoresB\x13\n\x11_domain_expertiseB\x10\n\x0e_persona_title\"\xde\x01\n\x16PersonaCharacteristics\x12\x17\n\x0f\x63ore_principles\x18\x01 \x03(\t\x12\x1a\n\x12\x64\x65\x63ision_framework\x18\x02 \x01(\t\x12\x1b\n\x13\x63ommunication_style\x18\x03 \x01(\t\x12\x19\n\x11thinking_patterns\x18\x04 \x03(\t\x12\x1e\n\x16\x63haracteristic_phrases\x18\x05 \x03(\t\x12\x1d\n\x15\x62\x65havioral_tendencies\x18\x06 \x03(\t\x12\x18\n\x10original_content\x18\x07 \x01(\t\"\x88\x01\n\x0eRoleAdaptation\x12\x14\n\x0cleader_score\x18\x01 \x01(\x02\x12\x16\n\x0e\x66ollower_score\x18\x02 \x01(\x02\x12\x16\n\x0enarrator_score\x18\x03 \x01(\x02\x12\x16\n\x0epreferred_role\x18\x04 \x01(\t\x12\x18\n\x10role_flexibility\x18\x05 \x01(\x02\"\xdd\x01\n\x10\x43ompetencyScores\x12T\n\x11\x63ompetency_scores\x18\x01 \x03(\x0b\x32\x39.mantis.persona.v1.CompetencyScores.CompetencyScoresEntry\x12:\n\x0frole_adaptation\x18\x02 \x01(\x0b\x32!.mantis.persona.v1.RoleAdaptation\x1a\x37\n\x15\x43ompetencyScoresEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x02:\x02\x38\x01\"z\n\x0f\x44omainExpertise\x12\x17\n\x0fprimary_domains\x18\x01 \x03(\t\x12\x19\n\x11secondary_domains\x18\x02 \x03(\t\x12\x15\n\rmethodologies\x18\x03 \x03(\t\x12\x1c\n\x14tools_and_frameworks\x18\x04 \x03(\tb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1emantis/v1/mantis_persona.proto\x12\x11mantis.persona.v1\x1a\ta2a.proto\x1a\x17validate/validate.proto\"\x9a\x03\n\x0fMantisAgentCard\x12%\n\nagent_card\x18\x01 \x01(\x0b\x32\x11.a2a.v1.AgentCard\x12O\n\x17persona_characteristics\x18\x02 \x01(\x0b\x32).mantis.persona.v1.PersonaCharacteristicsH\x00\x88\x01\x01\x12\x43\n\x11\x63ompetency_scores\x18\x03 \x01(\x0b\x32#.mantis.persona.v1.CompetencyScoresH\x01\x88\x01\x01\x12\x41\n\x10\x64omain_expertise\x18\x04 \x01(\x0b\x32\".mantis.persona.v1.DomainExpertiseH\x02\x88\x01\x01\x12\x1a\n\rpersona_title\x18\n \x01(\tH\x03\x88\x01\x01\x12\x12\n\nskill_tags\x18\x0b \x03(\tB\x1a\n\x18_persona_characteristicsB\x14\n\x12_competency_scoresB\x13\n\x11_domain_expertiseB\x10\n\x0e_persona_title\"\xde\x01\n\x16PersonaCharacteristics\x12\x17\n\x0f\x63ore_principles\x18\x01 \x03(\t\x12\x1a\n\x12\x64\x65\x63ision_framework\x18\x02 \x01(\t\x12\x1b\n\x13\x63ommunication_style\x18\x03 \x01(\t\x12\x19\n\x11thinking_patterns\x18\x04 \x03(\t\x12\x1e\n\x16\x63haracteristic_phrases\x18\x05 \x03(\t\x12\x1d\n\x15\x62\x65havioral_tendencies\x18\x06 \x03(\t\x12\x18\n\x10original_content\x18\x07 \x01(\t\"\xfb\x01\n\x0eRoleAdaptation\x12%\n\x0cleader_score\x18\x01 \x01(\x02\x42\x0f\xfa\x42\x0c\n\n\x1d\x00\x00\x80?-\x00\x00\x00\x00\x12\'\n\x0e\x66ollower_score\x18\x02 \x01(\x02\x42\x0f\xfa\x42\x0c\n\n\x1d\x00\x00\x80?-\x00\x00\x00\x00\x12\'\n\x0enarrator_score\x18\x03 \x01(\x02\x42\x0f\xfa\x42\x0c\n\n\x1d\x00\x00\x80?-\x00\x00\x00\x00\x12\x45\n\x0epreferred_role\x18\x04 \x01(\x0e\x32!.mantis.persona.v1.RolePreferenceB\n\xfa\x42\x07\x82\x01\x04\x10\x01 \x00\x12)\n\x10role_flexibility\x18\x05 \x01(\x02\x42\x0f\xfa\x42\x0c\n\n\x1d\x00\x00\x80?-\x00\x00\x00\x00\"\xf3\x01\n\x10\x43ompetencyScores\x12j\n\x11\x63ompetency_scores\x18\x01 \x03(\x0b\x32\x39.mantis.persona.v1.CompetencyScores.CompetencyScoresEntryB\x14\xfa\x42\x11\x9a\x01\x0e*\x0c\n\n\x1d\x00\x00\x80?-\x00\x00\x00\x00\x12:\n\x0frole_adaptation\x18\x02 \x01(\x0b\x32!.mantis.persona.v1.RoleAdaptation\x1a\x37\n\x15\x43ompetencyScoresEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x02:\x02\x38\x01\"z\n\x0f\x44omainExpertise\x12\x17\n\x0fprimary_domains\x18\x01 \x03(\t\x12\x19\n\x11secondary_domains\x18\x02 \x03(\t\x12\x15\n\rmethodologies\x18\x03 \x03(\t\x12\x1c\n\x14tools_and_frameworks\x18\x04 \x03(\t*\x89\x01\n\x0eRolePreference\x12\x1f\n\x1bROLE_PREFERENCE_UNSPECIFIED\x10\x00\x12\x1a\n\x16ROLE_PREFERENCE_LEADER\x10\x01\x12\x1c\n\x18ROLE_PREFERENCE_FOLLOWER\x10\x02\x12\x1c\n\x18ROLE_PREFERENCE_NARRATOR\x10\x03\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'mantis.v1.mantis_persona_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
+  _globals['_ROLEADAPTATION'].fields_by_name['leader_score']._loaded_options = None
+  _globals['_ROLEADAPTATION'].fields_by_name['leader_score']._serialized_options = b'\372B\014\n\n\035\000\000\200?-\000\000\000\000'
+  _globals['_ROLEADAPTATION'].fields_by_name['follower_score']._loaded_options = None
+  _globals['_ROLEADAPTATION'].fields_by_name['follower_score']._serialized_options = b'\372B\014\n\n\035\000\000\200?-\000\000\000\000'
+  _globals['_ROLEADAPTATION'].fields_by_name['narrator_score']._loaded_options = None
+  _globals['_ROLEADAPTATION'].fields_by_name['narrator_score']._serialized_options = b'\372B\014\n\n\035\000\000\200?-\000\000\000\000'
+  _globals['_ROLEADAPTATION'].fields_by_name['preferred_role']._loaded_options = None
+  _globals['_ROLEADAPTATION'].fields_by_name['preferred_role']._serialized_options = b'\372B\007\202\001\004\020\001 \000'
+  _globals['_ROLEADAPTATION'].fields_by_name['role_flexibility']._loaded_options = None
+  _globals['_ROLEADAPTATION'].fields_by_name['role_flexibility']._serialized_options = b'\372B\014\n\n\035\000\000\200?-\000\000\000\000'
   _globals['_COMPETENCYSCORES_COMPETENCYSCORESENTRY']._loaded_options = None
   _globals['_COMPETENCYSCORES_COMPETENCYSCORESENTRY']._serialized_options = b'8\001'
-  _globals['_MANTISAGENTCARD']._serialized_start=65
-  _globals['_MANTISAGENTCARD']._serialized_end=475
-  _globals['_PERSONACHARACTERISTICS']._serialized_start=478
-  _globals['_PERSONACHARACTERISTICS']._serialized_end=700
-  _globals['_ROLEADAPTATION']._serialized_start=703
-  _globals['_ROLEADAPTATION']._serialized_end=839
-  _globals['_COMPETENCYSCORES']._serialized_start=842
-  _globals['_COMPETENCYSCORES']._serialized_end=1063
-  _globals['_COMPETENCYSCORES_COMPETENCYSCORESENTRY']._serialized_start=1008
-  _globals['_COMPETENCYSCORES_COMPETENCYSCORESENTRY']._serialized_end=1063
-  _globals['_DOMAINEXPERTISE']._serialized_start=1065
-  _globals['_DOMAINEXPERTISE']._serialized_end=1187
+  _globals['_COMPETENCYSCORES'].fields_by_name['competency_scores']._loaded_options = None
+  _globals['_COMPETENCYSCORES'].fields_by_name['competency_scores']._serialized_options = b'\372B\021\232\001\016*\014\n\n\035\000\000\200?-\000\000\000\000'
+  _globals['_ROLEPREFERENCE']._serialized_start=1352
+  _globals['_ROLEPREFERENCE']._serialized_end=1489
+  _globals['_MANTISAGENTCARD']._serialized_start=90
+  _globals['_MANTISAGENTCARD']._serialized_end=500
+  _globals['_PERSONACHARACTERISTICS']._serialized_start=503
+  _globals['_PERSONACHARACTERISTICS']._serialized_end=725
+  _globals['_ROLEADAPTATION']._serialized_start=728
+  _globals['_ROLEADAPTATION']._serialized_end=979
+  _globals['_COMPETENCYSCORES']._serialized_start=982
+  _globals['_COMPETENCYSCORES']._serialized_end=1225
+  _globals['_COMPETENCYSCORES_COMPETENCYSCORESENTRY']._serialized_start=1170
+  _globals['_COMPETENCYSCORES_COMPETENCYSCORESENTRY']._serialized_end=1225
+  _globals['_DOMAINEXPERTISE']._serialized_start=1227
+  _globals['_DOMAINEXPERTISE']._serialized_end=1349
 # @@protoc_insertion_point(module_scope)
