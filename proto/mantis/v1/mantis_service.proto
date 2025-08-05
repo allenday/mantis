@@ -6,7 +6,7 @@ import "google/api/annotations.proto";
 import "google/api/client.proto";
 import "google/api/field_behavior.proto";
 import "google/protobuf/empty.proto";
-import "mantis_core.proto";
+import "mantis/v1/mantis_core.proto";
 import "registry.proto";
 
 option csharp_namespace = "Mantis.Service.V1";

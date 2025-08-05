@@ -58,8 +58,9 @@ def main():
 
     # Proto files to generate
     proto_files = [
-        "mantis_core.proto",
-        "mantis_service.proto",
+        "mantis/v1/mantis_core.proto",
+        "mantis/v1/mantis_service.proto",
+        "mantis/v1/mantis_persona.proto",
     ]
 
     for proto_file in proto_files:
