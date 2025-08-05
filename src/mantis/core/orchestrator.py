@@ -6,8 +6,10 @@ import time
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
+from pydantic import BaseModel
 
 from ..proto.mantis.v1 import mantis_core_pb2
+from ..proto.mantis.v1.prompt_composition_pb2 import ExecutionContext as ProtoExecutionContext
 from ..config import DEFAULT_MODEL, DEFAULT_TEMPERATURE
 
 
@@ -42,18 +44,121 @@ class DirectExecutor(ExecutionStrategy):
         agent_spec: mantis_core_pb2.AgentSpec,
         agent_index: int
     ) -> mantis_core_pb2.AgentResponse:
-        """Execute agent directly using pydantic-ai."""
-        # TODO: This is where we'll integrate with existing pydantic-ai infrastructure
-        # For now, return a placeholder response
+        """Execute agent directly using pydantic-ai with modular prompt composition."""
+        from ..prompts import PromptCompositionEngine, CompositionStrategy
+        from ..prompts.variables import create_composition_context
+        from ..agent.card import load_agent_card_from_json, ensure_mantis_agent_card
+        from ..llm.structured_extractor import StructuredExtractor
+        import json
         
-        response = mantis_core_pb2.AgentResponse()
-        response.text_response = f"[DirectExecutor] Processed query: {simulation_input.query}"
-        response.output_modes.append("text/markdown")
-        
-        return response
+        try:
+            # For now, create minimal agent card since agent_card_path is not in protobuf
+            # TODO: Add agent card loading mechanism to AgentSpec or pass separately
+            mantis_card = self._create_minimal_agent_card()
+            
+            # Determine execution context and role using proto
+            execution_context = ProtoExecutionContext()
+            execution_context.current_depth = agent_spec.current_depth
+            execution_context.max_depth = simulation_input.max_depth
+            execution_context.team_size = 1
+            execution_context.assigned_role = self._determine_agent_role(mantis_card, agent_spec)
+            execution_context.agent_index = agent_index
+            
+            # Compose prompt using modular system
+            composition_engine = PromptCompositionEngine()
+            context = create_composition_context(
+                mantis_card=mantis_card,
+                simulation_input=simulation_input,
+                agent_spec=agent_spec,
+                execution_context=execution_context
+            )
+            
+            composed_prompt = await composition_engine.compose_prompt(
+                context=context,
+                strategy=CompositionStrategy.BLENDED
+            )
+            
+            # Execute using structured extractor (LLM integration)
+            extractor = StructuredExtractor()
+            
+            # Use the composed prompt as the system prompt
+            model = simulation_input.model if simulation_input.model else DEFAULT_MODEL
+            result = await extractor.extract_text_response(
+                prompt=composed_prompt.final_prompt,
+                query=simulation_input.query,
+                model=model
+            )
+            
+            # Create response
+            response = mantis_core_pb2.AgentResponse()
+            response.text_response = result
+            response.output_modes.append("text/markdown")
+            
+            # Add metadata about prompt composition (if metadata field exists)
+            try:
+                response.metadata.update({
+                    'modules_used': [m.get_module_name() for m in composed_prompt.modules_used],
+                    'variables_resolved': len(composed_prompt.variables_resolved),
+                    'composition_strategy': composed_prompt.strategy.value
+                })
+            except AttributeError:
+                # Metadata field doesn't exist in this protobuf version
+                pass
+            
+            return response
+            
+        except Exception as e:
+            # Fallback to simple execution
+            response = mantis_core_pb2.AgentResponse()
+            response.text_response = f"Error in agent execution: {str(e)}\n\nFallback response for query: {simulation_input.query}"
+            response.output_modes.append("text/markdown")
+            return response
     
     def get_strategy_type(self) -> mantis_core_pb2.ExecutionStrategy:
         return mantis_core_pb2.EXECUTION_STRATEGY_DIRECT
+    
+    def _create_minimal_agent_card(self):
+        """Create a minimal agent card for generic execution."""
+        from ..proto.mantis.v1.mantis_persona_pb2 import MantisAgentCard
+        from ..proto.a2a_pb2 import AgentCard
+        
+        # Create minimal MantisAgentCard
+        mantis_card = MantisAgentCard()
+        
+        # Create basic agent card
+        agent_card = AgentCard()
+        agent_card.name = "Generic Agent"
+        agent_card.description = "A general-purpose agent for task execution"
+        agent_card.version = "1.0.0"
+        
+        mantis_card.agent_card.CopyFrom(agent_card)
+        return mantis_card
+    
+    def _determine_agent_role(self, mantis_card, simulation_input) -> str:
+        """Determine the agent's role based on context and capabilities."""
+        # For now, use simple heuristics
+        # In the future, this could use the role assignment engine
+        
+        current_depth = simulation_input.current_depth
+        max_depth = simulation_input.max_depth
+        
+        # Simple role assignment logic
+        if current_depth == 0:
+            return "leader"  # Top level is strategic leader
+        elif current_depth >= max_depth - 1:
+            return "follower"  # Near max depth focuses on execution
+        else:
+            # Check if agent has good leadership scores
+            if mantis_card.competency_scores and mantis_card.competency_scores.role_adaptation:
+                leader_score = mantis_card.competency_scores.role_adaptation.leader_score
+                narrator_score = mantis_card.competency_scores.role_adaptation.narrator_score
+                
+                if leader_score > narrator_score and leader_score > 0.7:
+                    return "leader"
+                elif narrator_score > 0.7:
+                    return "narrator"
+            
+            return "follower"  # Default to execution role
 
 
 class A2AExecutor(ExecutionStrategy):
