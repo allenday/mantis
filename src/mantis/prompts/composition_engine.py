@@ -3,7 +3,7 @@ Core prompt composition engine that orchestrates module selection and prompt ass
 """
 
 import logging
-from dataclasses import dataclass
+from pydantic import BaseModel
 from enum import Enum
 from typing import List, Dict, Any, Optional
 
@@ -25,14 +25,16 @@ class CompositionStrategy(Enum):
     CONDITIONAL = "conditional"  # Rule-based combinations
 
 
-@dataclass
-class ComposedPrompt:
+class ComposedPrompt(BaseModel):
     """Result of prompt composition containing final prompt and metadata."""
     final_prompt: str
     modules_used: List[BasePromptModule]
     variables_resolved: Dict[str, Any]
     strategy: CompositionStrategy
     metadata: Dict[str, Any]
+    
+    class Config:
+        arbitrary_types_allowed = True
 
 
 class PromptCompositionEngine:

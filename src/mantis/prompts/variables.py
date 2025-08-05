@@ -2,21 +2,23 @@
 Context and variable management for prompt composition.
 """
 
-from dataclasses import dataclass, field
+from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional, List, Union
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class CompositionContext:
+class CompositionContext(BaseModel):
     """Context information needed for prompt composition."""
     mantis_card: Any  # MantisAgentCard
     simulation_input: Any  # SimulationInput
     agent_spec: Any  # AgentSpec
-    execution_context: Union[Dict[str, Any], Any] = field(default_factory=dict)  # Can be dict or proto ExecutionContext
-    variables: Dict[str, Any] = field(default_factory=dict)
+    execution_context: Union[Dict[str, Any], Any] = Field(default_factory=dict)  # Can be dict or proto ExecutionContext
+    variables: Dict[str, Any] = Field(default_factory=dict)
+    
+    class Config:
+        arbitrary_types_allowed = True
     
     def get_variable(self, key: str, default: Any = None) -> Any:
         """Get a variable value with fallback to default."""
