@@ -32,6 +32,28 @@ class DirectExecutor(ExecutionStrategy):
 
     def __init__(self):
         self._model_cache: Dict[str, Any] = {}
+        self._tools: List[Any] = []
+        self._initialize_tools()
+
+    def _initialize_tools(self):
+        """Initialize available tools for agents."""
+        try:
+            from ..tools.web_fetch import WebFetchTool, WebFetchConfig
+
+            # Create web fetch tool with secure defaults
+            web_config = WebFetchConfig(
+                timeout=30.0,
+                max_content_size=5 * 1024 * 1024,  # 5MB limit
+                rate_limit_requests=30,  # 30 requests per minute
+                verify_ssl=True,
+                blocked_domains=["localhost", "127.0.0.1", "0.0.0.0", "::1"],  # Block local access
+            )
+            web_tool = WebFetchTool(web_config)
+            self._tools.append(web_tool)
+
+        except ImportError:
+            # Tools module not available
+            pass
 
     async def execute_agent(
         self, simulation_input: mantis_core_pb2.SimulationInput, agent_spec: mantis_core_pb2.AgentSpec, agent_index: int
