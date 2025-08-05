@@ -62,6 +62,7 @@ def main():
         "mantis/v1/mantis_core.proto",
         "mantis/v1/mantis_service.proto", 
         "mantis/v1/mantis_persona.proto",
+        "mantis/v1/prompt_composition.proto",
     ]
 
     for proto_file in proto_files:
@@ -177,6 +178,13 @@ def main():
                         import_pattern = f"import {module_name} as"
                         relative_import = f"from {dots} import {module_name} as"
                         content = content.replace(import_pattern, relative_import)
+            
+            # Fix mantis.v1 imports to be relative within the same package
+            if "mantis/v1" in str(proto_file):
+                # Fix broken double imports first
+                content = content.replace("from mantis.v1 from . import", "from . import")
+                # Then fix regular mantis.v1 imports
+                content = content.replace("from mantis.v1 import", "from . import")
 
             # Write back if changed
             if content != original_content:
