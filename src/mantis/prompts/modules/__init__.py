@@ -9,11 +9,4 @@ from .leader import LeaderModule
 from .context import ContextModule
 from .capability import CapabilityModule
 
-__all__ = [
-    "BasePromptModule",
-    "PersonaModule", 
-    "RoleModule",
-    "LeaderModule",
-    "ContextModule",
-    "CapabilityModule"
-]
+__all__ = ["BasePromptModule", "PersonaModule", "RoleModule", "LeaderModule", "ContextModule", "CapabilityModule"]

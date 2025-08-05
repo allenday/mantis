@@ -13,8 +13,8 @@ from .variables import CompositionContext, create_composition_context
 
 __all__ = [
     "PromptCompositionEngine",
-    "CompositionStrategy", 
+    "CompositionStrategy",
     "ComposedPrompt",
     "CompositionContext",
-    "create_composition_context"
+    "create_composition_context",
 ]
