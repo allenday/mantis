@@ -32,6 +32,8 @@ class DirectExecutor(ExecutionStrategy):
 
     def __init__(self):
         self._model_cache: Dict[str, Any] = {}
+        self._tools: Dict[str, Any] = {}
+        self._initialize_tools()
 
     async def execute_agent(
         self, simulation_input: mantis_core_pb2.SimulationInput, agent_spec: mantis_core_pb2.AgentSpec, agent_index: int
@@ -107,6 +109,41 @@ class DirectExecutor(ExecutionStrategy):
 
     def get_strategy_type(self) -> mantis_core_pb2.ExecutionStrategy:
         return mantis_core_pb2.EXECUTION_STRATEGY_DIRECT
+
+    def _initialize_tools(self):
+        """Initialize available tools for agent execution."""
+        try:
+            from ..tools.web_fetch import WebFetchTool, WebFetchConfig
+            from ..tools.web_search import WebSearchTool, WebSearchConfig
+
+            # Initialize WebFetchTool with secure defaults
+            web_fetch_config = WebFetchConfig(
+                timeout=30.0,
+                user_agent="Mantis-Agent/1.0 (DirectExecutor)",
+                rate_limit_requests=60,
+                rate_limit_window=60,
+                verify_ssl=True,
+                max_content_size=10 * 1024 * 1024,  # 10MB limit
+            )
+            self._tools["web_fetch"] = WebFetchTool(web_fetch_config)
+
+            # Initialize WebSearchTool
+            web_search_config = WebSearchConfig(
+                max_results=10,
+                timeout=30.0,
+                rate_limit_requests=30,
+                rate_limit_window=60,
+                enable_suggestions=True,
+            )
+            self._tools["web_search"] = WebSearchTool(web_search_config)
+
+        except ImportError:
+            # Tools not available, continue without them
+            pass
+
+    def get_available_tools(self) -> Dict[str, Any]:
+        """Get dictionary of available tools."""
+        return self._tools.copy()
 
     def _create_minimal_agent_card(self):
         """Create a minimal agent card for generic execution."""
