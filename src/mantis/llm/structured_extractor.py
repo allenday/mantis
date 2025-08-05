@@ -8,13 +8,12 @@ for persona extraction, prompt composition, and other structured data tasks.
 """
 
 import logging
-import os
-from typing import TypeVar, Type, Optional, Any, Union
-from pathlib import Path
+from typing import TypeVar, Type, Optional, Any
 
 # Load environment variables from .env file
 try:
     from dotenv import load_dotenv
+
     load_dotenv()
 except ImportError:
     pass  # dotenv not available, skip
@@ -23,6 +22,7 @@ except ImportError:
 try:
     from pydantic_ai import Agent
     from pydantic_ai.models import Model
+
     PYDANTIC_AI_AVAILABLE = True
 except ImportError:
     PYDANTIC_AI_AVAILABLE = False
@@ -31,25 +31,26 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar('T')  # Generic type for structured data
+T = TypeVar("T")  # Generic type for structured data
 
 
 class StructuredExtractionError(Exception):
     """Raised when structured data extraction fails."""
+
     pass
 
 
 class StructuredExtractor:
     """
     Reusable LLM-powered structured data extractor.
-    
+
     This class provides a generic interface for extracting structured data from text
     using pydantic-ai with various LLM providers. It supports both pydantic models
     and protobuf messages as result types.
-    
+
     Usage:
         extractor = StructuredExtractor("anthropic:claude-3-5-haiku-20241022")
-        
+
         # Extract with pydantic model
         result = extractor.extract_sync(
             content="Some text...",
@@ -57,7 +58,7 @@ class StructuredExtractor:
             system_prompt="Extract data from this text...",
             user_prompt="Here is the text: ..."
         )
-        
+
         # Extract with protobuf message (converted on-the-fly)
         result = extractor.extract_protobuf_sync(
             content="Some text...",
@@ -66,145 +67,134 @@ class StructuredExtractor:
             user_prompt="Text: ..."
         )
     """
-    
+
     def __init__(self, model_spec: Optional[str] = None):
         """
         Initialize the structured extractor.
-        
+
         Args:
             model_spec: Model specification in format "provider:model" (e.g., "anthropic:claude-3-5-haiku-20241022")
                        If None, uses DEFAULT_MODEL from config
         """
         if not PYDANTIC_AI_AVAILABLE:
-            raise StructuredExtractionError(
-                "pydantic-ai is not available. Install with: pip install pydantic-ai"
-            )
-            
+            raise StructuredExtractionError("pydantic-ai is not available. Install with: pip install pydantic-ai")
+
         self.model_spec = model_spec or self._get_default_model()
         self._model_cache: Optional[Model] = None
-        
+
     def _get_default_model(self) -> str:
         """Get default model from config."""
         try:
             from ..config import DEFAULT_MODEL
+
             return DEFAULT_MODEL
         except ImportError:
             # Fallback if config not available
             return "anthropic:claude-3-5-haiku-20241022"
-            
+
     def _create_model(self) -> Model:
         """Create LLM model instance with caching."""
         if self._model_cache is not None:
             return self._model_cache
-            
+
         try:
-            if ':' in self.model_spec:
-                provider, model_name = self.model_spec.split(':', 1)
+            if ":" in self.model_spec:
+                provider, model_name = self.model_spec.split(":", 1)
                 model = self._create_provider_model(provider.lower(), model_name)
             else:
                 # Default to anthropic if no provider specified
-                model = self._create_provider_model('anthropic', self.model_spec)
-                
+                model = self._create_provider_model("anthropic", self.model_spec)
+
             self._model_cache = model
             return model
-            
+
         except ImportError as e:
             raise StructuredExtractionError(f"Missing LLM dependencies for {self.model_spec}: {e}")
         except Exception as e:
             raise StructuredExtractionError(f"Failed to create model {self.model_spec}: {e}")
-            
+
     def _create_provider_model(self, provider: str, model_name: str) -> Model:
         """Create model for specific provider."""
-        if provider == 'anthropic':
+        if provider == "anthropic":
             from pydantic_ai.models.anthropic import AnthropicModel
+
             return AnthropicModel(model_name)
-        elif provider == 'openai':
+        elif provider == "openai":
             from pydantic_ai.models.openai import OpenAIModel
+
             return OpenAIModel(model_name)
-        elif provider == 'google' or provider == 'gemini':
+        elif provider == "google" or provider == "gemini":
             from pydantic_ai.models.gemini import GeminiModel
+
             return GeminiModel(model_name)
-        elif provider == 'groq':
+        elif provider == "groq":
             from pydantic_ai.models.groq import GroqModel
+
             return GroqModel(model_name)
         else:
             raise StructuredExtractionError(f"Unsupported provider: {provider}")
-            
+
     async def extract_async(
-        self, 
-        content: str, 
-        result_type: Type[T], 
-        system_prompt: str, 
-        user_prompt: str,
-        **agent_kwargs
+        self, content: str, result_type: Type[T], system_prompt: str, user_prompt: str, **agent_kwargs
     ) -> T:
         """
         Extract structured data asynchronously.
-        
+
         Args:
             content: The input text content to process
             result_type: Pydantic model class to extract data into
             system_prompt: System prompt defining the extraction task
             user_prompt: User prompt with the specific content/instructions
             **agent_kwargs: Additional arguments to pass to the pydantic-ai Agent
-            
+
         Returns:
             Instance of result_type with extracted data
-            
+
         Raises:
             StructuredExtractionError: If extraction fails
         """
         try:
             model = self._create_model()
-            
+
             # Create pydantic-ai agent
-            agent = Agent(
-                model=model,
-                result_type=result_type,
-                system_prompt=system_prompt,
-                **agent_kwargs
-            )
-            
+            agent = Agent(model=model, result_type=result_type, system_prompt=system_prompt, **agent_kwargs)
+
             # Run extraction
             result = await agent.run(user_prompt)
             return result.data
-            
+
         except Exception as e:
             logger.error(f"LLM extraction failed: {e}")
             raise StructuredExtractionError(f"LLM extraction failed: {e}")
-            
+
     def extract_sync(
-        self, 
-        content: str, 
-        result_type: Type[T], 
-        system_prompt: str, 
-        user_prompt: str,
-        **agent_kwargs
+        self, content: str, result_type: Type[T], system_prompt: str, user_prompt: str, **agent_kwargs
     ) -> T:
         """
         Extract structured data synchronously.
-        
+
         Args:
             content: The input text content to process
             result_type: Pydantic model class to extract data into
             system_prompt: System prompt defining the extraction task
             user_prompt: User prompt with the specific content/instructions
             **agent_kwargs: Additional arguments to pass to the pydantic-ai Agent
-            
+
         Returns:
             Instance of result_type with extracted data
-            
+
         Raises:
             StructuredExtractionError: If extraction fails
         """
         import asyncio
-        
+
         try:
             # Handle event loop scenarios
             try:
                 asyncio.get_running_loop()
                 # We're in an event loop, run in thread
                 import concurrent.futures
+
                 with concurrent.futures.ThreadPoolExecutor() as executor:
                     future = executor.submit(
                         lambda: asyncio.run(
@@ -214,114 +204,144 @@ class StructuredExtractor:
                     return future.result()
             except RuntimeError:
                 # No event loop, use asyncio.run
-                return asyncio.run(
-                    self.extract_async(content, result_type, system_prompt, user_prompt, **agent_kwargs)
-                )
-                
+                return asyncio.run(self.extract_async(content, result_type, system_prompt, user_prompt, **agent_kwargs))
+
         except Exception as e:
             raise StructuredExtractionError(f"Synchronous extraction failed: {e}")
-            
+
     def extract_protobuf_sync(
-        self,
-        content: str,
-        protobuf_type: Type,
-        system_prompt: str,
-        user_prompt: str,
-        **agent_kwargs
+        self, content: str, protobuf_type: Type, system_prompt: str, user_prompt: str, **agent_kwargs
     ):
         """
         Extract data into protobuf message using on-the-fly pydantic conversion.
-        
+
         Args:
             content: The input text content to process
             protobuf_type: Protobuf message class to extract data into
             system_prompt: System prompt defining the extraction task
             user_prompt: User prompt with the specific content/instructions
             **agent_kwargs: Additional arguments to pass to the pydantic-ai Agent
-            
+
         Returns:
             Instance of protobuf_type with extracted data
-            
+
         Raises:
             StructuredExtractionError: If extraction fails
         """
         try:
             # Convert protobuf to pydantic on-the-fly
             pydantic_model = self._protobuf_to_pydantic(protobuf_type)
-            
+
             # Extract using pydantic model
-            pydantic_result = self.extract_sync(
-                content, pydantic_model, system_prompt, user_prompt, **agent_kwargs
-            )
-            
+            pydantic_result = self.extract_sync(content, pydantic_model, system_prompt, user_prompt, **agent_kwargs)
+
             # Convert back to protobuf
             return self._pydantic_to_protobuf(pydantic_result, protobuf_type)
-            
+
         except Exception as e:
             raise StructuredExtractionError(f"Protobuf extraction failed: {e}")
-            
+
+    async def extract_text_response(self, prompt: str, query: str, model: Optional[str] = None) -> str:
+        """
+        Extract a text response using the composed prompt as system prompt.
+
+        Args:
+            prompt: The composed system prompt
+            query: The user query
+            model: Optional model override
+
+        Returns:
+            Text response from the LLM
+        """
+        try:
+            # Override model if specified
+            if model:
+                original_model = self.model_spec
+                self.model_spec = model
+                self._model_cache = None  # Clear cache to use new model
+
+            model_instance = self._create_model()
+
+            # Create a simple text agent (no structured output)
+            agent = Agent(model=model_instance, system_prompt=prompt)
+
+            # Run and get text response
+            result = await agent.run(query)
+
+            # Restore original model if we changed it
+            if model:
+                self.model_spec = original_model
+                self._model_cache = None
+
+            return str(result.data)
+
+        except Exception as e:
+            logger.error(f"Text response extraction failed: {e}")
+            raise StructuredExtractionError(f"Text response extraction failed: {e}")
+
     def _protobuf_to_pydantic(self, protobuf_type: Type) -> Type:
         """Convert protobuf message class to equivalent pydantic model."""
         try:
             # Try using protobuf-to-pydantic if available
             try:
                 from protobuf_to_pydantic import msg_to_pydantic_dataclass
+
                 return msg_to_pydantic_dataclass(protobuf_type)
             except ImportError:
                 # Fallback: create pydantic model manually based on protobuf descriptor
                 return self._create_pydantic_from_protobuf(protobuf_type)
-                
+
         except Exception as e:
             raise StructuredExtractionError(f"Failed to convert protobuf to pydantic: {e}")
-            
+
     def _create_pydantic_from_protobuf(self, protobuf_type: Type) -> Type:
         """Create pydantic model from protobuf descriptor (fallback method)."""
         from pydantic import BaseModel, Field
-        from typing import List, Dict, Optional
-        
+        from typing import Optional
+
         # Get protobuf descriptor
         descriptor = protobuf_type.DESCRIPTOR
-        
+
         # Build field definitions and annotations
         fields = {}
         annotations = {}
-        
+
         for field in descriptor.fields:
             field_type = self._get_python_type_for_protobuf_field(field)
-            
+
             # Create field with default
             if field.label == field.LABEL_REPEATED:
                 default_value = Field(default_factory=list)
                 annotations[field.name] = field_type
-            elif hasattr(field, 'default_value') and field.default_value is not None:
+            elif hasattr(field, "default_value") and field.default_value is not None:
                 default_value = field.default_value
                 # Make optional if has default
-                annotations[field.name] = Optional[field_type] if field_type != type(None) else field_type
+                annotations[field.name] = Optional[field_type] if field_type is not type(None) else field_type
             else:
                 default_value = Field(default=None)
-                annotations[field.name] = Optional[field_type] if field_type != type(None) else field_type
-                
+                annotations[field.name] = Optional[field_type] if field_type is not type(None) else field_type
+
             fields[field.name] = default_value
-        
+
         # Create dynamic pydantic model class with proper annotations
         # Need to set annotations before creating the class
-        fields['__annotations__'] = annotations
+        fields["__annotations__"] = annotations
         model_class = type(f"{protobuf_type.__name__}Pydantic", (BaseModel,), fields)
-        
+
         return model_class
-        
+
     def _get_python_type_for_protobuf_field(self, field):
         """Get Python type annotation for protobuf field."""
-        from typing import List, Dict, Optional
-        
+        from typing import List, Dict, Optional, Any
+
         # Check if this is a map field (map<key, value>)
-        if hasattr(field, 'message_type') and field.message_type and hasattr(field.message_type, 'fields'):
+        if hasattr(field, "message_type") and field.message_type and hasattr(field.message_type, "fields"):
             # Check if this looks like a map entry (has key and value fields)
             map_fields = {f.name: f for f in field.message_type.fields}
-            if 'key' in map_fields and 'value' in map_fields:
-                key_field = map_fields['key']
-                value_field = map_fields['value']
-                
+            if "key" in map_fields and "value" in map_fields:
+                key_field = map_fields["key"]
+                value_field = map_fields["value"]
+
                 # Map protobuf types to Python types
                 type_mapping = {
                     key_field.TYPE_STRING: str,
@@ -331,19 +351,18 @@ class StructuredExtractor:
                     key_field.TYPE_DOUBLE: float,
                     key_field.TYPE_BOOL: bool,
                 }
-                
+
                 key_type = type_mapping.get(key_field.type, str)
                 value_type = type_mapping.get(value_field.type, str)
-                
+
                 return Dict[key_type, value_type]
-        
+
         # Check if this is a nested message field (not a map)
-        if hasattr(field, 'message_type') and field.message_type and field.type == field.TYPE_MESSAGE:
+        if hasattr(field, "message_type") and field.message_type and field.type == field.TYPE_MESSAGE:
             # For nested messages, use Dict to represent the structure
             # This allows the LLM to return structured data as a dict
-            from typing import Any
             return Dict[str, Any]
-        
+
         # Map protobuf types to Python types
         type_mapping = {
             field.TYPE_STRING: str,
@@ -353,41 +372,41 @@ class StructuredExtractor:
             field.TYPE_DOUBLE: float,
             field.TYPE_BOOL: bool,
         }
-        
+
         base_type = type_mapping.get(field.type, str)  # Default to str
-        
+
         # Handle repeated fields
         if field.label == field.LABEL_REPEATED:
             return List[base_type]
-        
+
         # Handle optional fields
         if field.label == field.LABEL_OPTIONAL:
             return Optional[base_type]
-            
+
         return base_type
-        
+
     def _pydantic_to_protobuf(self, pydantic_obj, protobuf_type: Type):
         """Convert pydantic model instance to protobuf message."""
         protobuf_obj = protobuf_type()
-        
+
         # Copy fields from pydantic to protobuf
         for field_name, value in pydantic_obj.dict().items():
             if hasattr(protobuf_obj, field_name) and value is not None:
                 try:
                     field = getattr(protobuf_obj, field_name)
-                    
+
                     # Handle repeated fields
-                    if hasattr(field, 'extend') and isinstance(value, list):
+                    if hasattr(field, "extend") and isinstance(value, list):
                         field.extend(value)
                     # Handle map fields (protobuf maps have .update() method)
-                    elif hasattr(field, 'update') and isinstance(value, dict):
+                    elif hasattr(field, "update") and isinstance(value, dict):
                         field.update(value)
                     # Handle protobuf map fields that appear as dict in pydantic
-                    elif isinstance(value, dict) and hasattr(field, 'clear'):
+                    elif isinstance(value, dict) and hasattr(field, "clear"):
                         field.clear()
                         field.update(value)
                     # Handle nested message fields (check if field has protobuf message methods)
-                    elif hasattr(field, 'CopyFrom') and isinstance(value, dict):
+                    elif hasattr(field, "CopyFrom") and isinstance(value, dict):
                         # Populate nested message fields
                         for sub_field_name, sub_value in value.items():
                             if hasattr(field, sub_field_name) and sub_value is not None:
@@ -396,7 +415,7 @@ class StructuredExtractor:
                                 except (TypeError, ValueError):
                                     pass  # Skip invalid assignments
                     # Handle nested message fields that got returned as strings (fallback)
-                    elif hasattr(field, 'CopyFrom') and isinstance(value, str):
+                    elif hasattr(field, "CopyFrom") and isinstance(value, str):
                         # Skip - can't convert string to nested message
                         pass
                     # Handle scalar fields
@@ -405,10 +424,10 @@ class StructuredExtractor:
                             setattr(protobuf_obj, field_name, value)
                         except (TypeError, ValueError):
                             pass  # Skip invalid assignments
-                            
+
                 except Exception:
                     pass  # Skip fields that can't be processed
-                    
+
         return protobuf_obj
 
 
@@ -419,22 +438,22 @@ _global_extractor: Optional[StructuredExtractor] = None
 def get_structured_extractor(model_spec: Optional[str] = None) -> StructuredExtractor:
     """
     Get or create global structured extractor instance.
-    
+
     This provides a singleton pattern for reusing the extractor across
     different parts of the application (Issues #17, #19, persona extraction, etc.).
-    
+
     Args:
         model_spec: Model specification. If provided, creates new extractor with this model.
                    If None, reuses existing extractor or creates with default model.
-                   
+
     Returns:
         StructuredExtractor instance
     """
     global _global_extractor
-    
+
     if _global_extractor is None or model_spec is not None:
         _global_extractor = StructuredExtractor(model_spec)
-        
+
     return _global_extractor
 
 
@@ -444,19 +463,19 @@ def extract_structured_data_sync(
     system_prompt: str,
     user_prompt: str,
     model_spec: Optional[str] = None,
-    **agent_kwargs
+    **agent_kwargs,
 ) -> T:
     """
     Convenience function for one-off structured data extraction.
-    
+
     Args:
-        content: Input text content 
+        content: Input text content
         result_type: Pydantic model class to extract into
         system_prompt: System prompt for the extraction task
         user_prompt: User prompt with content/instructions
         model_spec: Optional model specification
         **agent_kwargs: Additional agent arguments
-        
+
     Returns:
         Extracted structured data
     """
@@ -470,19 +489,19 @@ def extract_protobuf_data_sync(
     system_prompt: str,
     user_prompt: str,
     model_spec: Optional[str] = None,
-    **agent_kwargs
+    **agent_kwargs,
 ):
     """
     Convenience function for one-off protobuf data extraction.
-    
+
     Args:
         content: Input text content
         protobuf_type: Protobuf message class to extract into
-        system_prompt: System prompt for the extraction task  
+        system_prompt: System prompt for the extraction task
         user_prompt: User prompt with content/instructions
         model_spec: Optional model specification
         **agent_kwargs: Additional agent arguments
-        
+
     Returns:
         Extracted protobuf message instance
     """
