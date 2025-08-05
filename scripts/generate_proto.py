@@ -60,7 +60,7 @@ def main():
     proto_files = [
         "validate/validate.proto",  # Generate validation support first
         "mantis/v1/mantis_core.proto",
-        "mantis/v1/mantis_service.proto", 
+        "mantis/v1/mantis_service.proto",
         "mantis/v1/mantis_persona.proto",
         "mantis/v1/prompt_composition.proto",
     ]
@@ -134,7 +134,7 @@ def main():
         pb2_files = list(output_dir.rglob("*_pb2.py"))
         grpc_files = list(output_dir.rglob("*_pb2_grpc.py"))
         all_files = pb2_files + grpc_files
-        
+
         if not all_files:
             print("⚠️  No generated files found to fix")
             return
@@ -152,7 +152,7 @@ def main():
             # Read the file
             content = proto_file.read_text()
             original_content = content
-            
+
             # Get the directory of this proto file relative to output_dir
             proto_file_dir = proto_file.relative_to(output_dir).parent
 
@@ -160,12 +160,14 @@ def main():
             if "mantis/v1" in str(proto_file):
                 content = content.replace(
                     "from validate import validate_pb2 as validate_dot_validate__pb2",
-                    "from ...validate import validate_pb2 as validate_dot_validate__pb2"
+                    "from ...validate import validate_pb2 as validate_dot_validate__pb2",
                 )
-            
+
             # Fix imports for each pb2 module (skip validate_pb2 as it's handled above)
             for module_name, module_dir in pb2_modules.items():
-                if module_name != proto_file.stem and module_name != "validate_pb2":  # Don't fix self-imports or validate
+                if (
+                    module_name != proto_file.stem and module_name != "validate_pb2"
+                ):  # Don't fix self-imports or validate
                     # Calculate the relative import path
                     if module_dir == proto_file_dir:
                         # Same directory - use simple relative import
@@ -178,7 +180,7 @@ def main():
                         import_pattern = f"import {module_name} as"
                         relative_import = f"from {dots} import {module_name} as"
                         content = content.replace(import_pattern, relative_import)
-            
+
             # Fix mantis.v1 imports to be relative within the same package
             if "mantis/v1" in str(proto_file):
                 # Fix broken double imports first

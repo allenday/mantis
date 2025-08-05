@@ -1,4 +1,4 @@
-.PHONY: help install install-dev proto clean lint format typecheck test ci build docs-install docs-build docs-serve
+.PHONY: help install install-dev proto check clean lint format typecheck test ci build docs-install docs-build docs-serve
 
 # Default target
 help:
@@ -11,6 +11,7 @@ help:
 	@echo "  format       - Format code (black, ruff)"
 	@echo "  typecheck    - Run type checking (mypy)"
 	@echo "  test         - Run tests"
+	@echo "  check        - Check project code health"
 	@echo "  ci           - Run CI pipeline (install-dev, proto, lint, test)"
 	@echo "  build        - Build package and check"
 	@echo "  docs-install - Install documentation dependencies"
@@ -27,6 +28,8 @@ PIP := $(VENV)/bin/pip
 $(VENV):
 	$(PYTHON) -m venv $(VENV)
 	$(PIP) install --upgrade pip
+
+check: $(VENV) proto lint format typecheck test
 
 # Install package in production mode
 install: $(VENV)
