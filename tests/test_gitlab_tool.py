@@ -338,18 +338,30 @@ class TestDirectExecutorIntegration:
         for tool_name in expected_gitlab_tools:
             assert tool_name in tools
 
-    @patch('mantis.tools.GitLabTool')
-    @patch('mantis.tools.GitLabConfig')
-    def test_direct_executor_tool_initialization_failure(self, mock_config, mock_tool):
+    def test_direct_executor_tool_initialization_failure(self):
         """Test DirectExecutor handles GitLab tool initialization failure gracefully."""
         from mantis.core.orchestrator import DirectExecutor
+        from unittest.mock import patch
         
-        # Mock GitLabTool to raise an exception
-        mock_tool.side_effect = Exception("GitLab initialization failed")
-        
-        # Should not raise exception, just log warning
-        executor = DirectExecutor()
-        tools = executor.get_available_tools()
-        
-        # Tools should be empty due to initialization failure
-        assert len(tools) == 0
+        # Mock GitLabTool at the point of import
+        with patch('mantis.tools.gitlab_integration.GitLabTool') as mock_tool:
+            # Make GitLabTool raise an exception during initialization
+            mock_tool.side_effect = Exception("GitLab initialization failed")
+            
+            # Should not raise exception, just log warning
+            executor = DirectExecutor()
+            tools = executor.get_available_tools()
+            
+            # Should have other tools but no GitLab tools
+            gitlab_tool_names = [
+                "list_projects", "get_project", "list_issues", "create_issue",
+                "list_merge_requests", "create_merge_request", "list_pipelines",
+                "get_file_contents", "search_repositories"
+            ]
+            
+            # Verify no GitLab tools are registered
+            for tool_name in gitlab_tool_names:
+                assert tool_name not in tools
+            
+            # Should still have other tools (web_fetch, web_search, git_operations)
+            assert len(tools) > 0

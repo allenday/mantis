@@ -119,8 +119,9 @@ class GitLabTool:
 
     def _validate_config(self):
         """Validate the configuration."""
-        if not self.config.personal_access_token:
-            raise ValueError("GitLab personal access token is required")
+        # Allow empty token for initialization purposes (read-only mode)
+        if not self.config.personal_access_token and not self.config.read_only_mode:
+            raise ValueError("GitLab personal access token is required for non-read-only mode")
 
         if not self.config.api_url:
             raise ValueError("GitLab API URL is required")
@@ -142,6 +143,10 @@ class GitLabTool:
         Raises:
             MCPError: If MCP communication fails
         """
+        # Check if we have a valid configuration for MCP calls
+        if not self.config.personal_access_token:
+            raise MCPError("GitLab personal access token is required for MCP operations")
+
         # TODO: Implement actual MCP client communication
         # For now, this is a placeholder that simulates the MCP protocol
 

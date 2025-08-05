@@ -26,7 +26,7 @@ __all__ = [
     "WebSearchConfig",
     "SearchResult",
     "SearchResponse",
-    "SearchFilters", 
+    "SearchFilters",
     "GitOperationsTool",
     "GitOperationsConfig",
     "RepositoryInfo",
