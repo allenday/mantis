@@ -2,9 +2,12 @@
 UserRequest builder for converting CLI arguments to protobuf messages.
 """
 
-from typing import List, Optional, Union, Dict, Any
+from typing import List, Optional, Union, Dict, Any, TYPE_CHECKING
 
-from ..proto.mantis.v1 import mantis_core_pb2
+if TYPE_CHECKING:
+    from ..proto.mantis.v1 import mantis_core_pb2
+else:
+    from ..proto.mantis.v1 import mantis_core_pb2
 from ..config import DEFAULT_MAX_DEPTH
 
 
@@ -75,7 +78,7 @@ class UserRequestBuilder:
         count: Optional[int] = None,
         model: Optional[str] = None,
         temperature: Optional[float] = None,
-        recursion_policy: Optional[Union[str, mantis_core_pb2.RecursionPolicy]] = None,
+        recursion_policy: Optional[Union[str, int]] = None,
     ) -> "UserRequestBuilder":
         """Add an agent specification."""
         spec = mantis_core_pb2.AgentSpec()
