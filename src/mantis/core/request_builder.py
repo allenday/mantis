@@ -2,12 +2,9 @@
 UserRequest builder for converting CLI arguments to protobuf messages.
 """
 
-from typing import List, Optional, Union, Dict, Any, TYPE_CHECKING
+from typing import List, Optional, Union, Dict, Any
 
-if TYPE_CHECKING:
-    from ..proto.mantis.v1 import mantis_core_pb2
-else:
-    from ..proto.mantis.v1 import mantis_core_pb2
+from ..proto.mantis.v1 import mantis_core_pb2
 from ..config import DEFAULT_MAX_DEPTH
 
 
@@ -78,7 +75,7 @@ class UserRequestBuilder:
         count: Optional[int] = None,
         model: Optional[str] = None,
         temperature: Optional[float] = None,
-        recursion_policy: Optional[Union[str, int]] = None,
+        recursion_policy: Optional[Union[str, mantis_core_pb2.RecursionPolicy]] = None,
     ) -> "UserRequestBuilder":
         """Add an agent specification."""
         spec = mantis_core_pb2.AgentSpec()
@@ -112,8 +109,8 @@ class UserRequestBuilder:
                     raise ValueError(f"Invalid recursion policy '{recursion_policy}'. Valid options: {valid_policies}")
                 spec.recursion_policy = policy
             else:
-                # recursion_policy is an int (enum value)  
-                spec.recursion_policy = recursion_policy  # type: ignore[assignment]
+                # recursion_policy is an enum value
+                spec.recursion_policy = recursion_policy
 
         self._agents.append(spec)
         return self

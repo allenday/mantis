@@ -7,7 +7,7 @@ name = "mantis"
 version = "0.1.0"
 description = "Multi-agent AI framework for strategic divination"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [
     { name = "Allen Day", email = "allendy@users.github.com" }
 ]
@@ -47,14 +47,14 @@ packages = ["src/mantis"]
 
 [tool.ruff]
 line-length = 120
-target-version = "py310"
+target-version = "py311"
 
 [tool.black]
 line-length = 120
-target-version = ["py310"]
+target-version = ["py311"]
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 warn_return_any = false
 warn_unused_configs = true  
 disallow_untyped_defs = false

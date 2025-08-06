@@ -4,12 +4,9 @@ Core simulation orchestrator for executing multi-agent scenarios.
 
 import time
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, List, TYPE_CHECKING
+from typing import Dict, Any, Optional, List
 
-if TYPE_CHECKING:
-    from ..proto.mantis.v1 import mantis_core_pb2
-else:
-    from ..proto.mantis.v1 import mantis_core_pb2
+from ..proto.mantis.v1 import mantis_core_pb2
 from ..proto.mantis.v1.prompt_composition_pb2 import ExecutionContext as ProtoExecutionContext, SimulationContext
 from ..config import DEFAULT_MODEL
 
@@ -25,7 +22,7 @@ class ExecutionStrategy(ABC):
         pass
 
     @abstractmethod
-    def get_strategy_type(self) -> int:
+    def get_strategy_type(self) -> mantis_core_pb2.ExecutionStrategy:
         """Return the strategy type enum value."""
         pass
 
@@ -110,7 +107,7 @@ class DirectExecutor(ExecutionStrategy):
             response.output_modes.append("text/markdown")
             return response
 
-    def get_strategy_type(self) -> int:
+    def get_strategy_type(self) -> mantis_core_pb2.ExecutionStrategy:
         return mantis_core_pb2.EXECUTION_STRATEGY_DIRECT
 
     def _initialize_tools(self):
@@ -224,7 +221,7 @@ class A2AExecutor(ExecutionStrategy):
 
         return response
 
-    def get_strategy_type(self) -> int:
+    def get_strategy_type(self) -> mantis_core_pb2.ExecutionStrategy:
         return mantis_core_pb2.EXECUTION_STRATEGY_A2A
 
 
@@ -241,7 +238,7 @@ class SimulationOrchestrator:
     """
 
     def __init__(self):
-        self._strategies: Dict[int, ExecutionStrategy] = {
+        self._strategies: Dict[mantis_core_pb2.ExecutionStrategy, ExecutionStrategy] = {
             mantis_core_pb2.EXECUTION_STRATEGY_DIRECT: DirectExecutor(),
             mantis_core_pb2.EXECUTION_STRATEGY_A2A: A2AExecutor(),
         }
@@ -399,10 +396,10 @@ class SimulationOrchestrator:
 
         return aggregated
 
-    def get_available_strategies(self) -> List[int]:
+    def get_available_strategies(self) -> List[mantis_core_pb2.ExecutionStrategy]:
         """Get list of available execution strategies."""
         return list(self._strategies.keys())
 
-    def set_strategy(self, strategy_type: int, strategy: ExecutionStrategy):
+    def set_strategy(self, strategy_type: mantis_core_pb2.ExecutionStrategy, strategy: ExecutionStrategy):
         """Register or override an execution strategy."""
         self._strategies[strategy_type] = strategy
