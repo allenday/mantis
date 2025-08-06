@@ -2,7 +2,7 @@
 UserRequest builder for converting CLI arguments to protobuf messages.
 """
 
-from typing import List, Optional, Union, Dict, Any, TYPE_CHECKING, cast
+from typing import List, Optional, Union, Dict, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..proto.mantis.v1 import mantis_core_pb2
