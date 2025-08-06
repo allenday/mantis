@@ -46,6 +46,10 @@ class TestAgentWebFetchToolIntegration:
     @pytest.fixture
     def web_fetch_agent(self):
         """Create an agent with WebFetchTool capability."""
+        # Check API key before creating agent
+        if not os.getenv("ANTHROPIC_API_KEY"):
+            pytest.skip("No Anthropic API key available for LLM integration test")
+            
         from mantis.tools import WebFetchTool, WebFetchConfig
         
         # Create tool with test-friendly config
@@ -83,10 +87,6 @@ class TestAgentWebFetchToolIntegration:
     async def test_agent_webfetch_mocked(self, web_fetch_agent):
         """Test agent using WebFetchTool with mocked tool responses but real LLM."""
         agent, web_fetch_tool = web_fetch_agent
-        
-        # Skip if no API key available
-        if not os.getenv("ANTHROPIC_API_KEY"):
-            pytest.skip("No Anthropic API key available for LLM integration test")
         
         # Mock the tool response
         from mantis.tools import WebResponse
@@ -143,6 +143,10 @@ class TestAgentWebSearchToolIntegration:
     @pytest.fixture
     def web_search_agent(self):
         """Create an agent with WebSearchTool capability."""
+        # Check API key before creating agent
+        if not os.getenv("ANTHROPIC_API_KEY"):
+            pytest.skip("No Anthropic API key available for LLM integration test")
+            
         from mantis.tools import WebSearchTool, WebSearchConfig
         
         # Create tool with test-friendly config
@@ -184,10 +188,6 @@ class TestAgentWebSearchToolIntegration:
         from mantis.tools import SearchResult, SearchResponse
         
         agent, web_search_tool = web_search_agent
-        
-        # Skip if no API key available
-        if not os.getenv("ANTHROPIC_API_KEY"):
-            pytest.skip("No Anthropic API key available for LLM integration test")
         
         # Mock the tool response
         mock_results = SearchResponse(
@@ -258,6 +258,10 @@ class TestAgentJiraToolIntegration:
     @pytest.fixture
     def jira_agent(self):
         """Create an agent with JiraTool capability."""
+        # Check API key before creating agent
+        if not os.getenv("ANTHROPIC_API_KEY"):
+            pytest.skip("No Anthropic API key available for LLM integration test")
+            
         from mantis.tools import JiraTool, JiraConfig
         
         # Create tool with test config (read-only for safety)
@@ -304,10 +308,6 @@ class TestAgentJiraToolIntegration:
         from mantis.tools import JiraIssue
         
         agent, jira_tool = jira_agent
-        
-        # Skip if no API key available
-        if not os.getenv("ANTHROPIC_API_KEY"):
-            pytest.skip("No Anthropic API key available for LLM integration test")
         
         # Mock the tool response
         mock_issue = JiraIssue(
@@ -370,6 +370,10 @@ class TestAgentGitOperationsToolIntegration:
     @pytest.fixture
     def git_agent(self):
         """Create an agent with GitOperationsTool capability."""
+        # Check API key before creating agent
+        if not os.getenv("ANTHROPIC_API_KEY"):
+            pytest.skip("No Anthropic API key available for LLM integration test")
+            
         from mantis.tools import GitOperationsTool, GitOperationsConfig
         
         # Create tool with test-friendly config
@@ -421,10 +425,6 @@ class TestAgentGitOperationsToolIntegration:
         from mantis.tools import RepositoryInfo, CodeMatch
         
         agent, git_tool = git_agent
-        
-        # Skip if no API key available
-        if not os.getenv("ANTHROPIC_API_KEY"):
-            pytest.skip("No Anthropic API key available for LLM integration test")
         
         # Mock the tool responses
         mock_repo_info = RepositoryInfo(
@@ -496,6 +496,10 @@ class TestMultiToolWorkflows:
     @pytest.fixture
     def multi_tool_agent(self):
         """Create an agent with multiple tool capabilities."""
+        # Check API key before creating agent
+        if not os.getenv("ANTHROPIC_API_KEY"):
+            pytest.skip("No Anthropic API key available for LLM integration test")
+            
         from mantis.tools import WebFetchTool, WebFetchConfig, WebSearchTool, WebSearchConfig
         
         # Create tools
@@ -534,10 +538,6 @@ class TestMultiToolWorkflows:
         from mantis.tools import SearchResult, SearchResponse
         
         agent, (web_search_tool, web_fetch_tool) = multi_tool_agent
-        
-        # Skip if no API key available
-        if not os.getenv("ANTHROPIC_API_KEY"):
-            pytest.skip("No Anthropic API key available for LLM integration test")
         
         # Mock search results
         mock_search_results = SearchResponse(
