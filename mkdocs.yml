@@ -1,0 +1,54 @@
+site_name: Mantis Documentation
+site_description: Multi-agent AI framework for strategic divination
+site_author: Allen Day
+site_url: https://github.com/allendy/mantis
+
+# Output directory configuration
+site_dir: docs-site
+
+# Theme
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - search.highlight
+
+# Plugins
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          import:
+            - https://docs.python.org/3/objects.inv
+          options:
+            docstring_style: google
+            docstring_section_style: list
+            merge_init_into_class: true
+            show_root_heading: true
+            show_root_full_path: true
+
+# Additional navigation 
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - User Guide:
+      - Overview: user-guide/overview.md
+  - API Reference:
+      - Modules: reference/modules.md
+  - Development:
+      - Contributing: dev/contributing.md
+      - Changelog: dev/changelog.md
+
+# Markdown extensions
+markdown_extensions:
+  - attr_list
+  - md_in_html
+  - tables
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
