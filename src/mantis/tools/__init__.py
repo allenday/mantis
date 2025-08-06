@@ -2,12 +2,21 @@
 Tools package for Mantis agents.
 
 This package contains various tools that agents can use for external operations
-like web fetching, searching, git operations, and other integrations.
+like web fetching, searching, git operations, Jira integration, and other integrations.
 """
 
 from .web_fetch import WebFetchTool, WebFetchConfig, WebResponse
 from .web_search import WebSearchTool, WebSearchConfig, SearchResult, SearchResponse, SearchFilters
 from .git_operations import GitOperationsTool, GitOperationsConfig, RepositoryInfo, CommitInfo, CodeMatch
+from .jira_integration import (
+    JiraTool,
+    JiraConfig,
+    JiraIssue,
+    JiraProject,
+    JiraBoard,
+    JiraComment,
+    MCPError,
+)
 
 __all__ = [
     "WebFetchTool",
@@ -23,4 +32,11 @@ __all__ = [
     "RepositoryInfo",
     "CommitInfo",
     "CodeMatch",
+    "JiraTool",
+    "JiraConfig",
+    "JiraIssue",
+    "JiraProject",
+    "JiraBoard",
+    "JiraComment",
+    "MCPError",
 ]

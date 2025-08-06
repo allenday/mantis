@@ -116,6 +116,7 @@ class DirectExecutor(ExecutionStrategy):
             from ..tools.web_fetch import WebFetchTool, WebFetchConfig
             from ..tools.web_search import WebSearchTool, WebSearchConfig
             from ..tools.git_operations import GitOperationsTool, GitOperationsConfig
+            from ..tools.jira_integration import JiraTool, JiraConfig
 
             # Initialize WebFetchTool with secure defaults
             web_fetch_config = WebFetchConfig(
@@ -149,6 +150,24 @@ class DirectExecutor(ExecutionStrategy):
                 max_search_results=50,
             )
             self._tools["git_operations"] = GitOperationsTool(git_config)
+
+            # Initialize JiraTool with secure defaults
+            try:
+                jira_config = JiraConfig(
+                    api_token="",  # Placeholder - agents can reconfigure as needed
+                    email="",  # Placeholder - agents can reconfigure as needed
+                    server_url="https://your-domain.atlassian.net",  # Default placeholder
+                    read_only_mode=True,
+                    timeout=30.0,
+                )
+                jira_tool = JiraTool(jira_config)
+                self._tools.update(jira_tool.get_tools())
+            except Exception as e:
+                # Log Jira tool initialization failure but continue with other tools
+                import logging
+
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Failed to initialize Jira tool: {e}")
 
         except ImportError:
             # Tools not available, continue without them
