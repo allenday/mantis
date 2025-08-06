@@ -29,7 +29,7 @@ PIP := $(VENV)/bin/pip
 # Create virtual environment if it doesn't exist
 $(VENV):
 	$(PYTHON) -m venv $(VENV)
-	$(PIP) install --upgrade pip
+	$(PIP) install --timeout 300 --upgrade pip setuptools wheel
 
 check: $(VENV) proto lint format test
 
@@ -39,9 +39,19 @@ install: $(VENV)
 
 # Install package in development mode with all dependencies
 install-dev: $(VENV)
-	$(PIP) install -e ".[dev]"
-	$(PIP) install --force-reinstall protobuf==5.29.5 grpcio grpcio-tools googleapis-common-protos
-	$(PIP) install twine
+	# Install core dependencies first to avoid timeout
+	$(PIP) install --timeout 300 --retries 3 "pydantic>=2.5.0" "python-dotenv>=1.0.0" "httpx>=0.25.0" "aiohttp>=3.9.0"
+	$(PIP) install --timeout 300 --retries 3 "rich>=13.0.0" "rich-click>=1.6.0" "click>=8.0.0" "uvicorn>=0.24.0"
+	# Install complex dependencies separately
+	$(PIP) install --timeout 600 --retries 3 "pydantic-ai>=0.0.10"
+	$(PIP) install --timeout 300 --retries 3 "fasta2a>=0.0.1" "protoc-gen-validate>=1.2.0"
+	# Install dev dependencies
+	$(PIP) install --timeout 300 --retries 3 "pytest>=7.4.0" "pytest-asyncio>=0.21.0" "pytest-cov>=4.1.0"
+	$(PIP) install --timeout 300 --retries 3 "black>=23.0.0" "ruff>=0.1.0" "mypy>=1.6.0" "build>=1.0.0"
+	# Install package in development mode
+	$(PIP) install --timeout 300 --retries 3 -e . --no-deps
+	$(PIP) install --timeout 300 --retries 3 --force-reinstall protobuf==5.29.5 grpcio grpcio-tools googleapis-common-protos
+	$(PIP) install --timeout 300 --retries 3 twine
 
 # Generate protobuf code
 proto: install-dev
