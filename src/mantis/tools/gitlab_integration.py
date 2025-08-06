@@ -185,7 +185,7 @@ class GitLabTool:
         Returns:
             List of GitLabProject objects
         """
-        parameters = {"per_page": limit}
+        parameters: Dict[str, Any] = {"per_page": limit}
 
         if search:
             parameters["search"] = search
@@ -315,7 +315,7 @@ class GitLabTool:
         if self.config.read_only_mode:
             raise MCPError("Cannot create issue: read-only mode is enabled")
 
-        parameters = {"project_id": str(project_id), "title": title}
+        parameters: Dict[str, Any] = {"project_id": str(project_id), "title": title}
 
         if description:
             parameters["description"] = description
