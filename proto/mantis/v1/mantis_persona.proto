@@ -1,0 +1,114 @@
+syntax = "proto3";
+
+package mantis.persona.v1;
+
+import "a2a.proto";
+import "validate/validate.proto";
+
+// Role preferences for multi-agent scenarios
+enum RolePreference {
+  ROLE_PREFERENCE_UNSPECIFIED = 0;
+  ROLE_PREFERENCE_LEADER = 1;
+  ROLE_PREFERENCE_FOLLOWER = 2;
+  ROLE_PREFERENCE_NARRATOR = 3;
+}
+
+// Enriched AgentCard that includes parsed persona extension data
+message MantisAgentCard {
+  // The base A2A AgentCard
+  a2a.v1.AgentCard agent_card = 1;
+  
+  // Parsed persona extension data (optional)
+  optional PersonaCharacteristics persona_characteristics = 2;
+  optional CompetencyScores competency_scores = 3;
+  optional DomainExpertise domain_expertise = 4;
+  
+  // Computed/derived fields for display
+  optional string persona_title = 10;      // e.g., "Master Strategist"
+  repeated string skill_tags = 11;         // Extracted from skills for domain hints
+}
+
+// Persona characteristics and behavioral patterns extension
+// URI: https://mantis.ai/extensions/persona-characteristics/v1
+message PersonaCharacteristics {
+  // Core principles that guide the persona's worldview and decisions
+  repeated string core_principles = 1;
+  
+  // Framework for how the persona approaches decision-making
+  string decision_framework = 2;
+  
+  // Style and tone of communication preferred by the persona
+  string communication_style = 3;
+  
+  // Patterns of thought and cognitive approaches
+  repeated string thinking_patterns = 4;
+  
+  // Characteristic phrases and expressions the persona uses
+  repeated string characteristic_phrases = 5;
+  
+  // Behavioral tendencies and habits
+  repeated string behavioral_tendencies = 6;
+  
+  // Original content used to generate the persona. Can be used as a system prompt.
+  string original_content = 7;
+}
+
+// Role adaptation scores and preferences
+message RoleAdaptation {
+  // Score for effectiveness as a leader (0.0 - 1.0)
+  // 0.0-0.3: Poor leadership, 0.4-0.6: Moderate, 0.7-0.8: Strong, 0.9-1.0: Exceptional
+  float leader_score = 1 [(validate.rules).float = {gte: 0.0, lte: 1.0}];
+  
+  // Score for effectiveness as a follower (0.0 - 1.0)
+  // 0.0-0.3: Poor execution, 0.4-0.6: Moderate, 0.7-0.8: Strong, 0.9-1.0: Exceptional
+  float follower_score = 2 [(validate.rules).float = {gte: 0.0, lte: 1.0}];
+  
+  // Score for effectiveness as a narrator/observer (0.0 - 1.0)
+  // 0.0-0.3: Poor facilitation, 0.4-0.6: Moderate, 0.7-0.8: Strong, 0.9-1.0: Exceptional
+  float narrator_score = 3 [(validate.rules).float = {gte: 0.0, lte: 1.0}];
+  
+  // Preferred role in team dynamics
+  RolePreference preferred_role = 4 [(validate.rules).enum = {defined_only: true, not_in: [0]}];
+  
+  // Flexibility in adapting to different roles (0.0 - 1.0)
+  // 0.0-0.3: Rigid, 0.4-0.6: Moderate flexibility, 0.7-0.8: Highly flexible, 0.9-1.0: Chameleon-like
+  float role_flexibility = 5 [(validate.rules).float = {gte: 0.0, lte: 1.0}];
+}
+
+// Competency scores across key skill areas
+// URI: https://mantis.ai/extensions/competency-scores/v1
+message CompetencyScores {
+  // Map of competency name to score (0.0 - 1.0)
+  // Scoring guidelines: 0.0-0.3: Limited/weak, 0.4-0.6: Moderate, 0.7-0.8: Strong, 0.9-1.0: Exceptional/legendary
+  // Common competencies include:
+  // - "strategic planning and long-term vision"
+  // - "team leadership and inspiring others"
+  // - "decisive decision making under pressure"
+  // - "clear and persuasive communication"
+  // - "analytical thinking and logical reasoning"
+  // - "creative innovation and design thinking"
+  // - "risk assessment and mitigation planning"
+  // - "stakeholder relationship management"
+  // - "domain expertise and technical knowledge"
+  // - "adaptability to changing circumstances"
+  map<string, float> competency_scores = 1 [(validate.rules).map.values.float = {gte: 0.0, lte: 1.0}];
+  
+  // Role adaptation scores and preferences
+  RoleAdaptation role_adaptation = 2;
+}
+
+// Domain expertise and knowledge areas
+// URI: https://mantis.ai/extensions/domain-expertise/v1
+message DomainExpertise {
+  // Primary domains of expertise
+  repeated string primary_domains = 1;
+  
+  // Secondary areas of knowledge
+  repeated string secondary_domains = 2;
+  
+  // Methodologies and approaches the persona employs
+  repeated string methodologies = 3;
+  
+  // Tools and frameworks the persona is familiar with
+  repeated string tools_and_frameworks = 4;
+}

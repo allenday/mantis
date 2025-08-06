@@ -1,0 +1,18 @@
+[submodule "third_party/git2md"]
+    path = third_party/git2md
+    url = https://github.com/xpos587/git2md.git
+[submodule "third_party/LLM-As-Hierarchical-Policy"]
+    path = third_party/LLM-As-Hierarchical-Policy
+    url = https://github.com/lz1oceani/LLM-As-Hierarchical-Policy.git
+[submodule "third_party/a2a-python"]
+    path = third_party/a2a-python
+    url = https://github.com/a2aproject/a2a-python.git
+[submodule "third_party/a2a-samples"]
+    path = third_party/a2a-samples
+    url = https://github.com/a2aproject/a2a-samples.git
+[submodule "third_party/A2A"]
+	path = third_party/A2A
+	url = https://github.com/a2aproject/A2A.git
+[submodule "third_party/a2a-registry"]
+	path = third_party/a2a-registry
+	url = https://github.com/allenday/a2a-registry.git

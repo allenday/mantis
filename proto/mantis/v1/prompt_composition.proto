@@ -1,0 +1,152 @@
+syntax = "proto3";
+
+package mantis.prompts;
+
+import "google/protobuf/struct.proto";
+import "mantis/v1/mantis_persona.proto";
+import "mantis/v1/mantis_core.proto";
+
+// Prompt composition service for A2A networking
+service PromptCompositionService {
+  // Compose a modular prompt from agent card and execution context
+  rpc ComposePrompt(PromptCompositionRequest) returns (PromptCompositionResponse);
+  
+  // Get available composition strategies and modules
+  rpc GetCapabilities(CapabilitiesRequest) returns (CapabilitiesResponse);
+}
+
+// Request for prompt composition
+message PromptCompositionRequest {
+  // The agent card with persona and competency data
+  mantis.persona.v1.MantisAgentCard agent_card = 1;
+  
+  // Simulation input with query and context
+  mantis.core.SimulationInput simulation_input = 2;
+  
+  // Agent specification with role preferences
+  mantis.core.AgentSpec agent_spec = 3;
+  
+  // Execution context for role assignment and recursion
+  ExecutionContext execution_context = 4;
+  
+  // Composition strategy to use
+  CompositionStrategy strategy = 5;
+}
+
+// Response with composed prompt
+message PromptCompositionResponse {
+  // The final composed prompt text  
+  string composed_prompt = 1;
+  
+  // Modules that were used in composition
+  repeated string modules_used = 2;
+  
+  // Variables that were resolved during composition
+  map<string, string> variables_resolved = 3;
+  
+  // Composition strategy that was applied
+  CompositionStrategy strategy = 4;
+  
+  // Composition metadata
+  CompositionMetadata metadata = 5;
+}
+
+// Execution context for agent processing (proto version)
+message ExecutionContext {
+  // Current recursion depth
+  int32 current_depth = 1;
+  
+  // Maximum allowed recursion depth
+  int32 max_depth = 2;
+  
+  // Team size at current depth
+  int32 team_size = 3;
+  
+  // Assigned role for this agent
+  string assigned_role = 4;
+  
+  // Agent index in team
+  int32 agent_index = 5;
+  
+  // Parent task description (if recursing)
+  optional string parent_task = 6;
+  
+  // Available agents that can be delegated to
+  repeated string available_agents = 7;
+}
+
+// Simulation orchestration context (replaces dataclass)
+message SimulationContext {
+  // Start time as Unix timestamp
+  double start_time = 1;
+  
+  // Execution strategy being used
+  mantis.core.ExecutionStrategy strategy = 2;
+  
+  // The simulation input being processed
+  mantis.core.SimulationInput simulation_input = 3;
+  
+  // Current recursion depth for the simulation
+  int32 current_depth = 4;
+}
+
+// Composition strategy enumeration  
+enum CompositionStrategy {
+  COMPOSITION_STRATEGY_UNSPECIFIED = 0;
+  COMPOSITION_STRATEGY_LAYERED = 1;    // Layer modules by priority
+  COMPOSITION_STRATEGY_BLENDED = 2;    // Blend modules together
+  COMPOSITION_STRATEGY_CONDITIONAL = 3; // Apply modules based on conditions
+}
+
+// Metadata about the composition process
+message CompositionMetadata {
+  // Total variables available for substitution
+  int32 total_variables = 1;
+  
+  // Variables that were actually used
+  int32 variables_used = 2;
+  
+  // Modules that were available
+  repeated string available_modules = 3;
+  
+  // Modules that were applicable
+  repeated string applicable_modules = 4;
+  
+  // Composition time in milliseconds
+  int64 composition_time_ms = 5;
+}
+
+// Request for service capabilities
+message CapabilitiesRequest {
+  // No parameters needed
+}
+
+// Response with service capabilities
+message CapabilitiesResponse {
+  // Available composition strategies
+  repeated CompositionStrategy strategies = 1;
+  
+  // Available prompt modules
+  repeated ModuleInfo modules = 2;
+  
+  // Service version
+  string version = 3;
+}
+
+// Information about a prompt module
+message ModuleInfo {
+  // Module name
+  string name = 1;
+  
+  // Module description
+  string description = 2;
+  
+  // Module priority
+  int32 priority = 3;
+  
+  // Whether module is always applicable
+  bool always_applicable = 4;
+  
+  // Variables this module uses
+  repeated string required_variables = 5;
+}
