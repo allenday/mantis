@@ -96,8 +96,7 @@ docs-install: install-dev
 	$(PIP) install mkdocs mkdocs-material mkdocstrings mkdocstrings-python
 
 docs-build: docs-install
-	mkdir -p site
-	echo "Documentation build placeholder" > site/index.html
+	$(VENV)/bin/mkdocs build --config-file mkdocs.yml --site-dir docs-site
 
 docs-serve: docs-install
-	@echo "Documentation server placeholder - would run mkdocs serve"
+	$(VENV)/bin/mkdocs serve --config-file mkdocs.yml

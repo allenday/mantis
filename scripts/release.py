@@ -57,6 +57,7 @@ def main():
     parser.add_argument("version", help="Version to release (e.g., 0.1.1)")
     parser.add_argument("--dry-run", action="store_true", help="Only update version, don't build")
     parser.add_argument("--skip-tests", action="store_true", help="Skip running tests")
+    parser.add_argument("--skip-docs", action="store_true", help="Skip building documentation")
 
     args = parser.parse_args()
 
@@ -90,6 +91,15 @@ def main():
     # except subprocess.CalledProcessError as e:
     #     print(f"Docker build failed: {e}")
     #     sys.exit(1)
+
+    # Build documentation
+    if not args.skip_docs:
+        print("Building documentation...")
+        try:
+            run_command(["make", "docs-build"])
+        except subprocess.CalledProcessError as e:
+            print(f"Documentation build failed: {e}")
+            sys.exit(1)
 
     # Build package
     print("Building package...")
