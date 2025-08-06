@@ -68,3 +68,10 @@ exclude = [
 [[tool.mypy.overrides]]
 module = "mcp.*"
 ignore_errors = true
+
+[tool.pytest.ini_options]
+markers = [
+    "live_integration: marks tests that use live APIs and require API keys",
+    "mocked_integration: marks tests that use mocked tool responses but real LLMs", 
+    "multi_tool_workflow: marks tests that use multiple tools in complex workflows"
+]

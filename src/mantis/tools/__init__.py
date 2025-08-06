@@ -2,7 +2,7 @@
 Tools package for Mantis agents.
 
 This package contains various tools that agents can use for external operations
-like web fetching, searching, git operations, Jira integration, and other integrations.
+like web fetching, searching, git operations, Jira integration, GitLab integration, and other integrations.
 """
 
 from .web_fetch import WebFetchTool, WebFetchConfig, WebResponse
@@ -15,7 +15,16 @@ from .jira_integration import (
     JiraProject,
     JiraBoard,
     JiraComment,
-    MCPError,
+    MCPError as JiraMCPError,
+)
+from .gitlab_integration import (
+    GitLabTool,
+    GitLabConfig,
+    GitLabProject,
+    GitLabIssue,
+    GitLabMergeRequest,
+    GitLabPipeline,
+    MCPError as GitLabMCPError,
 )
 
 __all__ = [
@@ -38,5 +47,12 @@ __all__ = [
     "JiraProject",
     "JiraBoard",
     "JiraComment",
-    "MCPError",
+    "JiraMCPError",
+    "GitLabTool",
+    "GitLabConfig",
+    "GitLabProject",
+    "GitLabIssue",
+    "GitLabMergeRequest",
+    "GitLabPipeline",
+    "GitLabMCPError",
 ]

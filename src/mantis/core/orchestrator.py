@@ -117,6 +117,7 @@ class DirectExecutor(ExecutionStrategy):
             from ..tools.web_search import WebSearchTool, WebSearchConfig
             from ..tools.git_operations import GitOperationsTool, GitOperationsConfig
             from ..tools.jira_integration import JiraTool, JiraConfig
+            from ..tools.gitlab_integration import GitLabTool, GitLabConfig
 
             # Initialize WebFetchTool with secure defaults
             web_fetch_config = WebFetchConfig(
@@ -165,9 +166,23 @@ class DirectExecutor(ExecutionStrategy):
             except Exception as e:
                 # Log Jira tool initialization failure but continue with other tools
                 import logging
-
                 logger = logging.getLogger(__name__)
                 logger.warning(f"Failed to initialize Jira tool: {e}")
+
+            # Initialize GitLabTool with secure defaults
+            try:
+                gitlab_config = GitLabConfig(
+                    personal_access_token="",  # Placeholder - agents can reconfigure as needed
+                    read_only_mode=True,
+                    timeout=30.0,
+                )
+                gitlab_tool = GitLabTool(gitlab_config)
+                self._tools.update(gitlab_tool.get_tools())
+            except Exception as e:
+                # Log GitLab tool initialization failure but continue with other tools
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Failed to initialize GitLab tool: {e}")
 
         except ImportError:
             # Tools not available, continue without them
