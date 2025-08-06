@@ -1,4 +1,4 @@
-.PHONY: help install install-dev proto check clean lint format typecheck test ci build docs-install docs-build docs-serve
+.PHONY: help install install-dev proto check clean lint format typecheck test ci build verify-package publish docs-install docs-build docs-serve
 
 # Default target
 help:
@@ -14,6 +14,8 @@ help:
 	@echo "  check        - Check project code health"
 	@echo "  ci           - Run CI pipeline (install-dev, proto, lint, test)"
 	@echo "  build        - Build package and check"
+	@echo "  verify-package - Verify built package integrity"
+	@echo "  publish      - Publish package to PyPI"
 	@echo "  docs-install - Install documentation dependencies"
 	@echo "  docs-build   - Build documentation"
 	@echo "  docs-serve   - Serve documentation locally"
@@ -80,6 +82,14 @@ ci: install-dev proto lint typecheck test
 build: install-dev proto
 	$(VENV)/bin/python -m build
 	$(VENV)/bin/python -m twine check dist/*
+
+# Verify built package integrity
+verify-package: build
+	$(VENV)/bin/python -m twine check dist/* --strict
+
+# Publish package to PyPI
+publish: verify-package
+	$(VENV)/bin/python -m twine upload dist/*
 
 # Documentation targets (placeholder for now)
 docs-install: install-dev

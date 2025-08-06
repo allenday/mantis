@@ -109,6 +109,7 @@ class UserRequestBuilder:
                     raise ValueError(f"Invalid recursion policy '{recursion_policy}'. Valid options: {valid_policies}")
                 spec.recursion_policy = policy
             else:
+                # recursion_policy is an enum value
                 spec.recursion_policy = recursion_policy
 
         self._agents.append(spec)
