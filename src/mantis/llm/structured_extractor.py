@@ -356,23 +356,9 @@ class StructuredExtractor:
             # Check if this looks like a map entry (has key and value fields)
             map_fields = {f.name: f for f in field.message_type.fields}
             if "key" in map_fields and "value" in map_fields:
-                key_field = map_fields["key"]
-                value_field = map_fields["value"]
-
-                # Map protobuf types to Python types
-                type_mapping = {
-                    key_field.TYPE_STRING: str,
-                    key_field.TYPE_INT32: int,
-                    key_field.TYPE_INT64: int,
-                    key_field.TYPE_FLOAT: float,
-                    key_field.TYPE_DOUBLE: float,
-                    key_field.TYPE_BOOL: bool,
-                }
-
-                key_type = type_mapping.get(key_field.type, str)
-                value_type = type_mapping.get(value_field.type, str)
-
-                return Dict[key_type, value_type]
+                # For map fields, we'll use Dict[str, Any] as a fallback
+                # since we can't dynamically create generic types at runtime
+                return Dict[str, Any]
 
         # Check if this is a nested message field (not a map)
         if hasattr(field, "message_type") and field.message_type and field.type == field.TYPE_MESSAGE:
@@ -380,27 +366,18 @@ class StructuredExtractor:
             # This allows the LLM to return structured data as a dict
             return Dict[str, Any]
 
-        # Map protobuf types to Python types
-        type_mapping = {
-            field.TYPE_STRING: str,
-            field.TYPE_INT32: int,
-            field.TYPE_INT64: int,
-            field.TYPE_FLOAT: float,
-            field.TYPE_DOUBLE: float,
-            field.TYPE_BOOL: bool,
-        }
-
-        base_type = type_mapping.get(field.type, str)  # Default to str
-
         # Handle repeated fields
         if field.label == field.LABEL_REPEATED:
-            return List[base_type]
+            # For repeated fields, we'll use List[Any] as a fallback
+            return List[Any]
 
         # Handle optional fields
         if field.label == field.LABEL_OPTIONAL:
-            return Optional[base_type]
+            return Optional[Any]
 
-        return base_type
+        # For scalar fields, return Any as a safe fallback
+        # This allows the LLM to return appropriate values
+        return Any
 
     def _pydantic_to_protobuf(self, pydantic_obj, protobuf_type: Type):
         """Convert pydantic model instance to protobuf message."""

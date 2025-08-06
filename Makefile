@@ -31,7 +31,7 @@ $(VENV):
 	$(PYTHON) -m venv $(VENV)
 	$(PIP) install --upgrade pip
 
-check: $(VENV) proto lint format test
+check: $(VENV) proto lint typecheck format test
 
 # Install package in production mode
 install: $(VENV)
@@ -60,16 +60,16 @@ clean:
 
 # Linting
 lint: install-dev
-	$(VENV)/bin/ruff check src/ scripts/ --exclude="src/mantis/proto/*_pb2.py" --exclude="src/mantis/proto/*_pb2_grpc.py"
+	$(VENV)/bin/ruff check src/ scripts/
 
 # Type checking
 typecheck: install-dev
-	$(VENV)/bin/mypy src/ scripts/
+	$(VENV)/bin/mypy src/ scripts/ --check-untyped-defs --exclude="src/mantis/proto/*_pb2.py|src/mantis/proto/*_pb2_grpc.py"
 
 # Formatting
 format: install-dev
 	$(VENV)/bin/black src/ scripts/ --exclude="src/mantis/proto/.*_pb2.*\.py$$"
-	$(VENV)/bin/ruff format src/ scripts/ --exclude="src/mantis/proto/*_pb2.py" --exclude="src/mantis/proto/*_pb2_grpc.py"
+	$(VENV)/bin/ruff format src/ scripts/
 
 # Run tests
 test: install-dev proto

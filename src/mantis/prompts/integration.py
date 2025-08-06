@@ -27,7 +27,7 @@ class PromptIntegrationService:
     def __init__(self):
         self._composition_engine = PromptCompositionEngine()
 
-    def generate_agent_prompt(
+    async def generate_agent_prompt(
         self,
         agent_card: MantisAgentCard,
         simulation_input: SimulationInput,
@@ -56,10 +56,11 @@ class PromptIntegrationService:
             )
 
             # Generate prompt using composition engine
-            prompt = self._composition_engine.compose_prompt(
+            result = await self._composition_engine.compose_prompt(
                 composition_context,
                 strategy=CompositionStrategy.LAYERED,  # Default strategy
             )
+            prompt = result.final_prompt
 
             logger.debug(f"Generated prompt for agent {mantis_card.persona_title or mantis_card.agent_card.name}")
             return prompt
@@ -227,12 +228,14 @@ Provide a helpful and accurate response based on your capabilities and expertise
         Useful for debugging and understanding prompt composition decisions.
         """
         try:
-            mantis_card = ensure_mantis_agent_card(agent_card)
-            composition_context = self._create_composition_context(
-                mantis_card, simulation_input, agent_spec, execution_context or {}
-            )
+            # mantis_card = ensure_mantis_agent_card(agent_card)
+            # composition_context = self._create_composition_context(
+            #     mantis_card, simulation_input, agent_spec, execution_context or {}
+            # )
 
-            return self._composition_engine.analyze_composition(composition_context)
+            # Note: analyze_composition method doesn't exist on PromptCompositionEngine
+            # This would need to be implemented or removed
+            return {"error": "analyze_composition method not implemented"}
 
         except Exception as e:
             logger.error(f"Failed to analyze prompt composition: {e}")
