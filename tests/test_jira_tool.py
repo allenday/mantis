@@ -4,7 +4,7 @@ Tests for JiraTool integration.
 
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
-from mantis.tools import JiraTool, JiraConfig, JiraIssue, JiraProject, JiraBoard, JiraComment, MCPError
+from mantis.tools import JiraTool, JiraConfig, JiraIssue, JiraProject, JiraBoard, JiraComment, JiraMCPError
 
 
 class TestJiraConfig:
@@ -198,8 +198,8 @@ class TestJiraTool:
         tools = tool.get_tools()
         
         expected_tools = [
-            "get_issue", "search_issues", "create_issue", "update_issue",
-            "transition_issue", "add_comment", "get_projects", "get_boards"
+            "jira_get_issue", "jira_search_issues", "jira_create_issue", "jira_update_issue",
+            "jira_transition_issue", "jira_add_comment", "jira_get_projects", "jira_get_boards"
         ]
         
         assert set(tools.keys()) == set(expected_tools)
@@ -209,7 +209,7 @@ class TestJiraTool:
 
     @pytest.mark.asyncio
     async def test_mcp_tool_call_placeholder(self):
-        """Test _call_mcp_tool method raises MCPError (placeholder implementation)."""
+        """Test _call_mcp_tool method raises JiraMCPError (placeholder implementation)."""
         config = JiraConfig(
             api_token="test_token",
             email="test@example.com",
@@ -217,7 +217,7 @@ class TestJiraTool:
         )
         tool = JiraTool(config)
         
-        with pytest.raises(MCPError, match="MCP server communication not yet implemented"):
+        with pytest.raises(JiraMCPError, match="MCP server communication not yet implemented"):
             await tool._call_mcp_tool("test_tool", {"param": "value"})
 
     @pytest.mark.asyncio
@@ -230,7 +230,7 @@ class TestJiraTool:
         )
         tool = JiraTool(config)
         
-        with pytest.raises(MCPError, match="MCP server communication not yet implemented"):
+        with pytest.raises(JiraMCPError, match="MCP server communication not yet implemented"):
             await tool.get_issue("TEST-123")
 
     @pytest.mark.asyncio
@@ -244,7 +244,7 @@ class TestJiraTool:
         )
         tool = JiraTool(config)
         
-        with pytest.raises(MCPError, match="Cannot create issue: read-only mode is enabled"):
+        with pytest.raises(JiraMCPError, match="Cannot create issue: read-only mode is enabled"):
             await tool.create_issue("TEST", "Test Issue")
 
     @pytest.mark.asyncio
@@ -258,7 +258,7 @@ class TestJiraTool:
         )
         tool = JiraTool(config)
         
-        with pytest.raises(MCPError, match="Cannot update issue: read-only mode is enabled"):
+        with pytest.raises(JiraMCPError, match="Cannot update issue: read-only mode is enabled"):
             await tool.update_issue("TEST-123", summary="Updated Summary")
 
     @pytest.mark.asyncio
@@ -272,7 +272,7 @@ class TestJiraTool:
         )
         tool = JiraTool(config)
         
-        with pytest.raises(MCPError, match="Issue transitions are disabled"):
+        with pytest.raises(JiraMCPError, match="Issue transitions are disabled"):
             await tool.transition_issue("TEST-123", "Done")
 
     @pytest.mark.asyncio
@@ -286,7 +286,7 @@ class TestJiraTool:
         )
         tool = JiraTool(config)
         
-        with pytest.raises(MCPError, match="Comments are disabled"):
+        with pytest.raises(JiraMCPError, match="Comments are disabled"):
             await tool.add_comment("TEST-123", "Test comment")
 
     @pytest.mark.asyncio
@@ -444,14 +444,14 @@ class TestDirectExecutorIntegration:
         # Mock Jira tool to return expected tools
         mock_tool_instance = MagicMock()
         mock_tool_instance.get_tools.return_value = {
-            "get_issue": mock_tool_instance,
-            "search_issues": mock_tool_instance,
-            "create_issue": mock_tool_instance,
-            "update_issue": mock_tool_instance,
-            "transition_issue": mock_tool_instance,
-            "add_comment": mock_tool_instance,
-            "get_projects": mock_tool_instance,
-            "get_boards": mock_tool_instance,
+            "jira_get_issue": mock_tool_instance,
+            "jira_search_issues": mock_tool_instance,
+            "jira_create_issue": mock_tool_instance,
+            "jira_update_issue": mock_tool_instance,
+            "jira_transition_issue": mock_tool_instance,
+            "jira_add_comment": mock_tool_instance,
+            "jira_get_projects": mock_tool_instance,
+            "jira_get_boards": mock_tool_instance,
         }
         mock_jira_tool.return_value = mock_tool_instance
         
@@ -460,8 +460,8 @@ class TestDirectExecutorIntegration:
         
         # Should have Jira tools available
         expected_jira_tools = [
-            "get_issue", "search_issues", "create_issue", "update_issue",
-            "transition_issue", "add_comment", "get_projects", "get_boards"
+            "jira_get_issue", "jira_search_issues", "jira_create_issue", "jira_update_issue",
+            "jira_transition_issue", "jira_add_comment", "jira_get_projects", "jira_get_boards"
         ]
         
         for tool_name in expected_jira_tools:
@@ -483,8 +483,8 @@ class TestDirectExecutorIntegration:
             
             # Should have other tools but no Jira tools
             jira_tool_names = [
-                "get_issue", "search_issues", "create_issue", "update_issue",
-                "transition_issue", "add_comment", "get_projects", "get_boards"
+                "jira_get_issue", "jira_search_issues", "jira_create_issue", "jira_update_issue",
+                "jira_transition_issue", "jira_add_comment", "jira_get_projects", "jira_get_boards"
             ]
             
             # Verify no Jira tools are registered

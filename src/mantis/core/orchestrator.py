@@ -166,6 +166,7 @@ class DirectExecutor(ExecutionStrategy):
             except Exception as e:
                 # Log Jira tool initialization failure but continue with other tools
                 import logging
+
                 logger = logging.getLogger(__name__)
                 logger.warning(f"Failed to initialize Jira tool: {e}")
 
@@ -181,6 +182,7 @@ class DirectExecutor(ExecutionStrategy):
             except Exception as e:
                 # Log GitLab tool initialization failure but continue with other tools
                 import logging
+
                 logger = logging.getLogger(__name__)
                 logger.warning(f"Failed to initialize GitLab tool: {e}")
 

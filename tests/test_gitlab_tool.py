@@ -4,7 +4,7 @@ Tests for GitLabTool integration.
 
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
-from mantis.tools import GitLabTool, GitLabConfig, GitLabProject, GitLabIssue, GitLabMergeRequest, GitLabPipeline, MCPError
+from mantis.tools import GitLabTool, GitLabConfig, GitLabProject, GitLabIssue, GitLabMergeRequest, GitLabPipeline, GitLabMCPError
 
 
 class TestGitLabConfig:
@@ -159,9 +159,9 @@ class TestGitLabTool:
         tools = tool.get_tools()
         
         expected_tools = [
-            "list_projects", "get_project", "list_issues", "create_issue",
-            "list_merge_requests", "create_merge_request", "list_pipelines",
-            "get_file_contents", "search_repositories"
+            "gitlab_list_projects", "gitlab_get_project", "gitlab_list_issues", "gitlab_create_issue",
+            "gitlab_list_merge_requests", "gitlab_create_merge_request", "gitlab_list_pipelines",
+            "gitlab_get_file_contents", "gitlab_search_repositories"
         ]
         
         assert set(tools.keys()) == set(expected_tools)
@@ -171,11 +171,11 @@ class TestGitLabTool:
 
     @pytest.mark.asyncio
     async def test_mcp_tool_call_placeholder(self):
-        """Test _call_mcp_tool method raises MCPError (placeholder implementation)."""
+        """Test _call_mcp_tool method raises GitLabMCPError (placeholder implementation)."""
         config = GitLabConfig(personal_access_token="test_token")
         tool = GitLabTool(config)
         
-        with pytest.raises(MCPError, match="MCP server communication not yet implemented"):
+        with pytest.raises(GitLabMCPError, match="MCP server communication not yet implemented"):
             await tool._call_mcp_tool("test_tool", {"param": "value"})
 
     @pytest.mark.asyncio
@@ -184,7 +184,7 @@ class TestGitLabTool:
         config = GitLabConfig(personal_access_token="test_token")
         tool = GitLabTool(config)
         
-        with pytest.raises(MCPError, match="MCP server communication not yet implemented"):
+        with pytest.raises(GitLabMCPError, match="MCP server communication not yet implemented"):
             await tool.list_projects()
 
     @pytest.mark.asyncio
@@ -193,7 +193,7 @@ class TestGitLabTool:
         config = GitLabConfig(personal_access_token="test_token", read_only_mode=True)
         tool = GitLabTool(config)
         
-        with pytest.raises(MCPError, match="Cannot create issue: read-only mode is enabled"):
+        with pytest.raises(GitLabMCPError, match="Cannot create issue: read-only mode is enabled"):
             await tool.create_issue("project", "Test Issue")
 
     @pytest.mark.asyncio
@@ -202,7 +202,7 @@ class TestGitLabTool:
         config = GitLabConfig(personal_access_token="test_token", read_only_mode=True)
         tool = GitLabTool(config)
         
-        with pytest.raises(MCPError, match="Cannot create merge request: read-only mode is enabled"):
+        with pytest.raises(GitLabMCPError, match="Cannot create merge request: read-only mode is enabled"):
             await tool.create_merge_request("project", "Test MR", "feature", "main")
 
     @pytest.mark.asyncio
@@ -211,7 +211,7 @@ class TestGitLabTool:
         config = GitLabConfig(personal_access_token="test_token", enable_pipeline_api=False)
         tool = GitLabTool(config)
         
-        with pytest.raises(MCPError, match="Pipeline API is disabled"):
+        with pytest.raises(GitLabMCPError, match="Pipeline API is disabled"):
             await tool.list_pipelines("project")
 
     @pytest.mark.asyncio
@@ -313,15 +313,15 @@ class TestDirectExecutorIntegration:
         # Mock GitLab tool to return expected tools
         mock_tool_instance = MagicMock()
         mock_tool_instance.get_tools.return_value = {
-            "list_projects": mock_tool_instance,
-            "get_project": mock_tool_instance,
-            "list_issues": mock_tool_instance,
-            "create_issue": mock_tool_instance,
-            "list_merge_requests": mock_tool_instance,
-            "create_merge_request": mock_tool_instance,
-            "list_pipelines": mock_tool_instance,
-            "get_file_contents": mock_tool_instance,
-            "search_repositories": mock_tool_instance,
+            "gitlab_list_projects": mock_tool_instance,
+            "gitlab_get_project": mock_tool_instance,
+            "gitlab_list_issues": mock_tool_instance,
+            "gitlab_create_issue": mock_tool_instance,
+            "gitlab_list_merge_requests": mock_tool_instance,
+            "gitlab_create_merge_request": mock_tool_instance,
+            "gitlab_list_pipelines": mock_tool_instance,
+            "gitlab_get_file_contents": mock_tool_instance,
+            "gitlab_search_repositories": mock_tool_instance,
         }
         mock_gitlab_tool.return_value = mock_tool_instance
         
@@ -330,9 +330,9 @@ class TestDirectExecutorIntegration:
         
         # Should have GitLab tools available
         expected_gitlab_tools = [
-            "list_projects", "get_project", "list_issues", "create_issue",
-            "list_merge_requests", "create_merge_request", "list_pipelines",
-            "get_file_contents", "search_repositories"
+            "gitlab_list_projects", "gitlab_get_project", "gitlab_list_issues", "gitlab_create_issue",
+            "gitlab_list_merge_requests", "gitlab_create_merge_request", "gitlab_list_pipelines",
+            "gitlab_get_file_contents", "gitlab_search_repositories"
         ]
         
         for tool_name in expected_gitlab_tools:
@@ -354,9 +354,9 @@ class TestDirectExecutorIntegration:
             
             # Should have other tools but no GitLab tools
             gitlab_tool_names = [
-                "list_projects", "get_project", "list_issues", "create_issue",
-                "list_merge_requests", "create_merge_request", "list_pipelines",
-                "get_file_contents", "search_repositories"
+                "gitlab_list_projects", "gitlab_get_project", "gitlab_list_issues", "gitlab_create_issue",
+                "gitlab_list_merge_requests", "gitlab_create_merge_request", "gitlab_list_pipelines",
+                "gitlab_get_file_contents", "gitlab_search_repositories"
             ]
             
             # Verify no GitLab tools are registered

@@ -518,12 +518,12 @@ class JiraTool:
     def get_tools(self) -> Dict[str, Any]:
         """Return dictionary of available tools for pydantic-ai integration."""
         return {
-            "get_issue": self,
-            "search_issues": self,
-            "create_issue": self,
-            "update_issue": self,
-            "transition_issue": self,
-            "add_comment": self,
-            "get_projects": self,
-            "get_boards": self,
+            "jira_get_issue": self,
+            "jira_search_issues": self,
+            "jira_create_issue": self,
+            "jira_update_issue": self,
+            "jira_transition_issue": self,
+            "jira_add_comment": self,
+            "jira_get_projects": self,
+            "jira_get_boards": self,
         }

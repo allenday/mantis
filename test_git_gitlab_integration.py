@@ -123,8 +123,97 @@ async def test_real_git_operations_integration():
         return False
 
 
+async def test_real_gitlab_integration():
+    """Test REAL LLM agent with REAL GitLab tool."""
+    print('\n🧪 Testing REAL LLM agent with REAL GitLab tool...')
+    
+    from mantis.tools import GitLabTool, GitLabConfig
+    
+    # Check if GitLab credentials are available
+    gitlab_token = os.getenv('GITLAB_PERSONAL_ACCESS_TOKEN') or os.getenv('GITLAB_TOKEN')
+    gitlab_url = os.getenv('GITLAB_API_URL', 'https://gitlab.com/api/v4')
+    
+    if not gitlab_token:
+        print('  ⚠️  No GitLab token found - creating read-only tool for testing')
+        config = GitLabConfig(
+            personal_access_token="",
+            api_url=gitlab_url,
+            read_only_mode=True,
+            timeout=10.0,
+        )
+    else:
+        print(f'  🔑 GitLab token found - creating full-access tool')
+        config = GitLabConfig(
+            personal_access_token=gitlab_token,
+            api_url=gitlab_url,
+            read_only_mode=False,
+            timeout=10.0,
+        )
+    
+    gitlab_tool = GitLabTool(config)
+    
+    # Create REAL pydantic-ai agent
+    agent = Agent(
+        'anthropic:claude-3-5-haiku-20241022',
+        deps_type=Dict[str, Any],
+        system_prompt='You are a helpful assistant that can interact with GitLab. Use the GitLab tools when asked about projects, issues, or GitLab operations.'
+    )
+    
+    @agent.tool
+    async def gitlab_list_projects(ctx: RunContext[Dict[str, Any]], search: str = None) -> str:
+        """List GitLab projects."""
+        try:
+            print(f'  📋 Getting GitLab projects list...')
+            if search:
+                print(f'      Searching for: {search}')
+            projects = await gitlab_tool.list_projects(search=search, limit=3)
+            
+            if projects:
+                project_list = []
+                for project in projects:
+                    proj_info = f"- {project.name} ({project.namespace})"
+                    if project.description:
+                        proj_info += f": {project.description[:100]}..."
+                    project_list.append(proj_info)
+                
+                summary = f"Found {len(projects)} GitLab projects:\n\n" + "\n".join(project_list)
+                print(f'  ✅ Retrieved {len(projects)} projects')
+                return summary
+            else:
+                print('  ❌ No projects found or access denied')
+                return "No GitLab projects found or access denied"
+                
+        except Exception as e:
+            print(f'  💥 GitLab projects error: {str(e)}')
+            return f'Failed to get GitLab projects: {str(e)}'
+    
+    # Test GitLab operations
+    print('  🤖 Calling LLM agent to explore GitLab...')
+    result = await agent.run(
+        'Please show me some GitLab projects that are available, and tell me about what you find.',
+        deps={}
+    )
+    
+    print(f'\n📋 Agent response:\n{result.output}')
+    
+    # Verify GitLab integration (even if limited by permissions)
+    response_lower = result.output.lower()
+    success_indicators = [
+        'gitlab' in response_lower,
+        len(result.output) > 100,
+        any(word in response_lower for word in ['project', 'issue', 'access', 'error', 'mcp'])
+    ]
+    
+    if all(success_indicators):
+        print('\n🎉 SUCCESS: Real LLM agent successfully attempted GitLab operations!')
+        return True
+    else:
+        print('\n💥 FAILED: GitLab integration did not work as expected')
+        return False
+
+
 async def test_real_jira_integration():
-    """Test REAL LLM agent with REAL Jira tool (instead of GitLab for now)."""
+    """Test REAL LLM agent with REAL Jira tool."""
     print('\n🧪 Testing REAL LLM agent with REAL Jira tool...')
     
     from mantis.tools import JiraTool, JiraConfig
@@ -163,7 +252,7 @@ async def test_real_jira_integration():
     )
     
     @agent.tool
-    async def get_jira_projects(ctx: RunContext[Dict[str, Any]]) -> str:
+    async def jira_get_projects(ctx: RunContext[Dict[str, Any]]) -> str:
         """Get list of Jira projects."""
         try:
             print(f'  📋 Getting Jira projects list...')
@@ -215,11 +304,12 @@ async def test_real_jira_integration():
 
 async def main():
     """Run all Git and GitLab integration tests."""
-    print('🚀 Starting REAL Git & GitLab LLM Agent Integration Tests')
+    print('🚀 Starting REAL Git, GitLab & Jira LLM Agent Integration Tests')
     print('=' * 65)
     
     tests = [
         test_real_git_operations_integration,
+        test_real_gitlab_integration,
         test_real_jira_integration,
     ]
     

@@ -185,7 +185,7 @@ class GitLabTool:
         Returns:
             List of GitLabProject objects
         """
-        parameters = {"per_page": str(limit)}
+        parameters = {"per_page": limit}
 
         if search:
             parameters["search"] = search
@@ -322,7 +322,7 @@ class GitLabTool:
         if labels:
             parameters["labels"] = ",".join(labels)
         if assignee_id:
-            parameters["assignee_ids"] = str(assignee_id)
+            parameters["assignee_ids"] = [assignee_id]
 
         try:
             response = await self._call_mcp_tool("create_issue", parameters)
@@ -560,13 +560,13 @@ class GitLabTool:
     def get_tools(self) -> Dict[str, Any]:
         """Return dictionary of available tools for pydantic-ai integration."""
         return {
-            "list_projects": self,
-            "get_project": self,
-            "list_issues": self,
-            "create_issue": self,
-            "list_merge_requests": self,
-            "create_merge_request": self,
-            "list_pipelines": self,
-            "get_file_contents": self,
-            "search_repositories": self,
+            "gitlab_list_projects": self,
+            "gitlab_get_project": self,
+            "gitlab_list_issues": self,
+            "gitlab_create_issue": self,
+            "gitlab_list_merge_requests": self,
+            "gitlab_create_merge_request": self,
+            "gitlab_list_pipelines": self,
+            "gitlab_get_file_contents": self,
+            "gitlab_search_repositories": self,
         }
