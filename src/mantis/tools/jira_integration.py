@@ -310,9 +310,9 @@ class JiraTool:
         if priority:
             parameters["priority"] = priority
         if labels:
-            parameters["labels"] = labels
+            parameters["labels"] = ",".join(labels)
         if components:
-            parameters["components"] = components
+            parameters["components"] = ",".join(components)
 
         try:
             response = await self._call_mcp_tool("create_issue", parameters)
@@ -376,7 +376,7 @@ class JiraTool:
         if priority is not None:
             parameters["priority"] = priority
         if labels is not None:
-            parameters["labels"] = labels
+            parameters["labels"] = ",".join(labels)
 
         try:
             await self._call_mcp_tool("update_issue", parameters)
