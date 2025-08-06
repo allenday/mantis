@@ -322,7 +322,7 @@ class GitLabTool:
         if labels:
             parameters["labels"] = ",".join(labels)
         if assignee_id:
-            parameters["assignee_ids"] = [assignee_id]
+            parameters["assignee_ids"] = str(assignee_id)
 
         try:
             response = await self._call_mcp_tool("create_issue", parameters)
@@ -428,7 +428,7 @@ class GitLabTool:
         if description:
             parameters["description"] = description
         if assignee_id:
-            parameters["assignee_id"] = assignee_id
+            parameters["assignee_id"] = str(assignee_id)
 
         try:
             response = await self._call_mcp_tool("create_merge_request", parameters)
