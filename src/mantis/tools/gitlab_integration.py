@@ -185,7 +185,7 @@ class GitLabTool:
         Returns:
             List of GitLabProject objects
         """
-        parameters = {"per_page": limit}
+        parameters = {"per_page": str(limit)}
 
         if search:
             parameters["search"] = search
