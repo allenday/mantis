@@ -427,7 +427,7 @@ class TestJiraTool:
             "issue_type": "Task",
             "description": "Test description",
             "priority": "Medium",
-            "labels": ["new"]
+            "labels": "new"
         }
         mock_mcp_call.assert_called_once_with("create_issue", expected_params)
 
