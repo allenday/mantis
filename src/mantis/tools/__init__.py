@@ -26,6 +26,14 @@ from .gitlab_integration import (
     GitLabPipeline,
     MCPError as GitLabMCPError,
 )
+from .registry_access import (
+    RegistryTool,
+    RegistryConfig,
+    AgentCard,
+    AgentSpec,
+    SearchFilters as RegistrySearchFilters,
+    RegistryError,
+)
 
 __all__ = [
     "WebFetchTool",
@@ -55,4 +63,10 @@ __all__ = [
     "GitLabMergeRequest",
     "GitLabPipeline",
     "GitLabMCPError",
+    "RegistryTool",
+    "RegistryConfig",
+    "AgentCard",
+    "AgentSpec",
+    "RegistrySearchFilters",
+    "RegistryError",
 ]
