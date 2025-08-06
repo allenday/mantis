@@ -16,3 +16,6 @@
 [submodule "third_party/a2a-registry"]
 	path = third_party/a2a-registry
 	url = https://github.com/allenday/a2a-registry.git
+[submodule "third_party/claude-code-sub-agents"]
+	path = third_party/claude-code-sub-agents
+	url = https://github.com/lst97/claude-code-sub-agents.git
