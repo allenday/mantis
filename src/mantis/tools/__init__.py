@@ -1,58 +1,28 @@
 """
-Tools package for Mantis agents.
-
-This package contains various tools that agents can use for external operations
-like web fetching, searching, git operations, Jira integration, GitLab integration, and other integrations.
+Native pydantic-ai tools for Mantis agents.
+Simplified to only export the direct pydantic-ai functions.
 """
 
-from .web_fetch import WebFetchTool, WebFetchConfig, WebResponse
-from .web_search import WebSearchTool, WebSearchConfig, SearchResult, SearchResponse, SearchFilters
-from .git_operations import GitOperationsTool, GitOperationsConfig, RepositoryInfo, CommitInfo, CodeMatch
-from .jira_integration import (
-    JiraTool,
-    JiraConfig,
-    JiraIssue,
-    JiraProject,
-    JiraBoard,
-    JiraComment,
-    MCPError as JiraMCPError,
-)
-from .gitlab_integration import (
-    GitLabTool,
-    GitLabConfig,
-    GitLabProject,
-    GitLabIssue,
-    GitLabMergeRequest,
-    GitLabPipeline,
-    MCPError as GitLabMCPError,
-)
+# Import native pydantic-ai tool functions
+from .agent_registry import registry_search_agents, registry_get_agent_details
+from .web_fetch import web_fetch_url
+from .web_search import web_search
+from .git_operations import git_analyze_repository
+from .gitlab_integration import gitlab_list_projects, gitlab_list_issues, gitlab_create_issue, gitlab_get_issue
+from .jira_integration import jira_list_projects, jira_list_issues, jira_create_issue, jira_get_issue
 
 __all__ = [
-    "WebFetchTool",
-    "WebFetchConfig",
-    "WebResponse",
-    "WebSearchTool",
-    "WebSearchConfig",
-    "SearchResult",
-    "SearchResponse",
-    "SearchFilters",
-    "GitOperationsTool",
-    "GitOperationsConfig",
-    "RepositoryInfo",
-    "CommitInfo",
-    "CodeMatch",
-    "JiraTool",
-    "JiraConfig",
-    "JiraIssue",
-    "JiraProject",
-    "JiraBoard",
-    "JiraComment",
-    "JiraMCPError",
-    "GitLabTool",
-    "GitLabConfig",
-    "GitLabProject",
-    "GitLabIssue",
-    "GitLabMergeRequest",
-    "GitLabPipeline",
-    "GitLabMCPError",
+    "registry_search_agents",
+    "registry_get_agent_details",
+    "web_fetch_url",
+    "web_search",
+    "git_analyze_repository",
+    "gitlab_list_projects",
+    "gitlab_list_issues",
+    "gitlab_create_issue",
+    "gitlab_get_issue",
+    "jira_list_projects",
+    "jira_list_issues",
+    "jira_create_issue",
+    "jira_get_issue",
 ]

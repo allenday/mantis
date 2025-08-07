@@ -29,7 +29,7 @@ class TestUserRequestBuilder:
                   .context("Some context")
                   .structured_data({"key": "value"})
                   .model_spec("claude-3-5-sonnet", 0.8)
-                  .max_depth(3)
+                  .max_depth(1)
                   .add_agent(count=2, recursion_policy="may")
                   .build())
         
@@ -38,7 +38,7 @@ class TestUserRequestBuilder:
         assert '"key": "value"' in request.structured_data
         assert request.model_spec.model == "claude-3-5-sonnet"
         assert request.model_spec.temperature == 0.8
-        assert request.max_depth == 3
+        assert request.max_depth == 1
         assert len(request.agents) == 1
         assert request.agents[0].count == 2
         assert request.agents[0].recursion_policy == mantis_core_pb2.RECURSION_POLICY_MAY
@@ -93,7 +93,7 @@ class TestUserRequestBuilder:
             context="CLI context",
             model="claude-3-5-haiku",
             temperature=0.5,
-            max_depth=2,
+            max_depth=1,
             agents="leader:1:may,follower:1:must_not"
         )
         
@@ -101,7 +101,7 @@ class TestUserRequestBuilder:
         assert request.context == "CLI context"
         assert request.model_spec.model == "claude-3-5-haiku"
         assert request.model_spec.temperature == 0.5
-        assert request.max_depth == 2
+        assert request.max_depth == 1
         assert len(request.agents) == 2
 
     def test_validation_errors(self):
@@ -120,7 +120,7 @@ class TestUserRequestBuilder:
         with pytest.raises(ValueError, match="Max depth must be at least 1"):
             builder.query("test").max_depth(0).build()
             
-        with pytest.raises(ValueError, match="Max depth cannot exceed 10"):
+        with pytest.raises(ValueError, match="Max depth cannot exceed 1 for safety"):
             builder.query("test").max_depth(15).build()
             
         # Invalid agent count

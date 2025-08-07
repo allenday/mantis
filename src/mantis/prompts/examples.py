@@ -5,7 +5,8 @@ This module provides concrete examples showing how persona + modules → final p
 for different scenarios and agent configurations.
 """
 
-from .composition_engine import PromptCompositionEngine, CompositionContext, CompositionStrategy
+from .composition_engine import PromptCompositionEngine, CompositionStrategy
+from .variables import CompositionContext
 from ..proto.mantis.v1.mantis_persona_pb2 import (
     MantisAgentCard,
     PersonaCharacteristics,
@@ -155,7 +156,7 @@ def create_example_simulation_input(query: str, context: str = "") -> Simulation
     return sim_input
 
 
-def demonstrate_leader_team_building():
+async def demonstrate_leader_team_building():
     """Demonstrate leader module for team building scenario."""
     print("=" * 80)
     print("DEMONSTRATION: Leader Team Building")
@@ -172,19 +173,22 @@ def demonstrate_leader_team_building():
 
     # Create context for leader at top level
     context = CompositionContext(
-        agent_card=leader_card,
+        mantis_card=leader_card,
         simulation_input=sim_input,
         agent_spec=AgentSpec(),
-        current_depth=0,
-        max_depth=3,
-        team_size=1,  # Starting solo
-        is_leader=True,
-        requires_delegation=True,
+        execution_context={
+            "current_depth": 0,
+            "max_depth": 3,
+            "team_size": 1,  # Starting solo
+            "is_leader": True,
+            "requires_delegation": True,
+        },
     )
 
     # Generate prompt
     engine = PromptCompositionEngine()
-    prompt = engine.compose_prompt(context, CompositionStrategy.LAYERED)
+    result = await engine.compose_prompt(context, CompositionStrategy.LAYERED)
+    prompt = result.final_prompt
 
     print("SCENARIO: Strategic leader needs to build team for digital transformation")
     print("CONTEXT: Top-level (depth 0/3), solo start, delegation expected")
@@ -194,7 +198,7 @@ def demonstrate_leader_team_building():
     print("\n")
 
 
-def demonstrate_specialist_execution():
+async def demonstrate_specialist_execution():
     """Demonstrate specialist in execution role."""
     print("=" * 80)
     print("DEMONSTRATION: Technical Specialist Execution")
@@ -211,19 +215,22 @@ def demonstrate_specialist_execution():
 
     # Create context for specialist as follower
     context = CompositionContext(
-        agent_card=specialist_card,
+        mantis_card=specialist_card,
         simulation_input=sim_input,
         agent_spec=AgentSpec(),
-        current_depth=1,
-        max_depth=3,
-        team_size=3,
-        is_follower=True,
-        team_composition=["Marcus Strategy (Leader)", "Sarah Chen (Data Science)", "Alex Kumar (Product)"],
+        execution_context={
+            "current_depth": 1,
+            "max_depth": 3,
+            "team_size": 3,
+            "is_follower": True,
+            "team_composition": ["Marcus Strategy (Leader)", "Sarah Chen (Data Science)", "Alex Kumar (Product)"],
+        },
     )
 
     # Generate prompt
     engine = PromptCompositionEngine()
-    prompt = engine.compose_prompt(context, CompositionStrategy.BLENDED)
+    result = await engine.compose_prompt(context, CompositionStrategy.BLENDED)
+    prompt = result.final_prompt
 
     print("SCENARIO: Data scientist executing analysis task as part of team")
     print("CONTEXT: Mid-level (depth 1/3), 3-person team, follower role")
@@ -233,7 +240,7 @@ def demonstrate_specialist_execution():
     print("\n")
 
 
-def demonstrate_composition_strategies():
+async def demonstrate_composition_strategies():
     """Demonstrate different composition strategies."""
     print("=" * 80)
     print("DEMONSTRATION: Composition Strategy Comparison")
@@ -243,7 +250,10 @@ def demonstrate_composition_strategies():
     sim_input = create_example_simulation_input("Develop a go-to-market strategy for our new AI product.")
 
     context = CompositionContext(
-        agent_card=leader_card, simulation_input=sim_input, agent_spec=AgentSpec(), current_depth=0, is_leader=True
+        mantis_card=leader_card,
+        simulation_input=sim_input,
+        agent_spec=AgentSpec(),
+        execution_context={"current_depth": 0, "is_leader": True},
     )
 
     engine = PromptCompositionEngine()
@@ -251,16 +261,16 @@ def demonstrate_composition_strategies():
     print("SAME CONTEXT, DIFFERENT STRATEGIES:")
     print("\n1. LAYERED STRATEGY (sections with clear separators):")
     print("-" * 60)
-    layered_prompt = engine.compose_prompt(context, CompositionStrategy.LAYERED)
-    print(layered_prompt[:500] + "...\n")
+    layered_result = await engine.compose_prompt(context, CompositionStrategy.LAYERED)
+    print(layered_result.final_prompt[:500] + "...\n")
 
     print("2. BLENDED STRATEGY (seamlessly integrated):")
     print("-" * 60)
-    blended_prompt = engine.compose_prompt(context, CompositionStrategy.BLENDED)
-    print(blended_prompt[:500] + "...\n")
+    blended_result = await engine.compose_prompt(context, CompositionStrategy.BLENDED)
+    print(blended_result.final_prompt[:500] + "...\n")
 
 
-def demonstrate_context_adaptation():
+async def demonstrate_context_adaptation():
     """Demonstrate how prompts adapt to different contexts."""
     print("=" * 80)
     print("DEMONSTRATION: Context Adaptation")
@@ -280,7 +290,10 @@ def demonstrate_context_adaptation():
         print("-" * 40)
 
         context = CompositionContext(
-            agent_card=leader_card, simulation_input=sim_input, agent_spec=AgentSpec(), max_depth=3, **context_params
+            mantis_card=leader_card,
+            simulation_input=sim_input,
+            agent_spec=AgentSpec(),
+            execution_context={"max_depth": 3, **context_params},
         )
 
         # Just show the context module output for brevity
@@ -289,23 +302,25 @@ def demonstrate_context_adaptation():
         context_module = ContextModule()
         if context_module.is_applicable(context):
             # Update variables
-            from .variables import VariableSystem
+            from .variables import substitute_variables, create_composition_context
 
-            var_system = VariableSystem()
-            context.variables = var_system.create_variables(context)
+            # Re-create context with proper variable resolution
+            enhanced_context = create_composition_context(leader_card, sim_input, AgentSpec(), context_params)
 
-            context_content = context_module.generate_content(context)
-            context_rendered = var_system.substitute_variables(context_content, context.variables)
+            context_content = await context_module.generate_content(enhanced_context)
+            context_rendered = substitute_variables(context_content, enhanced_context.variables)
             print(context_rendered[:400] + "...")
 
 
-def run_all_demonstrations():
+async def run_all_demonstrations():
     """Run all prompt composition demonstrations."""
-    demonstrate_leader_team_building()
-    demonstrate_specialist_execution()
-    demonstrate_composition_strategies()
-    demonstrate_context_adaptation()
+    await demonstrate_leader_team_building()
+    await demonstrate_specialist_execution()
+    await demonstrate_composition_strategies()
+    await demonstrate_context_adaptation()
 
 
 if __name__ == "__main__":
-    run_all_demonstrations()
+    import asyncio
+
+    asyncio.run(run_all_demonstrations())

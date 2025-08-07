@@ -1,4 +1,4 @@
-.PHONY: help install install-dev proto check clean lint format typecheck test ci build verify-package publish docs-install docs-build docs-serve
+.PHONY: help install install-dev proto check clean lint format typecheck test ci build verify-package publish docs-install docs-build docs-serve generate-cards
 
 # Default target
 help:
@@ -19,6 +19,7 @@ help:
 	@echo "  docs-install - Install documentation dependencies"
 	@echo "  docs-build   - Build documentation"
 	@echo "  docs-serve   - Serve documentation locally"
+	@echo "  generate-cards - Generate agent cards from all prompts in agents/prompts/"
 
 # Python and venv setup
 PYTHON := python3
@@ -31,7 +32,7 @@ $(VENV):
 	$(PYTHON) -m venv $(VENV)
 	$(PIP) install --timeout 300 --upgrade pip setuptools wheel
 
-check: $(VENV) proto lint format test
+check: $(VENV) proto lint typecheck format test
 
 # Install package in production mode
 install: $(VENV)
@@ -70,16 +71,16 @@ clean:
 
 # Linting
 lint: install-dev
-	$(VENV)/bin/ruff check src/ scripts/ --exclude="src/mantis/proto/*_pb2.py" --exclude="src/mantis/proto/*_pb2_grpc.py"
+	$(VENV)/bin/ruff check src/ scripts/
 
 # Type checking
 typecheck: install-dev
-	$(VENV)/bin/mypy src/ scripts/
+	$(VENV)/bin/mypy src/ scripts/ --check-untyped-defs --exclude="src/mantis/proto/*_pb2.py|src/mantis/proto/*_pb2_grpc.py"
 
 # Formatting
 format: install-dev
 	$(VENV)/bin/black src/ scripts/ --exclude="src/mantis/proto/.*_pb2.*\.py$$"
-	$(VENV)/bin/ruff format src/ scripts/ --exclude="src/mantis/proto/*_pb2.py" --exclude="src/mantis/proto/*_pb2_grpc.py"
+	$(VENV)/bin/ruff format src/ scripts/
 
 # Run tests
 test: install-dev proto
@@ -106,8 +107,28 @@ docs-install: install-dev
 	$(PIP) install mkdocs mkdocs-material mkdocstrings mkdocstrings-python
 
 docs-build: docs-install
-	mkdir -p site
-	echo "Documentation build placeholder" > site/index.html
+	$(VENV)/bin/mkdocs build --config-file mkdocs.yml --site-dir docs-site
 
 docs-serve: docs-install
-	@echo "Documentation server placeholder - would run mkdocs serve"
+	$(VENV)/bin/mkdocs serve --config-file mkdocs.yml
+
+# Generate agent cards from all prompts using dependency-based regeneration
+generate-cards:
+	@echo "Generating agent cards from agents/prompts/ to agents/cards/..."
+	@find agents/prompts -name "*.md" -type f | while read prompt_file; do \
+		rel_path=$$(echo "$$prompt_file" | sed 's|agents/prompts/||'); \
+		output_file="agents/cards/$$(echo "$$rel_path" | sed 's|\.md$$|.json|')"; \
+		$(MAKE) "$$output_file"; \
+	done
+	@echo "Agent card generation complete!"
+
+# Pattern rule for generating individual agent cards with dependency checking
+agents/cards/%.json: agents/prompts/%.md
+	@echo "Generating: $@ from $<"
+	@mkdir -p $(dir $@)
+	@if PYTHONPATH=src $(VENV_PYTHON) -m mantis agent generate --model claude-opus-4-0 --input "$<" --output "$@"; then \
+		echo "✅ Generated: $@"; \
+	else \
+		echo "❌ Failed to generate: $@"; \
+		exit 1; \
+	fi

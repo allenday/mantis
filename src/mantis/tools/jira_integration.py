@@ -1,529 +1,324 @@
 """
-Jira integration tool using MCP server.
-
-This tool provides Jira operations by integrating with the mcp-atlassian
-server (https://github.com/sooperset/mcp-atlassian), enabling agents to
-interact with Jira APIs for issue tracking, project management, and more.
+Native pydantic-ai Jira integration tool.
+Simplified to only support pydantic-ai integration.
 """
 
-import json
 import logging
-from typing import Dict, Any, Optional, List
+import aiohttp
+from typing import Optional
 
-from pydantic import BaseModel, Field, ConfigDict
+# Observability imports
+try:
+    from ..observability import get_structured_logger
+
+    OBSERVABILITY_AVAILABLE = True
+except ImportError:
+    OBSERVABILITY_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
-
-class JiraConfig(BaseModel):
-    """Configuration for Jira MCP integration."""
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    # Authentication
-    api_token: str = Field(..., description="Jira API token")
-    email: str = Field(..., description="Jira user email")
-    server_url: str = Field(..., description="Jira server URL")
-
-    # MCP Server Configuration
-    read_only_mode: bool = Field(default=False, description="Restrict to read-only operations")
-
-    # Feature toggles
-    enable_issue_transitions: bool = Field(default=True, description="Enable issue state transitions")
-    enable_comments: bool = Field(default=True, description="Enable comment operations")
-    enable_attachments: bool = Field(default=True, description="Enable attachment operations")
-
-    # Transport and connection settings
-    transport_mode: str = Field(default="stdio", description="MCP transport mode (stdio, sse, streamable-http)")
-    host: str = Field(default="127.0.0.1", description="Server host")
-    timeout: float = Field(default=30.0, description="Request timeout in seconds")
-
-    # Filtering and limits
-    max_search_results: int = Field(default=50, description="Maximum search results")
-    default_project_filter: Optional[str] = Field(default=None, description="Default project filter")
-
-    # Proxy settings
-    http_proxy: Optional[str] = Field(default=None, description="HTTP proxy URL")
-    https_proxy: Optional[str] = Field(default=None, description="HTTPS proxy URL")
-    no_proxy: str = Field(default="localhost,127.0.0.1", description="Proxy exclusions")
+# Observability logger
+if OBSERVABILITY_AVAILABLE:
+    obs_logger = get_structured_logger("jira_integration")
+else:
+    obs_logger = None  # type: ignore
 
 
-class JiraIssue(BaseModel):
-    """Jira issue information."""
+async def jira_list_projects(jira_url: str, username: str, api_token: str, project_key: Optional[str] = None) -> str:
+    """List Jira projects accessible to the authenticated user.
 
-    key: str = Field(..., description="Issue key (e.g., PROJ-123)")
-    id: str = Field(..., description="Issue ID")
-    summary: str = Field(..., description="Issue summary")
-    description: Optional[str] = Field(None, description="Issue description")
-    status: str = Field(..., description="Issue status")
-    priority: str = Field(..., description="Issue priority")
-    assignee: Optional[Dict[str, Any]] = Field(None, description="Assignee information")
-    reporter: Dict[str, Any] = Field(..., description="Reporter information")
-    created: str = Field(..., description="Creation timestamp")
-    updated: str = Field(..., description="Last update timestamp")
-    project: Dict[str, Any] = Field(..., description="Project information")
-    issue_type: Dict[str, Any] = Field(..., description="Issue type information")
-    labels: List[str] = Field(default_factory=list, description="Issue labels")
-    components: List[Dict[str, Any]] = Field(default_factory=list, description="Issue components")
-    fix_versions: List[Dict[str, Any]] = Field(default_factory=list, description="Fix versions")
+    Args:
+        jira_url: Jira instance URL (e.g., https://company.atlassian.net)
+        username: Jira username/email
+        api_token: Jira API token
+        project_key: Optional specific project key to filter by
+
+    Returns:
+        Formatted list of projects with keys, names, and descriptions
+    """
+    if OBSERVABILITY_AVAILABLE and obs_logger:
+        obs_logger.info(f"🎯 TOOL_INVOKED: jira_list_projects for {jira_url}")
+
+    try:
+        api_url = f"{jira_url.rstrip('/')}/rest/api/2/project"
+
+        # Use HTTP Basic Auth with username and API token
+        auth = aiohttp.BasicAuth(username, api_token)
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(api_url, auth=auth) as response:
+                if response.status != 200:
+                    return f"Failed to fetch Jira projects: HTTP {response.status}"
+
+                projects = await response.json()
+
+                # Filter by project key if specified
+                if project_key:
+                    projects = [p for p in projects if p.get("key", "").upper() == project_key.upper()]
+
+                if not projects:
+                    filter_info = f" with key '{project_key}'" if project_key else ""
+                    return f"No Jira projects found{filter_info}"
+
+                # Format results for LLM
+                formatted_results = []
+                for project in projects[:20]:  # Limit to 20 results
+                    key = project.get("key", "Unknown")
+                    name = project.get("name", "Unknown")
+                    description = project.get("description", "No description")
+                    project_url = project.get("self", "")
+
+                    formatted_results.append(f"- **{key}: {name}**: {description}\n  URL: {project_url}")
+
+                result_text = f"Found {len(projects)} Jira projects:\n\n" + "\n\n".join(formatted_results)
+
+                if OBSERVABILITY_AVAILABLE and obs_logger:
+                    obs_logger.info(f"Jira projects listed: {len(projects)} results")
+
+                return result_text
+
+    except Exception as e:
+        error_msg = f"Error listing Jira projects: {str(e)}"
+        if OBSERVABILITY_AVAILABLE and obs_logger:
+            obs_logger.error(f"Jira projects list failed: {e}")
+        return error_msg
 
 
-class JiraProject(BaseModel):
-    """Jira project information."""
+async def jira_list_issues(jira_url: str, username: str, api_token: str, project_key: str, status: str = "open") -> str:
+    """List issues for a specific Jira project.
 
-    key: str = Field(..., description="Project key")
-    id: str = Field(..., description="Project ID")
-    name: str = Field(..., description="Project name")
-    description: Optional[str] = Field(None, description="Project description")
-    project_type: str = Field(..., description="Project type")
-    lead: Dict[str, Any] = Field(..., description="Project lead information")
-    url: str = Field(..., description="Project URL")
-    avatar_urls: Dict[str, str] = Field(..., description="Avatar URLs")
+    Args:
+        jira_url: Jira instance URL (e.g., https://company.atlassian.net)
+        username: Jira username/email
+        api_token: Jira API token
+        project_key: Project key (e.g., "PROJ", "DEV")
+        status: Issue status filter (open, closed, all)
 
+    Returns:
+        Formatted list of issues with summaries, statuses, and URLs
+    """
+    if OBSERVABILITY_AVAILABLE and obs_logger:
+        obs_logger.info(f"🎯 TOOL_INVOKED: jira_list_issues for project {project_key}")
 
-class JiraBoard(BaseModel):
-    """Jira board information."""
+    try:
+        # Build JQL query based on status filter
+        if status.lower() == "open":
+            jql = f'project = "{project_key}" AND resolution = Unresolved'
+        elif status.lower() == "closed":
+            jql = f'project = "{project_key}" AND resolution != Unresolved'
+        else:  # all
+            jql = f'project = "{project_key}"'
 
-    id: int = Field(..., description="Board ID")
-    name: str = Field(..., description="Board name")
-    type: str = Field(..., description="Board type (scrum, kanban)")
-    location: Dict[str, Any] = Field(..., description="Board location information")
+        api_url = f"{jira_url.rstrip('/')}/rest/api/2/search"
+        params = {"jql": jql, "maxResults": "20", "fields": "key,summary,status,assignee,created,priority"}
 
+        # Use HTTP Basic Auth with username and API token
+        auth = aiohttp.BasicAuth(username, api_token)
 
-class JiraComment(BaseModel):
-    """Jira comment information."""
+        async with aiohttp.ClientSession() as session:
+            async with session.get(api_url, params=params, auth=auth) as response:
+                if response.status != 200:
+                    return f"Failed to fetch Jira issues: HTTP {response.status}"
 
-    id: str = Field(..., description="Comment ID")
-    body: str = Field(..., description="Comment body")
-    author: Dict[str, Any] = Field(..., description="Comment author")
-    created: str = Field(..., description="Creation timestamp")
-    updated: str = Field(..., description="Last update timestamp")
+                data = await response.json()
+                issues = data.get("issues", [])
 
+                if not issues:
+                    return f"No {status} issues found in Jira project {project_key}"
 
-class MCPError(Exception):
-    """Exception raised when MCP server communication fails."""
+                # Format results for LLM
+                formatted_results = []
+                for issue in issues:
+                    key = issue.get("key", "?")
+                    summary = issue["fields"].get("summary", "No summary")
+                    status_name = issue["fields"].get("status", {}).get("name", "Unknown")
+                    assignee = issue["fields"].get("assignee")
+                    assignee_name = assignee.get("displayName", "Unassigned") if assignee else "Unassigned"
+                    created = issue["fields"].get("created", "").split("T")[0] if issue["fields"].get("created") else ""
+                    priority = (
+                        issue["fields"].get("priority", {}).get("name", "Unknown")
+                        if issue["fields"].get("priority")
+                        else "Unknown"
+                    )
 
-    pass
+                    issue_url = f"{jira_url.rstrip('/')}/browse/{key}"
 
+                    formatted_results.append(
+                        f"- **{key}: {summary}** [{status_name}]\n  Assignee: {assignee_name}, Priority: {priority}, Created: {created}\n  URL: {issue_url}"
+                    )
 
-class JiraTool:
-    """Jira integration tool using MCP server communication."""
-
-    def __init__(self, config: Optional[JiraConfig] = None):
-        self.config = config or JiraConfig(api_token="", email="", server_url="")
-        self._validate_config()
-
-    def _validate_config(self):
-        """Validate the configuration."""
-        # Allow empty credentials for initialization purposes (read-only mode)
-        if not self.config.api_token and not self.config.read_only_mode:
-            raise ValueError("Jira API token is required for non-read-only mode")
-
-        if not self.config.email and not self.config.read_only_mode:
-            raise ValueError("Jira user email is required for non-read-only mode")
-
-        if not self.config.server_url:
-            raise ValueError("Jira server URL is required")
-
-    async def _call_mcp_tool(self, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Call a tool on the mcp-atlassian server.
-
-        This method handles the MCP communication protocol to invoke
-        tools on the mcp-atlassian server.
-
-        Args:
-            tool_name: Name of the MCP tool to call
-            parameters: Parameters to pass to the tool
-
-        Returns:
-            Dictionary containing the tool response
-
-        Raises:
-            MCPError: If MCP communication fails
-        """
-        # Check if we have valid configuration for MCP calls
-        if not self.config.api_token:
-            raise MCPError("Jira API token is required for MCP operations")
-
-        # TODO: Implement actual MCP client communication
-        # For now, this is a placeholder that simulates the MCP protocol
-
-        logger.debug(f"Calling MCP tool: {tool_name} with parameters: {parameters}")
-
-        # This would be replaced with actual MCP client implementation
-        # using the Model Context Protocol to communicate with the mcp-atlassian server
-
-        # Simulate MCP request/response for development
-        mcp_request = {
-            "jsonrpc": "2.0",
-            "method": "tools/call",
-            "params": {"name": tool_name, "arguments": parameters},
-            "id": 1,
-        }
-
-        logger.info(f"MCP Request: {json.dumps(mcp_request, indent=2)}")
-
-        # In a real implementation, this would:
-        # 1. Connect to the MCP server (stdio, sse, or streamable-http)
-        # 2. Send the JSON-RPC request
-        # 3. Receive and parse the response
-        # 4. Handle errors appropriately
-
-        # For now, return a placeholder response
-        raise MCPError(f"MCP server communication not yet implemented for tool: {tool_name}")
-
-    async def get_issue(self, issue_key: str) -> JiraIssue:
-        """
-        Get details of a specific Jira issue.
-
-        Args:
-            issue_key: Issue key (e.g., PROJ-123)
-
-        Returns:
-            JiraIssue object with issue details
-        """
-        parameters = {"issue_key": issue_key}
-
-        try:
-            response = await self._call_mcp_tool("get_issue", parameters)
-            issue_data = response["issue"]
-
-            return JiraIssue(
-                key=issue_data["key"],
-                id=issue_data["id"],
-                summary=issue_data["fields"]["summary"],
-                description=issue_data["fields"].get("description"),
-                status=issue_data["fields"]["status"]["name"],
-                priority=issue_data["fields"]["priority"]["name"],
-                assignee=issue_data["fields"].get("assignee"),
-                reporter=issue_data["fields"]["reporter"],
-                created=issue_data["fields"]["created"],
-                updated=issue_data["fields"]["updated"],
-                project=issue_data["fields"]["project"],
-                issue_type=issue_data["fields"]["issuetype"],
-                labels=issue_data["fields"].get("labels", []),
-                components=issue_data["fields"].get("components", []),
-                fix_versions=issue_data["fields"].get("fixVersions", []),
-            )
-
-        except Exception as e:
-            raise MCPError(f"Failed to get issue {issue_key}: {str(e)}")
-
-    async def search_issues(
-        self,
-        jql: str,
-        max_results: Optional[int] = None,
-        start_at: int = 0,
-        expand: Optional[List[str]] = None,
-    ) -> List[JiraIssue]:
-        """
-        Search for Jira issues using JQL (Jira Query Language).
-
-        Args:
-            jql: JQL query string
-            max_results: Maximum number of results to return
-            start_at: Starting index for pagination
-            expand: List of fields to expand
-
-        Returns:
-            List of JiraIssue objects matching the search
-        """
-        parameters = {
-            "jql": jql,
-            "start_at": start_at,
-            "max_results": max_results or self.config.max_search_results,
-        }
-
-        if expand:
-            parameters["expand"] = expand
-
-        try:
-            response = await self._call_mcp_tool("search_issues", parameters)
-            issues = []
-
-            for issue_data in response.get("issues", []):
-                issue = JiraIssue(
-                    key=issue_data["key"],
-                    id=issue_data["id"],
-                    summary=issue_data["fields"]["summary"],
-                    description=issue_data["fields"].get("description"),
-                    status=issue_data["fields"]["status"]["name"],
-                    priority=issue_data["fields"]["priority"]["name"],
-                    assignee=issue_data["fields"].get("assignee"),
-                    reporter=issue_data["fields"]["reporter"],
-                    created=issue_data["fields"]["created"],
-                    updated=issue_data["fields"]["updated"],
-                    project=issue_data["fields"]["project"],
-                    issue_type=issue_data["fields"]["issuetype"],
-                    labels=issue_data["fields"].get("labels", []),
-                    components=issue_data["fields"].get("components", []),
-                    fix_versions=issue_data["fields"].get("fixVersions", []),
+                result_text = f"Found {len(issues)} {status} issues in project {project_key}:\n\n" + "\n\n".join(
+                    formatted_results
                 )
-                issues.append(issue)
 
-            return issues
+                if OBSERVABILITY_AVAILABLE and obs_logger:
+                    obs_logger.info(f"Jira issues listed: {len(issues)} results")
 
-        except Exception as e:
-            raise MCPError(f"Failed to search issues with JQL '{jql}': {str(e)}")
+                return result_text
 
-    async def create_issue(
-        self,
-        project_key: str,
-        summary: str,
-        issue_type: str = "Task",
-        description: Optional[str] = None,
-        assignee: Optional[str] = None,
-        priority: Optional[str] = None,
-        labels: Optional[List[str]] = None,
-        components: Optional[List[str]] = None,
-    ) -> JiraIssue:
-        """
-        Create a new Jira issue.
+    except Exception as e:
+        error_msg = f"Error listing Jira issues for {project_key}: {str(e)}"
+        if OBSERVABILITY_AVAILABLE and obs_logger:
+            obs_logger.error(f"Jira issues list failed: {e}")
+        return error_msg
 
-        Args:
-            project_key: Project key where to create the issue
-            summary: Issue summary
-            issue_type: Issue type (e.g., Task, Bug, Story)
-            description: Optional issue description
-            assignee: Optional assignee username or account ID
-            priority: Optional priority name
-            labels: Optional list of labels
-            components: Optional list of component names
 
-        Returns:
-            JiraIssue object representing the created issue
-        """
-        if self.config.read_only_mode:
-            raise MCPError("Cannot create issue: read-only mode is enabled")
+async def jira_create_issue(
+    jira_url: str,
+    username: str,
+    api_token: str,
+    project_key: str,
+    summary: str,
+    description: Optional[str] = None,
+    issue_type: str = "Task",
+) -> str:
+    """Create a new issue in a Jira project.
 
-        parameters = {
-            "project_key": project_key,
-            "summary": summary,
-            "issue_type": issue_type,
+    Args:
+        jira_url: Jira instance URL (e.g., https://company.atlassian.net)
+        username: Jira username/email
+        api_token: Jira API token
+        project_key: Project key (e.g., "PROJ", "DEV")
+        summary: Issue summary/title
+        description: Optional issue description
+        issue_type: Issue type (Task, Bug, Story, etc.)
+
+    Returns:
+        Confirmation message with issue details and URL
+    """
+    if OBSERVABILITY_AVAILABLE and obs_logger:
+        obs_logger.info(f"🎯 TOOL_INVOKED: jira_create_issue in project {project_key}")
+
+    try:
+        api_url = f"{jira_url.rstrip('/')}/rest/api/2/issue"
+
+        # Build issue data
+        issue_data = {
+            "fields": {"project": {"key": project_key}, "summary": summary, "issuetype": {"name": issue_type}}
         }
 
         if description:
-            parameters["description"] = description
-        if assignee:
-            parameters["assignee"] = assignee
-        if priority:
-            parameters["priority"] = priority
-        if labels:
-            parameters["labels"] = ",".join(labels)
-        if components:
-            parameters["components"] = ",".join(components)
+            issue_data["fields"]["description"] = description
 
-        try:
-            response = await self._call_mcp_tool("create_issue", parameters)
-            issue_data = response["issue"]
+        # Use HTTP Basic Auth with username and API token
+        auth = aiohttp.BasicAuth(username, api_token)
 
-            return JiraIssue(
-                key=issue_data["key"],
-                id=issue_data["id"],
-                summary=issue_data["fields"]["summary"],
-                description=issue_data["fields"].get("description"),
-                status=issue_data["fields"]["status"]["name"],
-                priority=issue_data["fields"]["priority"]["name"],
-                assignee=issue_data["fields"].get("assignee"),
-                reporter=issue_data["fields"]["reporter"],
-                created=issue_data["fields"]["created"],
-                updated=issue_data["fields"]["updated"],
-                project=issue_data["fields"]["project"],
-                issue_type=issue_data["fields"]["issuetype"],
-                labels=issue_data["fields"].get("labels", []),
-                components=issue_data["fields"].get("components", []),
-                fix_versions=issue_data["fields"].get("fixVersions", []),
-            )
+        async with aiohttp.ClientSession() as session:
+            async with session.post(api_url, json=issue_data, auth=auth) as response:
+                if response.status not in [200, 201]:
+                    error_text = await response.text()
+                    return f"Failed to create Jira issue: HTTP {response.status} - {error_text}"
 
-        except Exception as e:
-            raise MCPError(f"Failed to create issue in project {project_key}: {str(e)}")
+                result = await response.json()
 
-    async def update_issue(
-        self,
-        issue_key: str,
-        summary: Optional[str] = None,
-        description: Optional[str] = None,
-        assignee: Optional[str] = None,
-        priority: Optional[str] = None,
-        labels: Optional[List[str]] = None,
-    ) -> JiraIssue:
-        """
-        Update an existing Jira issue.
+                issue_key = result.get("key", "Unknown")
+                issue_url = f"{jira_url.rstrip('/')}/browse/{issue_key}"
 
-        Args:
-            issue_key: Issue key to update
-            summary: Optional new summary
-            description: Optional new description
-            assignee: Optional new assignee
-            priority: Optional new priority
-            labels: Optional new labels
+                result_msg = f"Successfully created Jira issue {issue_key}: {summary}\nURL: {issue_url}"
 
-        Returns:
-            Updated JiraIssue object
-        """
-        if self.config.read_only_mode:
-            raise MCPError("Cannot update issue: read-only mode is enabled")
+                if OBSERVABILITY_AVAILABLE and obs_logger:
+                    obs_logger.info(f"Jira issue created: {issue_key}")
 
-        parameters = {"issue_key": issue_key}
+                return result_msg
 
-        if summary is not None:
-            parameters["summary"] = summary
-        if description is not None:
-            parameters["description"] = description
-        if assignee is not None:
-            parameters["assignee"] = assignee
-        if priority is not None:
-            parameters["priority"] = priority
-        if labels is not None:
-            parameters["labels"] = ",".join(labels)
+    except Exception as e:
+        error_msg = f"Error creating Jira issue in {project_key}: {str(e)}"
+        if OBSERVABILITY_AVAILABLE and obs_logger:
+            obs_logger.error(f"Jira issue creation failed: {e}")
+        return error_msg
 
-        try:
-            await self._call_mcp_tool("update_issue", parameters)
-            # Return the updated issue
-            return await self.get_issue(issue_key)
 
-        except Exception as e:
-            raise MCPError(f"Failed to update issue {issue_key}: {str(e)}")
+async def jira_get_issue(jira_url: str, username: str, api_token: str, issue_key: str) -> str:
+    """Get detailed information about a specific Jira issue.
 
-    async def transition_issue(self, issue_key: str, transition_id: str) -> JiraIssue:
-        """
-        Transition a Jira issue to a new status.
+    Args:
+        jira_url: Jira instance URL (e.g., https://company.atlassian.net)
+        username: Jira username/email
+        api_token: Jira API token
+        issue_key: Issue key (e.g., "PROJ-123")
 
-        Args:
-            issue_key: Issue key to transition
-            transition_id: Transition ID or name
+    Returns:
+        Detailed issue information including description, comments, and metadata
+    """
+    if OBSERVABILITY_AVAILABLE and obs_logger:
+        obs_logger.info(f"🎯 TOOL_INVOKED: jira_get_issue for issue {issue_key}")
 
-        Returns:
-            Updated JiraIssue object after transition
-        """
-        if self.config.read_only_mode:
-            raise MCPError("Cannot transition issue: read-only mode is enabled")
-
-        if not self.config.enable_issue_transitions:
-            raise MCPError("Issue transitions are disabled")
-
-        parameters = {"issue_key": issue_key, "transition_id": transition_id}
-
-        try:
-            await self._call_mcp_tool("transition_issue", parameters)
-            # Return the updated issue
-            return await self.get_issue(issue_key)
-
-        except Exception as e:
-            raise MCPError(f"Failed to transition issue {issue_key}: {str(e)}")
-
-    async def add_comment(self, issue_key: str, body: str) -> JiraComment:
-        """
-        Add a comment to a Jira issue.
-
-        Args:
-            issue_key: Issue key to comment on
-            body: Comment text
-
-        Returns:
-            JiraComment object representing the created comment
-        """
-        if self.config.read_only_mode:
-            raise MCPError("Cannot add comment: read-only mode is enabled")
-
-        if not self.config.enable_comments:
-            raise MCPError("Comments are disabled")
-
-        parameters = {"issue_key": issue_key, "body": body}
-
-        try:
-            response = await self._call_mcp_tool("add_comment", parameters)
-            comment_data = response["comment"]
-
-            return JiraComment(
-                id=comment_data["id"],
-                body=comment_data["body"],
-                author=comment_data["author"],
-                created=comment_data["created"],
-                updated=comment_data["updated"],
-            )
-
-        except Exception as e:
-            raise MCPError(f"Failed to add comment to issue {issue_key}: {str(e)}")
-
-    async def get_projects(self, expand: Optional[List[str]] = None) -> List[JiraProject]:
-        """
-        Get list of Jira projects accessible to the authenticated user.
-
-        Args:
-            expand: Optional list of fields to expand
-
-        Returns:
-            List of JiraProject objects
-        """
-        parameters = {}
-        if expand:
-            parameters["expand"] = expand
-
-        try:
-            response = await self._call_mcp_tool("get_projects", parameters)
-            projects = []
-
-            for project_data in response.get("projects", []):
-                project = JiraProject(
-                    key=project_data["key"],
-                    id=project_data["id"],
-                    name=project_data["name"],
-                    description=project_data.get("description"),
-                    project_type=project_data["projectTypeKey"],
-                    lead=project_data["lead"],
-                    url=project_data["self"],
-                    avatar_urls=project_data["avatarUrls"],
-                )
-                projects.append(project)
-
-            return projects
-
-        except Exception as e:
-            raise MCPError(f"Failed to get projects: {str(e)}")
-
-    async def get_boards(self, project_key: Optional[str] = None) -> List[JiraBoard]:
-        """
-        Get list of Jira boards.
-
-        Args:
-            project_key: Optional project key to filter boards
-
-        Returns:
-            List of JiraBoard objects
-        """
-        parameters = {}
-        if project_key:
-            parameters["project_key"] = project_key
-
-        try:
-            response = await self._call_mcp_tool("get_boards", parameters)
-            boards = []
-
-            for board_data in response.get("boards", []):
-                board = JiraBoard(
-                    id=board_data["id"],
-                    name=board_data["name"],
-                    type=board_data["type"],
-                    location=board_data["location"],
-                )
-                boards.append(board)
-
-            return boards
-
-        except Exception as e:
-            raise MCPError(f"Failed to get boards: {str(e)}")
-
-    def get_tools(self) -> Dict[str, Any]:
-        """Return dictionary of available tools for pydantic-ai integration."""
-        return {
-            "jira_get_issue": self,
-            "jira_search_issues": self,
-            "jira_create_issue": self,
-            "jira_update_issue": self,
-            "jira_transition_issue": self,
-            "jira_add_comment": self,
-            "jira_get_projects": self,
-            "jira_get_boards": self,
+    try:
+        api_url = f"{jira_url.rstrip('/')}/rest/api/2/issue/{issue_key}"
+        params = {
+            "expand": "comments,changelog",
+            "fields": "summary,description,status,assignee,reporter,created,updated,priority,labels,components,fixVersions,resolution,resolutiondate",
         }
+
+        # Use HTTP Basic Auth with username and API token
+        auth = aiohttp.BasicAuth(username, api_token)
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(api_url, params=params, auth=auth) as response:
+                if response.status == 404:
+                    return f"Jira issue {issue_key} not found"
+                elif response.status != 200:
+                    return f"Failed to fetch Jira issue: HTTP {response.status}"
+
+                issue = await response.json()
+                fields = issue.get("fields", {})
+
+                # Format detailed issue information
+                key = issue.get("key", "Unknown")
+                summary = fields.get("summary", "No summary")
+                description = fields.get("description", "No description")
+                status = fields.get("status", {}).get("name", "Unknown")
+                assignee = fields.get("assignee")
+                assignee_name = assignee.get("displayName", "Unassigned") if assignee else "Unassigned"
+                reporter = fields.get("reporter", {}).get("displayName", "Unknown")
+                created = fields.get("created", "").split("T")[0] if fields.get("created") else ""
+                updated = fields.get("updated", "").split("T")[0] if fields.get("updated") else ""
+                priority = fields.get("priority", {}).get("name", "Unknown") if fields.get("priority") else "Unknown"
+                labels = fields.get("labels", [])
+                components = [comp.get("name", "") for comp in fields.get("components", [])]
+                fix_versions = [ver.get("name", "") for ver in fields.get("fixVersions", [])]
+                resolution = fields.get("resolution")
+                resolution_name = resolution.get("name", "Unresolved") if resolution else "Unresolved"
+                resolution_date = fields.get("resolutiondate", "").split("T")[0] if fields.get("resolutiondate") else ""
+
+                issue_url = f"{jira_url.rstrip('/')}/browse/{key}"
+
+                # Get comments
+                comments_text = ""
+                comments = issue.get("fields", {}).get("comment", {}).get("comments", [])
+                if comments:
+                    comments_text = f"\n\n**Comments ({len(comments)}):**\n"
+                    for comment in comments[-5:]:  # Last 5 comments
+                        comment_author = comment.get("author", {}).get("displayName", "Unknown")
+                        comment_body = comment.get("body", "")
+                        comment_created = comment.get("created", "").split("T")[0] if comment.get("created") else ""
+                        comments_text += f"\n- **{comment_author}** ({comment_created}): {comment_body[:200]}{'...' if len(comment_body) > 200 else ''}"
+
+                result_text = f"""**Jira Issue {key}: {summary}** [{status}]
+
+**Reporter:** {reporter}
+**Assignee:** {assignee_name}
+**Priority:** {priority}
+**Created:** {created}
+**Updated:** {updated}
+**Resolution:** {resolution_name}
+{f"**Resolution Date:** {resolution_date}" if resolution_date else ""}
+**Labels:** {", ".join(labels) if labels else "None"}
+**Components:** {", ".join(components) if components else "None"}
+**Fix Versions:** {", ".join(fix_versions) if fix_versions else "None"}
+**URL:** {issue_url}
+
+**Description:**
+{description}
+{comments_text}"""
+
+                if OBSERVABILITY_AVAILABLE and obs_logger:
+                    obs_logger.info(f"Jira issue {key} retrieved successfully")
+
+                return result_text
+
+    except Exception as e:
+        error_msg = f"Error getting Jira issue {issue_key}: {str(e)}"
+        if OBSERVABILITY_AVAILABLE and obs_logger:
+            obs_logger.error(f"Jira get issue failed: {e}")
+        return error_msg
