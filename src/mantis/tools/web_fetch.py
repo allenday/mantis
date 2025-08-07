@@ -55,12 +55,9 @@ async def web_fetch_url(url: str) -> str:
                 content_text = content.decode("utf-8", errors="ignore")
 
                 if response.status == 200:
-                    result_msg = (
-                        f"Successfully fetched {len(content_text)} characters from {url} (status: {response.status})"
-                    )
                     if OBSERVABILITY_AVAILABLE and obs_logger:
                         obs_logger.info(f"Web fetch successful: {len(content_text)} chars")
-                    return result_msg
+                    return content_text  # Return actual content for LLM/testing
                 else:
                     error_msg = f"Failed to fetch URL {url}: HTTP {response.status}"
                     if OBSERVABILITY_AVAILABLE and obs_logger:
