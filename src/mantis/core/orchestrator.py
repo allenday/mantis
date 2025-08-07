@@ -150,6 +150,18 @@ class DirectExecutor(ExecutionStrategy):
             )
             self._tools["git_operations"] = GitOperationsTool(git_config)
 
+            # Initialize RegistryTool
+            from ..tools.registry_access import RegistryTool, RegistryConfig
+            from ..config import DEFAULT_REGISTRY
+            registry_config = RegistryConfig(
+                base_url=DEFAULT_REGISTRY,
+                timeout=30.0,
+                cache_ttl=300,  # 5 minutes
+                rate_limit_requests=30,
+                rate_limit_window=60,
+            )
+            self._tools["registry_tool"] = RegistryTool(registry_config)
+
         except ImportError:
             # Tools not available, continue without them
             pass

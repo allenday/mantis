@@ -327,10 +327,7 @@ class TestRegistryTool:
             assert agents[0].health_score == 95
             assert agents[1].name == "ML Specialist"
             
-            mock_call.assert_called_once_with("list_agents", {
-                "include_inactive": False,
-                "page_size": 10
-            })
+            mock_call.assert_called_once_with("list_agents", {})
 
     @pytest.mark.asyncio
     async def test_list_all_agents_with_caching(self, registry_tool, sample_agent_data):

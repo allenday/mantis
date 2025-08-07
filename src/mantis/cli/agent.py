@@ -125,6 +125,8 @@ def display_agent_card_summary(agent_card, verbose: bool = False) -> None:
 
         # Competency Scores from extension
         comp = mantis_card.competency_scores
+        
+        
         if comp.competency_scores or comp.role_adaptation:
             # Find the competency-scores extension for header info
             competency_ext = None
@@ -143,35 +145,41 @@ def display_agent_card_summary(agent_card, verbose: bool = False) -> None:
 
             # Competency Scores Table
             if comp.competency_scores:
-                comp_table = Table(title="📊 Competency Scores", show_header=True, header_style="bold blue")
-                comp_table.add_column("Competency", style="cyan", width=60)
-                comp_table.add_column("Score", style="green", justify="right", width=7)
-                comp_table.add_column("Bar", style="blue", width=22)
+                try:
+                    comp_table = Table(title="📊 Competency Scores", show_header=True, header_style="bold blue")
+                    comp_table.add_column("Competency", style="cyan", width=60)
+                    comp_table.add_column("Score", style="green", justify="right", width=7)
+                    comp_table.add_column("Bar", style="blue", width=22)
 
-                for comp_name, score in comp.competency_scores.items():
-                    # Create visual bar chart
-                    bar_length = 20
-                    filled_length = int(score * bar_length)
-                    bar = "█" * filled_length + "░" * (bar_length - filled_length)
+                    for comp_name, score in comp.competency_scores.items():
+                        # Create visual bar chart
+                        bar_length = 20
+                        filled_length = int(score * bar_length)
+                        bar = "█" * filled_length + "░" * (bar_length - filled_length)
 
-                    # Clean up competency name for better display
-                    clean_name = comp_name.title().replace("_", " ")
+                        # Clean up competency name for better display
+                        clean_name = comp_name.title().replace("_", " ")
 
-                    # Dynamic score color based on value
-                    if score >= 0.9:
-                        score_color = "bright_green"
-                    elif score >= 0.8:
-                        score_color = "green"
-                    elif score >= 0.7:
-                        score_color = "yellow"
-                    elif score >= 0.5:
-                        score_color = "orange3"
-                    else:
-                        score_color = "red"
+                        # Dynamic score color based on value
+                        if score >= 0.9:
+                            score_color = "bright_green"
+                        elif score >= 0.8:
+                            score_color = "green"
+                        elif score >= 0.7:
+                            score_color = "yellow"
+                        elif score >= 0.5:
+                            score_color = "orange3"
+                        else:
+                            score_color = "red"
 
-                    comp_table.add_row(clean_name, f"[{score_color}]{score:.2f}[/{score_color}]", bar)
+                        comp_table.add_row(clean_name, f"[{score_color}]{score:.2f}[/{score_color}]", bar)
 
-                console.print(comp_table)
+                    console.print(comp_table)
+                        
+                except Exception as e:
+                    console.print(f"[red]❌ Error creating competency scores table: {e}[/red]")
+                    if verbose:
+                        console.print_exception()
 
             # Role Adaptation Table
             role = comp.role_adaptation
@@ -284,6 +292,60 @@ def display_agent_card_summary(agent_card, verbose: bool = False) -> None:
 
             console.print(domain_table)
 
+        # Skills Summary from extension  
+        skills = mantis_card.skills_summary
+        if skills.primary_skill_tags or skills.secondary_skill_tags or skills.skill_overview or skills.signature_abilities:
+            # Find the skills-summary extension for header info
+            skills_ext = None
+            for ext in mantis_card.agent_card.capabilities.extensions:
+                if ext.uri == "https://mantis.ai/extensions/skills-summary/v1":
+                    skills_ext = ext
+                    break
+
+            if skills_ext:
+                console.print(f"\n• [bold]{skills_ext.description}:[/bold]")
+                console.print(f"  [dim]AgentExtension URI:[/dim] {skills_ext.uri}")
+                console.print(f"  [dim]Required:[/dim] {skills_ext.required}")
+                console.print("")  # Empty line before data
+
+            # Create skills summary table
+            skills_table = Table(title="🛠️ Skills Summary", show_header=True, header_style="bold magenta")
+            skills_table.add_column("Primary Skills", style="green", width=50)
+            skills_table.add_column("Secondary Skills", style="blue", width=50)
+            
+            # Add skill tags rows
+            primary_count = len(skills.primary_skill_tags) if skills.primary_skill_tags else 0
+            secondary_count = len(skills.secondary_skill_tags) if skills.secondary_skill_tags else 0
+            max_skill_rows = max(primary_count, secondary_count)
+
+            for i in range(max_skill_rows):
+                primary_item = f"• {skills.primary_skill_tags[i]}" if i < primary_count else ""
+                secondary_item = f"• {skills.secondary_skill_tags[i]}" if i < secondary_count else ""
+                skills_table.add_row(primary_item, secondary_item)
+
+            console.print(skills_table)
+
+            # Skills overview
+            if skills.skill_overview:
+                overview_panel = Panel(
+                    skills.skill_overview,
+                    title="📋 Skills Overview",
+                    border_style="magenta",
+                    padding=(1, 2)
+                )
+                console.print(overview_panel)
+
+            # Signature abilities
+            if skills.signature_abilities:
+                abilities_text = "\n".join([f"• {ability}" for ability in skills.signature_abilities])
+                abilities_panel = Panel(
+                    abilities_text,
+                    title="⭐ Signature Abilities", 
+                    border_style="bright_magenta",
+                    padding=(1, 2)
+                )
+                console.print(abilities_panel)
+
     else:
         console.print("\n[bold cyan]📋 Extension Data (0 extensions):[/bold cyan]")
         console.print("[dim]No extensions defined[/dim]")
@@ -389,20 +451,27 @@ def inspect(
             # Find agent by URL
             for agent_data in agents:
                 if agent_data.get("url") == identifier:
-                    from a2a.types import AgentCard
+                    try:
+                        # Use the same loading function as file inspect to get full MantisAgentCard
+                        from ..agent.card import load_agent_card_from_json
+                        
+                        agent_card = load_agent_card_from_json(agent_data)
+                        
+                        if verbose:
+                            agent_name = agent_card.agent_card.name if hasattr(agent_card, "agent_card") else agent_card.name
+                            console.print(f"[dim]✅ Agent found: {agent_name}[/dim]")
 
-                    agent_card = AgentCard.model_validate(agent_data)
-
-                    if verbose:
-                        console.print(f"[dim]✅ Agent found: {agent_card.name}[/dim]")
-
-                    if format == "json":
-                        from google.protobuf.json_format import MessageToJson
-
-                        print(MessageToJson(agent_card, preserving_proto_field_name=True, indent=2))
-                    else:
-                        display_agent_card_summary(agent_card, verbose)
-                    return 0
+                        if format == "json":
+                            from google.protobuf.json_format import MessageToJson
+                            print(MessageToJson(agent_card, preserving_proto_field_name=True, indent=2))
+                        else:
+                            display_agent_card_summary(agent_card, verbose)
+                        return 0
+                    except Exception as e:
+                        console.print(f"[red]❌ Failed to parse agent data: {e}[/red]")
+                        if verbose:
+                            console.print_exception()
+                        return 1
 
             # Agent not found
             console.print(f"[red]❌ Agent not found: {identifier}[/red]")
@@ -556,6 +625,435 @@ def generate(
 
     except Exception as e:
         console.print(f"[red]❌ Failed to generate AgentCard: {e}[/red]")
+        if verbose:
+            console.print_exception()
+        return 1
+
+
+@agent.command()
+@use_global_options(["model", "verbose"])
+@click.option("--port", "-p", type=int, default=9001, help="Server port (default: 9001)")
+@click.option("--host", "-h", default="localhost", help="Server host (default: localhost)")
+@click.option("--registry-url", "-r", default="http://localhost:8080", help="A2A registry URL")
+@click.option(
+    "--system-prompt-file", type=click.Path(exists=True, path_type=Path), help="Override system prompt from file"
+)
+@click.option(
+    "--agent-card-file", type=click.Path(exists=True, path_type=Path), help="Explicit agent card file (persona JSON)"
+)
+@click.argument("persona_file", type=click.Path(exists=True, path_type=Path), required=False)
+def serve_single(
+    persona_file: Optional[Path],
+    model: Optional[str],
+    verbose: bool,
+    port: int,
+    host: str,
+    registry_url: str,
+    system_prompt_file: Optional[Path],
+    agent_card_file: Optional[Path],
+) -> int:
+    """
+    Serve a single AgentCard as an A2A agent server.
+
+    Takes an AgentCard JSON file and boots it up as a live A2A agent server that:
+    1. Registers with the A2A registry
+    2. Handles A2A protocol requests
+    3. Provides the agent's capabilities as live services
+
+    Examples:
+        mantis agent serve-single agents/cards/steve_jobs.json
+        mantis agent serve-single --port 9002 --agent-card-file steve_jobs.json
+        mantis agent serve-single persona.json --system-prompt-file custom_prompt.md
+    """
+    # Handle input precedence: argument > --agent-card-file
+    actual_input = persona_file or agent_card_file
+    if not actual_input:
+        console.print("[red]❌ No AgentCard file specified[/red]")
+        console.print("[dim]Use: mantis agent serve-single <file> or --agent-card-file <file>[/dim]")
+        return 1
+
+    if verbose:
+        console.print(f"[blue]🚀 Starting agent server from: {actual_input}[/blue]")
+        console.print(f"[dim]Server will run on {host}:{port}[/dim]")
+        console.print(f"[dim]Registry URL: {registry_url}[/dim]")
+
+    try:
+        # Load AgentCard data
+        with open(actual_input, "r") as f:
+            agent_data = json.load(f)
+
+        # Load AgentCard from JSON (handles both formats)
+        from ..agent.card import load_agent_card_from_json
+
+        agent_card = load_agent_card_from_json(agent_data)
+
+        if verbose:
+            agent_name = agent_card.agent_card.name if hasattr(agent_card, "agent_card") else agent_card.name
+            console.print(f"[dim]Loaded agent: {agent_name}[/dim]")
+
+        # Load custom system prompt if provided (not yet implemented for single serve)
+        if system_prompt_file and verbose:
+            console.print(f"[dim]Custom system prompt file provided: {system_prompt_file}[/dim]")
+            console.print("[dim]Note: Custom system prompts not yet implemented for single serve[/dim]")
+
+        # Get agent card reference
+        base_card = agent_card.agent_card if hasattr(agent_card, "agent_card") else agent_card
+        
+        console.print(f"\n[bold green]🌟 Starting {base_card.name} A2A Agent Server[/bold green]")
+        console.print(f"[cyan]💡 Serving {len(base_card.skills)} skills:[/cyan]")
+        for skill in base_card.skills:
+            console.print(f"  • {skill.name}")
+
+        console.print(f"\n[yellow]🌐 Server starting on http://{host}:{port}[/yellow]")
+        console.print(f"[yellow]📋 Will register with A2A registry at: {registry_url}[/yellow]")
+        console.print("\n[dim]Press Ctrl+C to stop the server[/dim]")
+
+        # Get model specification
+        from ..config import DEFAULT_MODEL
+        model_spec = model or DEFAULT_MODEL
+
+        if verbose:
+            console.print(f"[dim]Using model: {model_spec}[/dim]")
+
+        # Create single agent server
+        from fasta2a import FastA2A, Skill
+        from fasta2a.storage import InMemoryStorage
+        from fasta2a.broker import InMemoryBroker
+        import asyncio
+        import aiohttp
+        import uvicorn
+
+        # Convert AgentCard skills to FastA2A skills
+        fasta2a_skills = []
+        for skill in base_card.skills:
+            # Create system prompt for this skill
+            system_prompt = f"You are {base_card.name}.\n\n{base_card.description}\n\nYou are specifically being asked to help with: {skill.name}\n{skill.description}"
+
+            fasta2a_skill = Skill(
+                name=skill.name.lower().replace(" ", "_"),
+                description=skill.description,
+                system_prompt=system_prompt,
+                model=model_spec,
+            )
+            fasta2a_skills.append(fasta2a_skill)
+
+        # Update agent card URL
+        base_card.url = f"http://{host}:{port}"
+
+        app = FastA2A(
+            storage=InMemoryStorage(),
+            broker=InMemoryBroker(),
+            name=base_card.name,
+            url=base_card.url,
+            version=base_card.version,
+            description=base_card.description,
+            provider=base_card.provider,
+            skills=fasta2a_skills,
+            debug=verbose,
+        )
+
+        async def register_agent():
+            """Register agent with the A2A registry using JSON-RPC."""
+            try:
+                # Convert protobuf AgentCard to dict
+                from google.protobuf.json_format import MessageToDict
+                agent_card_data = MessageToDict(base_card, preserving_proto_field_name=True)
+
+                # JSON-RPC 2.0 call to register agent
+                payload = {"jsonrpc": "2.0", "method": "register_agent", "params": {"agent_card": agent_card_data}, "id": 1}
+
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        f"{registry_url}/jsonrpc", 
+                        json=payload, 
+                        headers={"Content-Type": "application/json"}
+                    ) as response:
+                        if response.status == 200:
+                            result = await response.json()
+                            if "error" in result:
+                                console.print(f"[red]❌ Registry error for {base_card.name}: {result['error']['message']}[/red]")
+                            elif "result" in result and result["result"].get("success"):
+                                console.print(f"[green]✅ Successfully registered {base_card.name} with registry[/green]")
+                            else:
+                                console.print(f"[yellow]⚠️ Unexpected registry response: {result}[/yellow]")
+                        else:
+                            response_text = await response.text()
+                            console.print(f"[yellow]⚠️ Registry registration returned HTTP {response.status} - {response_text[:200]}[/yellow]")
+            except Exception as e:
+                console.print(f"[yellow]⚠️ Failed to register with registry: {e}[/yellow]")
+                console.print("[dim]Server will start anyway, but may not be discoverable[/dim]")
+
+        if verbose:
+            console.print(f"[dim]Registering with A2A registry at {registry_url}[/dim]")
+
+        asyncio.run(register_agent())
+
+        # Run the server (this blocks)
+        uvicorn.run(app, host=host, port=port)
+        return 0
+
+    except FileNotFoundError:
+        console.print(f"[red]❌ File not found: {actual_input}[/red]")
+        return 1
+    except json.JSONDecodeError as e:
+        console.print(f"[red]❌ Invalid JSON in {actual_input}: {e}[/red]")
+        return 1
+    except Exception as e:
+        console.print(f"[red]❌ Failed to start agent server: {e}[/red]")
+        if verbose:
+            console.print_exception()
+        return 1
+
+
+@agent.command()
+@use_global_options(["model", "verbose"])
+@click.option(
+    "--agents-dir",
+    "-a",
+    type=click.Path(exists=True),
+    default="agents",
+    help="Directory containing agent JSON files (default: agents/)",
+)
+@click.option("--base-port", "-p", type=int, default=9001, help="Base port for agent servers (default: 9001)")
+@click.option("--host", "-h", default="0.0.0.0", help="Server host (default: 0.0.0.0)")
+@click.option("--registry-url", "-r", default="http://localhost:8080", help="A2A registry URL")
+def serve_all(
+    agents_dir: str, model: Optional[str], verbose: bool, base_port: int, host: str, registry_url: str
+) -> int:
+    """
+    Serve all agents through individual A2A servers.
+
+    This creates individual servers for each agent found in the agents directory,
+    assigning each agent a unique port starting from the base port.
+
+    Examples:
+        mantis agent serve-all
+        mantis agent serve-all --base-port 9000 --agents-dir ./my-agents
+        mantis agent serve-all --registry-url http://registry:8080
+    """
+    try:
+        import os
+        import asyncio
+        import aiohttp
+        import uvicorn
+
+        agents_path = Path(agents_dir)
+
+        # Find all JSON files recursively in the agents directory
+        agent_files = []
+        if agents_path.exists():
+            for root, dirs, files in os.walk(agents_path):
+                for file in files:
+                    if file.endswith(".json"):
+                        agent_files.append(Path(root) / file)
+
+        if not agent_files:
+            console.print(f"[yellow]⚠️  No agent files found in {agents_path}[/yellow]")
+            console.print("[dim]Looking for files matching pattern: *.json[/dim]")
+            return 0
+
+        console.print("[bold green]🎭 Starting Multi-Agent Server Farm[/bold green]")
+        console.print(f"[cyan]Agents directory: {agents_path}[/cyan]")
+        console.print(f"[cyan]Registry: {registry_url}[/cyan]")
+        console.print()
+
+        # Load and validate AgentCard objects
+        agent_cards = {}
+        port_assignments = {}
+        for i, agent_file in enumerate(agent_files):
+            try:
+                with open(agent_file, "r") as f:
+                    agent_data = json.load(f)
+
+                # Load AgentCard from JSON (handles both formats)
+                from ..agent.card import load_agent_card_from_json
+                agent_card = load_agent_card_from_json(agent_data)
+                
+                # Get base card reference
+                base_card = agent_card.agent_card if hasattr(agent_card, "agent_card") else agent_card
+                
+                agent_key = base_card.name.lower().replace(" ", "-")
+                assigned_port = base_port + i
+                
+                # Update agent URL
+                base_card.url = f"http://{host}:{assigned_port}"
+                
+                agent_cards[agent_key] = agent_card
+                port_assignments[agent_key] = assigned_port
+
+                console.print(f"  ✓ [cyan]{base_card.name}[/cyan] ({len(base_card.skills)} skills)")
+                if verbose:
+                    console.print(f"    [dim]File: {agent_file}[/dim]")
+                    console.print(f"    [dim]URL: {base_card.url}[/dim]")
+            except Exception as e:
+                console.print(f"[red]❌ Failed to load {agent_file.name}: {e}[/red]")
+                continue
+
+        if not agent_cards:
+            console.print("[red]❌ No valid agent cards found[/red]")
+            return 1
+
+        console.print(
+            f"\n[bold yellow]🚀 Starting {len(agent_cards)} agent servers on ports {base_port}-{base_port + len(agent_cards) - 1}...[/bold yellow]"
+        )
+        console.print(f"[yellow]📋 Will register each agent with A2A registry at: {registry_url}[/yellow]")
+        console.print("\n[dim]Press Ctrl+C to stop all servers[/dim]")
+
+        # Get model specification
+        from ..config import DEFAULT_MODEL
+        model_spec = model or DEFAULT_MODEL
+
+        # Create server tasks
+        from fasta2a import FastA2A, Skill
+        from fasta2a.storage import InMemoryStorage
+        from fasta2a.broker import InMemoryBroker
+
+        async def register_agent_with_registry(agent_card, registry_url: str):
+            """Register an agent card with the A2A registry using JSON-RPC."""
+            try:
+                # Get base card reference  
+                base_card = agent_card.agent_card if hasattr(agent_card, "agent_card") else agent_card
+                
+                # Convert protobuf AgentCard to dict with proper field naming
+                from google.protobuf.json_format import MessageToDict
+                agent_card_data = MessageToDict(base_card, preserving_proto_field_name=True)
+                
+                # JSON-RPC 2.0 call to register agent
+                payload = {"jsonrpc": "2.0", "method": "register_agent", "params": {"agent_card": agent_card_data}, "id": 1}
+                
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        f"{registry_url}/jsonrpc", 
+                        json=payload, 
+                        headers={"Content-Type": "application/json"}
+                    ) as response:
+                        if response.status == 200:
+                            result = await response.json()
+                            if "error" in result:
+                                console.print(f"[red]❌ Registry error for {base_card.name}: {result['error']['message']}[/red]")
+                                return False
+                            elif "result" in result and result["result"].get("success"):
+                                if verbose:
+                                    console.print(f"[green]✅ Successfully registered {base_card.name} with registry[/green]")
+                                return True
+                            else:
+                                console.print(f"[yellow]⚠️ Unexpected response for {base_card.name}: {result}[/yellow]")
+                                return False
+                        else:
+                            response_text = await response.text()
+                            console.print(f"[yellow]⚠️ Failed to register {base_card.name}: HTTP {response.status} - {response_text[:200]}[/yellow]")
+                            return False
+            except Exception as e:
+                console.print(f"[yellow]⚠️ Error registering {base_card.name} with registry: {e}[/yellow]")
+                return False
+
+        async def run_server(app, port, name):
+            """Run a single FastA2A server"""
+            try:
+                config = uvicorn.Config(
+                    app, host=host, port=port, log_level="info" if verbose else "warning"
+                )
+                server = uvicorn.Server(config)
+                if verbose:
+                    console.print(f"[dim]Starting {name} server on http://{host}:{port}[/dim]")
+                await server.serve()
+            except Exception as e:
+                console.print(f"[red]❌ ERROR starting server for {name} on port {port}: {e}[/red]")
+                raise
+
+        async def run_all_servers():
+            # Create FastA2A apps for each agent
+            servers = []
+            registration_tasks = []
+            
+            for agent_key, agent_card in agent_cards.items():
+                port = port_assignments[agent_key]
+                
+                # Get base card reference
+                base_card = agent_card.agent_card if hasattr(agent_card, "agent_card") else agent_card
+                
+                if verbose:
+                    console.print(f"[dim]Creating server for {base_card.name} on port {port}[/dim]")
+
+                # Convert AgentCard skills to FastA2A skills
+                fasta2a_skills = []
+                for skill in base_card.skills:
+                    system_prompt = f"You are {base_card.name}.\n\n{base_card.description}\n\nYou are specifically being asked to help with: {skill.name}\n{skill.description}"
+
+                    fasta2a_skill = Skill(
+                        name=skill.name.lower().replace(" ", "_"),
+                        description=skill.description,
+                        system_prompt=system_prompt,
+                        model=model_spec,
+                    )
+                    fasta2a_skills.append(fasta2a_skill)
+
+                # Create FastA2A app
+                app = FastA2A(
+                    storage=InMemoryStorage(),
+                    broker=InMemoryBroker(),
+                    name=base_card.name,
+                    url=base_card.url,
+                    version=base_card.version,
+                    description=base_card.description,
+                    provider=base_card.provider,
+                    skills=fasta2a_skills,
+                    debug=verbose,
+                )
+
+                servers.append((app, port, base_card.name))
+                registration_tasks.append(register_agent_with_registry(agent_card, registry_url))
+
+            # Register agents in batches to avoid thundering herd
+            if verbose:
+                console.print(f"[dim]Registering {len(registration_tasks)} agents with registry in batches[/dim]")
+            
+            batch_size = 10  # Register 10 agents at a time
+            batch_delay = 2.0  # Wait 2 seconds between batches
+            successful_registrations = 0
+            
+            for i in range(0, len(registration_tasks), batch_size):
+                batch = registration_tasks[i:i + batch_size]
+                batch_num = (i // batch_size) + 1
+                total_batches = (len(registration_tasks) + batch_size - 1) // batch_size
+                
+                if verbose:
+                    console.print(f"[dim]Registering batch {batch_num}/{total_batches} ({len(batch)} agents)[/dim]")
+                
+                batch_results = await asyncio.gather(*batch, return_exceptions=True)
+                batch_success = sum(1 for result in batch_results if result is True)
+                successful_registrations += batch_success
+                
+                if verbose:
+                    console.print(f"[dim]Batch {batch_num} complete: {batch_success}/{len(batch)} successful[/dim]")
+                
+                # Wait before next batch (except for the last batch)
+                if i + batch_size < len(registration_tasks):
+                    if verbose:
+                        console.print(f"[dim]Waiting {batch_delay}s before next batch...[/dim]")
+                    await asyncio.sleep(batch_delay)
+            
+            console.print(f"[green]✅ Successfully registered {successful_registrations}/{len(agent_cards)} agents[/green]")
+
+            # Start all servers
+            console.print(f"[dim]Starting {len(servers)} servers...[/dim]")
+            server_tasks = []
+            for app, port, name in servers:
+                task = asyncio.create_task(run_server(app, port, name))
+                server_tasks.append(task)
+
+            # Wait for all servers
+            await asyncio.gather(*server_tasks)
+
+        # Run all servers
+        asyncio.run(run_all_servers())
+        return 0
+
+    except FileNotFoundError:
+        console.print(f"[red]❌ Agents directory not found: {agents_dir}[/red]")
+        return 1
+    except Exception as e:
+        console.print(f"[red]❌ Failed to start multi-agent server: {e}[/red]")
         if verbose:
             console.print_exception()
         return 1

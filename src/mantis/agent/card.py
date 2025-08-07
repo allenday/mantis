@@ -205,26 +205,68 @@ Be specific to the persona. Focus on what makes them uniquely valuable.""",
         )
 
         # Extract skills summary with domain-specific skills
-        skills_summary = extractor.extract_protobuf_sync(
+        # Extract skills summary with hybrid approach (simple pydantic + manual protobuf)
+        from pydantic import BaseModel
+        from typing import List as TypingList
+        
+        class SkillsSummaryData(BaseModel):
+            primary_skill_tags: TypingList[str]
+            secondary_skill_tags: TypingList[str] 
+            skill_overview: str
+            signature_abilities: TypingList[str]
+            
+        class SkillData(BaseModel):
+            id: str
+            name: str
+            description: str
+            examples: TypingList[str]
+            related_competencies: TypingList[str] 
+            proficiency_score: float
+            
+        # Generate summary fields (this works reliably)
+        summary_data = extractor.extract_sync(
             content=content,
-            protobuf_type=SkillsSummary,
-            system_prompt="""Generate detailed, domain-specific skills for this persona. Create:
-- skills: Array of SkillDefinition objects with:
-  * id: snake_case identifier (e.g., "strategic_planning", "diplomatic_negotiation")
-  * name: human-readable name (e.g., "Strategic Planning", "Diplomatic Negotiation")
-  * description: detailed description of what this skill encompasses
-  * examples: specific examples of how the persona demonstrates this skill (not generic)
-  * related_competencies: related skills or sub-competencies
-  * proficiency_score: 0.0-1.0 based on persona's strength in this area
-- primary_skill_tags: 5-7 primary tags for categorization/search (specific to persona)
+            result_type=SkillsSummaryData,
+            system_prompt="""Generate domain-specific skills summary for this persona:
+- primary_skill_tags: 5-7 specific skill tags for search/categorization (avoid generic tags like "strategic_thinking", "analysis", "advice")
 - secondary_skill_tags: 3-5 broader category tags
-- skill_overview: paragraph summarizing overall skill profile
-- signature_abilities: 3-5 unique capabilities that distinguish this persona
-
-Focus on SPECIFIC skills based on the persona's background, NOT generic categories.
-Make examples authentic to how this persona would demonstrate the skill.""",
-            user_prompt=f"Generate domain-specific skills for this persona:\n\n{content}",
+- skill_overview: paragraph summarizing the persona's overall skill profile
+- signature_abilities: 3-5 unique capabilities that distinguish this persona""",
+            user_prompt=f"Generate skills summary for this persona:\n\n{content}",
         )
+        
+        # Generate detailed skills (simpler approach)
+        skills_data = extractor.extract_sync(
+            content=content,
+            result_type=TypingList[SkillData],
+            system_prompt="""Generate exactly 3 detailed skills for this persona. Each skill must have:
+- id: snake_case identifier (e.g., "strategic_planning", "diplomatic_negotiation") 
+- name: human-readable name (e.g., "Strategic Planning", "Diplomatic Negotiation")
+- description: detailed description (2-3 sentences)
+- examples: array of 2 specific examples showing how this persona demonstrates this skill
+- related_competencies: array of 2 related skills or sub-competencies
+- proficiency_score: 0.0-1.0 score based on persona's expertise level""",
+            user_prompt=f"Generate 3 detailed skills for this persona:\n\n{content}",
+        )
+        
+        # Create protobuf SkillsSummary manually
+        skills_summary = SkillsSummary()
+        skills_summary.primary_skill_tags.extend(summary_data.primary_skill_tags)
+        skills_summary.secondary_skill_tags.extend(summary_data.secondary_skill_tags)
+        skills_summary.skill_overview = summary_data.skill_overview  
+        skills_summary.signature_abilities.extend(summary_data.signature_abilities)
+        
+        # Add detailed skills to protobuf
+        from ..proto.mantis.v1.mantis_persona_pb2 import SkillDefinition
+        for skill_data in skills_data:
+            skill_def = SkillDefinition()
+            skill_def.id = skill_data.id
+            skill_def.name = skill_data.name
+            skill_def.description = skill_data.description
+            skill_def.examples.extend(skill_data.examples)
+            skill_def.related_competencies.extend(skill_data.related_competencies)
+            skill_def.proficiency_score = skill_data.proficiency_score
+            skills_summary.skills.append(skill_def)
 
         # Create enhanced MantisAgentCard
         mantis_card = MantisAgentCard()
@@ -247,23 +289,24 @@ Make examples authentic to how this persona would demonstrate the skill.""",
                 mantis_card.skill_tags.append(domain.lower().replace(" ", "_"))
 
         # Update AgentSkill fields with data from SkillsSummary
-        if mantis_card.agent_card.skills and skills_summary.skills:
+        if mantis_card.agent_card.skills:
             primary_skill = mantis_card.agent_card.skills[0]  # Update the primary skill
-            top_skill = skills_summary.skills[0]  # Use the top LLM-generated skill
             
-            # Update skill fields with LLM-generated data
-            primary_skill.name = top_skill.name
-            primary_skill.description = top_skill.description
+            # If we have detailed skills, use the top skill for name/description/examples
+            if skills_summary.skills:
+                top_skill = skills_summary.skills[0]
+                primary_skill.name = top_skill.name
+                primary_skill.description = top_skill.description
+                
+                # Add LLM-generated examples
+                del primary_skill.examples[:]
+                if top_skill.examples:
+                    primary_skill.examples.extend(top_skill.examples)
             
-            # Clear existing placeholder data and add LLM-generated tags
-            primary_skill.tags.clear()
+            # Always update tags from primary_skill_tags (fallback when detailed skills missing)
+            del primary_skill.tags[:]
             if skills_summary.primary_skill_tags:
                 primary_skill.tags.extend(skills_summary.primary_skill_tags[:5])
-            
-            # Clear existing placeholder data and add LLM-generated examples
-            primary_skill.examples.clear()
-            if top_skill.examples:
-                primary_skill.examples.extend(top_skill.examples)
 
         # Update the extensions with full LLM-extracted data
         from google.protobuf.json_format import MessageToDict

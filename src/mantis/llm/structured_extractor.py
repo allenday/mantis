@@ -362,22 +362,48 @@ class StructuredExtractor:
 
         # Check if this is a nested message field (not a map)
         if hasattr(field, "message_type") and field.message_type and field.type == field.TYPE_MESSAGE:
-            # For nested messages, use Dict to represent the structure
-            # This allows the LLM to return structured data as a dict
-            return Dict[str, Any]
+            # Recursively convert nested message types to pydantic models
+            nested_protobuf_type = field.message_type._concrete_class
+            nested_pydantic_type = self._protobuf_to_pydantic(nested_protobuf_type)
+            
+            # Handle repeated nested messages
+            if field.label == field.LABEL_REPEATED:
+                return List[nested_pydantic_type]
+            else:
+                return nested_pydantic_type
 
-        # Handle repeated fields
+        # Handle repeated fields with specific scalar types
         if field.label == field.LABEL_REPEATED:
-            # For repeated fields, we'll use List[Any] as a fallback
-            return List[Any]
+            scalar_type = self._get_scalar_type(field)
+            return List[scalar_type]
 
-        # Handle optional fields
+        # Handle optional fields with specific scalar types
         if field.label == field.LABEL_OPTIONAL:
-            return Optional[Any]
+            scalar_type = self._get_scalar_type(field)
+            return Optional[scalar_type]
 
-        # For scalar fields, return Any as a safe fallback
-        # This allows the LLM to return appropriate values
-        return Any
+        # For scalar fields, return specific type
+        return self._get_scalar_type(field)
+    
+    def _get_scalar_type(self, field):
+        """Get specific Python type for protobuf scalar field."""
+        # Map protobuf field types to Python types
+        if field.type == field.TYPE_STRING:
+            return str
+        elif field.type == field.TYPE_BOOL:
+            return bool
+        elif field.type == field.TYPE_INT32 or field.type == field.TYPE_INT64:
+            return int
+        elif field.type == field.TYPE_UINT32 or field.type == field.TYPE_UINT64:
+            return int
+        elif field.type == field.TYPE_FLOAT or field.type == field.TYPE_DOUBLE:
+            return float
+        elif field.type == field.TYPE_BYTES:
+            return bytes
+        else:
+            # Fallback for unknown types
+            from typing import Any
+            return Any
 
     def _pydantic_to_protobuf(self, pydantic_obj, protobuf_type: Type):
         """Convert pydantic model instance to protobuf message."""
@@ -391,7 +417,21 @@ class StructuredExtractor:
 
                     # Handle repeated fields
                     if hasattr(field, "extend") and isinstance(value, list):
-                        field.extend(value)
+                        # Check if this is a repeated nested message
+                        if value and isinstance(value[0], dict):
+                            # Get the protobuf field descriptor to find the nested message type
+                            descriptor = protobuf_obj.DESCRIPTOR
+                            proto_field = descriptor.fields_by_name.get(field_name)
+                            if proto_field and hasattr(proto_field, "message_type") and proto_field.message_type:
+                                # Convert each dict to a nested protobuf message
+                                nested_type = proto_field.message_type._concrete_class
+                                for item_dict in value:
+                                    nested_obj = self._pydantic_dict_to_protobuf(item_dict, nested_type)
+                                    field.append(nested_obj)
+                            else:
+                                field.extend(value)
+                        else:
+                            field.extend(value)
                     # Handle map fields (protobuf maps have .update() method)
                     elif hasattr(field, "update") and isinstance(value, dict):
                         field.update(value)
@@ -422,6 +462,17 @@ class StructuredExtractor:
                 except Exception:
                     pass  # Skip fields that can't be processed
 
+        return protobuf_obj
+    
+    def _pydantic_dict_to_protobuf(self, data_dict: dict, protobuf_type: Type):
+        """Convert a dictionary to a protobuf message (helper for nested messages)."""
+        protobuf_obj = protobuf_type()
+        for field_name, value in data_dict.items():
+            if hasattr(protobuf_obj, field_name) and value is not None:
+                try:
+                    setattr(protobuf_obj, field_name, value)
+                except (TypeError, ValueError):
+                    pass  # Skip invalid assignments
         return protobuf_obj
 
 
