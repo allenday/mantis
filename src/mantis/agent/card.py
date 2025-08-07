@@ -208,21 +208,21 @@ Be specific to the persona. Focus on what makes them uniquely valuable.""",
         # Extract skills summary with hybrid approach (simple pydantic + manual protobuf)
         from pydantic import BaseModel
         from typing import List as TypingList
-        
+
         class SkillsSummaryData(BaseModel):
             primary_skill_tags: TypingList[str]
-            secondary_skill_tags: TypingList[str] 
+            secondary_skill_tags: TypingList[str]
             skill_overview: str
             signature_abilities: TypingList[str]
-            
+
         class SkillData(BaseModel):
             id: str
             name: str
             description: str
             examples: TypingList[str]
-            related_competencies: TypingList[str] 
+            related_competencies: TypingList[str]
             proficiency_score: float
-            
+
         # Generate summary fields (this works reliably)
         summary_data = extractor.extract_sync(
             content=content,
@@ -234,7 +234,7 @@ Be specific to the persona. Focus on what makes them uniquely valuable.""",
 - signature_abilities: 3-5 unique capabilities that distinguish this persona (use readable text like "Strategic Political Analysis", "Power Structure Navigation")""",
             user_prompt=f"Generate skills summary for this persona:\n\n{content}",
         )
-        
+
         # Generate detailed skills (simpler approach)
         skills_data = extractor.extract_sync(
             content=content,
@@ -248,16 +248,17 @@ Be specific to the persona. Focus on what makes them uniquely valuable.""",
 - proficiency_score: 0.0-1.0 score based on persona's expertise level""",
             user_prompt=f"Generate 3 detailed skills for this persona:\n\n{content}",
         )
-        
+
         # Create protobuf SkillsSummary manually
         skills_summary = SkillsSummary()
         skills_summary.primary_skill_tags.extend(summary_data.primary_skill_tags)
         skills_summary.secondary_skill_tags.extend(summary_data.secondary_skill_tags)
-        skills_summary.skill_overview = summary_data.skill_overview  
+        skills_summary.skill_overview = summary_data.skill_overview
         skills_summary.signature_abilities.extend(summary_data.signature_abilities)
-        
+
         # Add detailed skills to protobuf
         from ..proto.mantis.v1.mantis_persona_pb2 import SkillDefinition
+
         for skill_data in skills_data:
             skill_def = SkillDefinition()
             skill_def.id = skill_data.id
@@ -291,18 +292,18 @@ Be specific to the persona. Focus on what makes them uniquely valuable.""",
         # Update AgentSkill fields with data from SkillsSummary
         if mantis_card.agent_card.skills:
             primary_skill = mantis_card.agent_card.skills[0]  # Update the primary skill
-            
+
             # If we have detailed skills, use the top skill for name/description/examples
             if skills_summary.skills:
                 top_skill = skills_summary.skills[0]
                 primary_skill.name = top_skill.name
                 primary_skill.description = top_skill.description
-                
+
                 # Add LLM-generated examples
                 del primary_skill.examples[:]
                 if top_skill.examples:
                     primary_skill.examples.extend(top_skill.examples)
-            
+
             # Always update tags from primary_skill_tags (fallback when detailed skills missing)
             del primary_skill.tags[:]
             if skills_summary.primary_skill_tags:
@@ -434,6 +435,7 @@ def parse_extension_data(extension_uri: str, extension_params: Dict[str, Any]) -
                 if "preferred_role" in role_data:
                     # Convert string role preference to enum value
                     from ..proto.mantis.v1.mantis_persona_pb2 import RolePreference
+
                     role_str = role_data["preferred_role"]
                     if role_str == "ROLE_PREFERENCE_LEADER":
                         message.role_adaptation.preferred_role = RolePreference.ROLE_PREFERENCE_LEADER
@@ -474,7 +476,7 @@ def parse_extension_data(extension_uri: str, extension_params: Dict[str, Any]) -
                     if "proficiency_score" in skill_data:
                         skill_def.proficiency_score = float(skill_data["proficiency_score"])
                     message.skills.append(skill_def)
-            
+
             if "primary_skill_tags" in extension_params:
                 message.primary_skill_tags.extend(extension_params["primary_skill_tags"])
             if "secondary_skill_tags" in extension_params:
@@ -515,32 +517,40 @@ def get_parsed_extensions(agent_card) -> Dict[str, Any]:
 def validate_mantis_agent_card(mantis_card: "MantisAgentCard") -> None:
     """
     Validate that a MantisAgentCard has all required extensions.
-    
+
     Args:
         mantis_card: MantisAgentCard to validate
-        
+
     Raises:
         ValueError: If required extensions are missing
     """
     missing_extensions = []
-    
+
     # Check for required extension data
-    if not mantis_card.persona_characteristics.core_principles and not mantis_card.persona_characteristics.communication_style:
+    if (
+        not mantis_card.persona_characteristics.core_principles
+        and not mantis_card.persona_characteristics.communication_style
+    ):
         missing_extensions.append("PersonaCharacteristics")
-    
-    if not mantis_card.competency_scores.competency_scores and not mantis_card.competency_scores.role_adaptation.leader_score:
+
+    if (
+        not mantis_card.competency_scores.competency_scores
+        and not mantis_card.competency_scores.role_adaptation.leader_score
+    ):
         missing_extensions.append("CompetencyScores")
-    
+
     if not mantis_card.domain_expertise.primary_domains and not mantis_card.domain_expertise.methodologies:
         missing_extensions.append("DomainExpertise")
-    
+
     if not mantis_card.skills_summary.primary_skill_tags and not mantis_card.skills_summary.skill_overview:
         missing_extensions.append("SkillsSummary")
-    
+
     if missing_extensions:
-        raise ValueError(f"MantisAgentCard validation failed: Missing required extensions: {missing_extensions}. "
-                        f"A valid MantisAgentCard must have all 4 extensions: PersonaCharacteristics, "
-                        f"CompetencyScores, DomainExpertise, and SkillsSummary.")
+        raise ValueError(
+            f"MantisAgentCard validation failed: Missing required extensions: {missing_extensions}. "
+            f"A valid MantisAgentCard must have all 4 extensions: PersonaCharacteristics, "
+            f"CompetencyScores, DomainExpertise, and SkillsSummary."
+        )
 
 
 def load_agent_card_from_json(agent_data: Dict[str, Any]) -> "MantisAgentCard":
@@ -552,7 +562,7 @@ def load_agent_card_from_json(agent_data: Dict[str, Any]) -> "MantisAgentCard":
 
     Returns:
         MantisAgentCard object
-        
+
     Raises:
         ValueError: If the card is missing required extensions
     """
@@ -596,9 +606,9 @@ def ensure_mantis_agent_card(agent_card) -> "MantisAgentCard":
     # Track which required extensions we've found
     required_extensions = {
         "PersonaCharacteristics": False,
-        "CompetencyScores": False, 
+        "CompetencyScores": False,
         "DomainExpertise": False,
-        "SkillsSummary": False
+        "SkillsSummary": False,
     }
 
     for uri, parsed_data in parsed_extensions.items():
@@ -620,9 +630,11 @@ def ensure_mantis_agent_card(agent_card) -> "MantisAgentCard":
     # Validate that all required extensions are present
     missing_extensions = [ext for ext, found in required_extensions.items() if not found]
     if missing_extensions:
-        raise ValueError(f"MantisAgentCard validation failed: Missing required extensions: {missing_extensions}. "
-                        f"A valid MantisAgentCard must have all 4 extensions: PersonaCharacteristics, "
-                        f"CompetencyScores, DomainExpertise, and SkillsSummary.")
+        raise ValueError(
+            f"MantisAgentCard validation failed: Missing required extensions: {missing_extensions}. "
+            f"A valid MantisAgentCard must have all 4 extensions: PersonaCharacteristics, "
+            f"CompetencyScores, DomainExpertise, and SkillsSummary."
+        )
 
     mantis_card.persona_title = agent_card.name
 

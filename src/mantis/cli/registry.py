@@ -18,7 +18,7 @@ console = Console()
 def display_registry_table(agents_data, verbose: bool = False, show_scores: bool = False) -> None:
     """Display a rich table of agents from the registry."""
     table = Table(title="🌐 Agent Registry", show_header=True, header_style="bold blue")
-    
+
     if show_scores:
         # Narrower columns when showing scores to fit all 6 columns
         table.add_column("Name", style="cyan", width=18)
@@ -51,7 +51,7 @@ def display_registry_table(agents_data, verbose: bool = False, show_scores: bool
             # Truncate long URLs for display based on column width
             url_width = 25 if show_scores else 30
             max_url_len = url_width - 3  # Leave room for "..."
-            display_url = url if len(url) <= max_url_len else url[:max_url_len-3] + "..."
+            display_url = url if len(url) <= max_url_len else url[: max_url_len - 3] + "..."
 
             if show_scores:
                 score = agent.get("similarity_score", "N/A")
@@ -90,7 +90,13 @@ def registry(verbose: bool):
 )
 @click.option("--query", "-q", help="Search query for semantic/vector search")
 @click.option("--limit", "-l", type=int, default=10, help="Maximum number of agents to display")
-@click.option("--similarity-threshold", "-t", type=float, default=0.0, help="Similarity threshold for vector search (0.0-1.0, default: 0.0)")
+@click.option(
+    "--similarity-threshold",
+    "-t",
+    type=float,
+    default=0.0,
+    help="Similarity threshold for vector search (0.0-1.0, default: 0.0)",
+)
 def list(
     registry: Optional[str],
     format: str,
@@ -125,19 +131,19 @@ def list(
         import requests
 
         jsonrpc_url = f"{registry_url}/jsonrpc"
-        
+
         if query:
             # Use search_agents method for semantic search
             payload = {
-                "jsonrpc": "2.0", 
-                "method": "search_agents", 
+                "jsonrpc": "2.0",
+                "method": "search_agents",
                 "params": {
                     "query": query,
                     "search_mode": "SEARCH_MODE_VECTOR",
                     "similarity_threshold": similarity_threshold,
-                    "max_results": limit
-                }, 
-                "id": 1
+                    "max_results": limit,
+                },
+                "id": 1,
             }
         else:
             # Use list_agents method for listing all agents
@@ -160,19 +166,21 @@ def list(
         response_data = result.get("result", {})
         agents_data = response_data.get("agents", [])
         similarity_scores = response_data.get("similarity_scores", [])
-        
+
         # Add similarity scores to agent data if available and sort by score descending
         if query and similarity_scores:
             for i, agent in enumerate(agents_data):
                 if i < len(similarity_scores):
                     agent["similarity_score"] = similarity_scores[i]
-            
+
             # Sort by similarity score descending (highest scores first)
             agents_data.sort(key=lambda x: x.get("similarity_score", 0), reverse=True)
-        
+
         # No local fallbacks - fail clearly if search returns no results
         if query and not agents_data and verbose:
-            console.print(f"[yellow]⚠️  Vector search returned no results for '{query}' with threshold {similarity_threshold}[/yellow]")
+            console.print(
+                f"[yellow]⚠️  Vector search returned no results for '{query}' with threshold {similarity_threshold}[/yellow]"
+            )
             console.print("[dim]Try lowering the similarity threshold with --similarity-threshold 0.3[/dim]")
 
         # Apply limit after sorting

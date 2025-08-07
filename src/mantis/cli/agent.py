@@ -125,8 +125,7 @@ def display_agent_card_summary(agent_card, verbose: bool = False) -> None:
 
         # Competency Scores from extension
         comp = mantis_card.competency_scores
-        
-        
+
         if comp.competency_scores or comp.role_adaptation:
             # Find the competency-scores extension for header info
             competency_ext = None
@@ -175,7 +174,7 @@ def display_agent_card_summary(agent_card, verbose: bool = False) -> None:
                         comp_table.add_row(clean_name, f"[{score_color}]{score:.2f}[/{score_color}]", bar)
 
                     console.print(comp_table)
-                        
+
                 except Exception as e:
                     console.print(f"[red]❌ Error creating competency scores table: {e}[/red]")
                     if verbose:
@@ -292,9 +291,14 @@ def display_agent_card_summary(agent_card, verbose: bool = False) -> None:
 
             console.print(domain_table)
 
-        # Skills Summary from extension  
+        # Skills Summary from extension
         skills = mantis_card.skills_summary
-        if skills.primary_skill_tags or skills.secondary_skill_tags or skills.skill_overview or skills.signature_abilities:
+        if (
+            skills.primary_skill_tags
+            or skills.secondary_skill_tags
+            or skills.skill_overview
+            or skills.signature_abilities
+        ):
             # Find the skills-summary extension for header info
             skills_ext = None
             for ext in mantis_card.agent_card.capabilities.extensions:
@@ -312,7 +316,7 @@ def display_agent_card_summary(agent_card, verbose: bool = False) -> None:
             skills_table = Table(title="🛠️ Skills Summary", show_header=True, header_style="bold magenta")
             skills_table.add_column("Primary Skills", style="green", width=50)
             skills_table.add_column("Secondary Skills", style="blue", width=50)
-            
+
             # Add skill tags rows
             primary_count = len(skills.primary_skill_tags) if skills.primary_skill_tags else 0
             secondary_count = len(skills.secondary_skill_tags) if skills.secondary_skill_tags else 0
@@ -328,10 +332,7 @@ def display_agent_card_summary(agent_card, verbose: bool = False) -> None:
             # Skills overview
             if skills.skill_overview:
                 overview_panel = Panel(
-                    skills.skill_overview,
-                    title="📋 Skills Overview",
-                    border_style="magenta",
-                    padding=(1, 2)
+                    skills.skill_overview, title="📋 Skills Overview", border_style="magenta", padding=(1, 2)
                 )
                 console.print(overview_panel)
 
@@ -339,10 +340,7 @@ def display_agent_card_summary(agent_card, verbose: bool = False) -> None:
             if skills.signature_abilities:
                 abilities_text = "\n".join([f"• {ability}" for ability in skills.signature_abilities])
                 abilities_panel = Panel(
-                    abilities_text,
-                    title="⭐ Signature Abilities", 
-                    border_style="bright_magenta",
-                    padding=(1, 2)
+                    abilities_text, title="⭐ Signature Abilities", border_style="bright_magenta", padding=(1, 2)
                 )
                 console.print(abilities_panel)
 
@@ -454,15 +452,18 @@ def inspect(
                     try:
                         # Use the same loading function as file inspect to get full MantisAgentCard
                         from ..agent.card import load_agent_card_from_json
-                        
+
                         agent_card = load_agent_card_from_json(agent_data)
-                        
+
                         if verbose:
-                            agent_name = agent_card.agent_card.name if hasattr(agent_card, "agent_card") else agent_card.name
+                            agent_name = (
+                                agent_card.agent_card.name if hasattr(agent_card, "agent_card") else agent_card.name
+                            )
                             console.print(f"[dim]✅ Agent found: {agent_name}[/dim]")
 
                         if format == "json":
                             from google.protobuf.json_format import MessageToJson
+
                             print(MessageToJson(agent_card, preserving_proto_field_name=True, indent=2))
                         else:
                             display_agent_card_summary(agent_card, verbose)
@@ -698,7 +699,7 @@ def serve_single(
 
         # Get agent card reference
         base_card = agent_card.agent_card if hasattr(agent_card, "agent_card") else agent_card
-        
+
         console.print(f"\n[bold green]🌟 Starting {base_card.name} A2A Agent Server[/bold green]")
         console.print(f"[cyan]💡 Serving {len(base_card.skills)} skills:[/cyan]")
         for skill in base_card.skills:
@@ -710,6 +711,7 @@ def serve_single(
 
         # Get model specification
         from ..config import DEFAULT_MODEL
+
         model_spec = model or DEFAULT_MODEL
 
         if verbose:
@@ -757,28 +759,38 @@ def serve_single(
             try:
                 # Convert protobuf AgentCard to dict
                 from google.protobuf.json_format import MessageToDict
+
                 agent_card_data = MessageToDict(base_card, preserving_proto_field_name=True)
 
                 # JSON-RPC 2.0 call to register agent
-                payload = {"jsonrpc": "2.0", "method": "register_agent", "params": {"agent_card": agent_card_data}, "id": 1}
+                payload = {
+                    "jsonrpc": "2.0",
+                    "method": "register_agent",
+                    "params": {"agent_card": agent_card_data},
+                    "id": 1,
+                }
 
                 async with aiohttp.ClientSession() as session:
                     async with session.post(
-                        f"{registry_url}/jsonrpc", 
-                        json=payload, 
-                        headers={"Content-Type": "application/json"}
+                        f"{registry_url}/jsonrpc", json=payload, headers={"Content-Type": "application/json"}
                     ) as response:
                         if response.status == 200:
                             result = await response.json()
                             if "error" in result:
-                                console.print(f"[red]❌ Registry error for {base_card.name}: {result['error']['message']}[/red]")
+                                console.print(
+                                    f"[red]❌ Registry error for {base_card.name}: {result['error']['message']}[/red]"
+                                )
                             elif "result" in result and result["result"].get("success"):
-                                console.print(f"[green]✅ Successfully registered {base_card.name} with registry[/green]")
+                                console.print(
+                                    f"[green]✅ Successfully registered {base_card.name} with registry[/green]"
+                                )
                             else:
                                 console.print(f"[yellow]⚠️ Unexpected registry response: {result}[/yellow]")
                         else:
                             response_text = await response.text()
-                            console.print(f"[yellow]⚠️ Registry registration returned HTTP {response.status} - {response_text[:200]}[/yellow]")
+                            console.print(
+                                f"[yellow]⚠️ Registry registration returned HTTP {response.status} - {response_text[:200]}[/yellow]"
+                            )
             except Exception as e:
                 console.print(f"[yellow]⚠️ Failed to register with registry: {e}[/yellow]")
                 console.print("[dim]Server will start anyway, but may not be discoverable[/dim]")
@@ -867,17 +879,18 @@ def serve_all(
 
                 # Load AgentCard from JSON (handles both formats)
                 from ..agent.card import load_agent_card_from_json
+
                 agent_card = load_agent_card_from_json(agent_data)
-                
+
                 # Get base card reference
                 base_card = agent_card.agent_card if hasattr(agent_card, "agent_card") else agent_card
-                
+
                 agent_key = base_card.name.lower().replace(" ", "-")
                 assigned_port = base_port + i
-                
+
                 # Update agent URL
                 base_card.url = f"http://{host}:{assigned_port}"
-                
+
                 agent_cards[agent_key] = agent_card
                 port_assignments[agent_key] = assigned_port
 
@@ -901,6 +914,7 @@ def serve_all(
 
         # Get model specification
         from ..config import DEFAULT_MODEL
+
         model_spec = model or DEFAULT_MODEL
 
         # Create server tasks
@@ -911,37 +925,47 @@ def serve_all(
         async def register_agent_with_registry(agent_card, registry_url: str):
             """Register an agent card with the A2A registry using JSON-RPC."""
             try:
-                # Get base card reference  
+                # Get base card reference
                 base_card = agent_card.agent_card if hasattr(agent_card, "agent_card") else agent_card
-                
+
                 # Convert protobuf AgentCard to dict with proper field naming
                 from google.protobuf.json_format import MessageToDict
+
                 agent_card_data = MessageToDict(base_card, preserving_proto_field_name=True)
-                
+
                 # JSON-RPC 2.0 call to register agent
-                payload = {"jsonrpc": "2.0", "method": "register_agent", "params": {"agent_card": agent_card_data}, "id": 1}
-                
+                payload = {
+                    "jsonrpc": "2.0",
+                    "method": "register_agent",
+                    "params": {"agent_card": agent_card_data},
+                    "id": 1,
+                }
+
                 async with aiohttp.ClientSession() as session:
                     async with session.post(
-                        f"{registry_url}/jsonrpc", 
-                        json=payload, 
-                        headers={"Content-Type": "application/json"}
+                        f"{registry_url}/jsonrpc", json=payload, headers={"Content-Type": "application/json"}
                     ) as response:
                         if response.status == 200:
                             result = await response.json()
                             if "error" in result:
-                                console.print(f"[red]❌ Registry error for {base_card.name}: {result['error']['message']}[/red]")
+                                console.print(
+                                    f"[red]❌ Registry error for {base_card.name}: {result['error']['message']}[/red]"
+                                )
                                 return False
                             elif "result" in result and result["result"].get("success"):
                                 if verbose:
-                                    console.print(f"[green]✅ Successfully registered {base_card.name} with registry[/green]")
+                                    console.print(
+                                        f"[green]✅ Successfully registered {base_card.name} with registry[/green]"
+                                    )
                                 return True
                             else:
                                 console.print(f"[yellow]⚠️ Unexpected response for {base_card.name}: {result}[/yellow]")
                                 return False
                         else:
                             response_text = await response.text()
-                            console.print(f"[yellow]⚠️ Failed to register {base_card.name}: HTTP {response.status} - {response_text[:200]}[/yellow]")
+                            console.print(
+                                f"[yellow]⚠️ Failed to register {base_card.name}: HTTP {response.status} - {response_text[:200]}[/yellow]"
+                            )
                             return False
             except Exception as e:
                 console.print(f"[yellow]⚠️ Error registering {base_card.name} with registry: {e}[/yellow]")
@@ -950,9 +974,7 @@ def serve_all(
         async def run_server(app, port, name):
             """Run a single FastA2A server"""
             try:
-                config = uvicorn.Config(
-                    app, host=host, port=port, log_level="info" if verbose else "warning"
-                )
+                config = uvicorn.Config(app, host=host, port=port, log_level="info" if verbose else "warning")
                 server = uvicorn.Server(config)
                 if verbose:
                     console.print(f"[dim]Starting {name} server on http://{host}:{port}[/dim]")
@@ -965,13 +987,13 @@ def serve_all(
             # Create FastA2A apps for each agent
             servers = []
             registration_tasks = []
-            
+
             for agent_key, agent_card in agent_cards.items():
                 port = port_assignments[agent_key]
-                
+
                 # Get base card reference
                 base_card = agent_card.agent_card if hasattr(agent_card, "agent_card") else agent_card
-                
+
                 if verbose:
                     console.print(f"[dim]Creating server for {base_card.name} on port {port}[/dim]")
 
@@ -1007,33 +1029,35 @@ def serve_all(
             # Register agents in batches to avoid thundering herd
             if verbose:
                 console.print(f"[dim]Registering {len(registration_tasks)} agents with registry in batches[/dim]")
-            
+
             batch_size = 10  # Register 10 agents at a time
             batch_delay = 2.0  # Wait 2 seconds between batches
             successful_registrations = 0
-            
+
             for i in range(0, len(registration_tasks), batch_size):
-                batch = registration_tasks[i:i + batch_size]
+                batch = registration_tasks[i : i + batch_size]
                 batch_num = (i // batch_size) + 1
                 total_batches = (len(registration_tasks) + batch_size - 1) // batch_size
-                
+
                 if verbose:
                     console.print(f"[dim]Registering batch {batch_num}/{total_batches} ({len(batch)} agents)[/dim]")
-                
+
                 batch_results = await asyncio.gather(*batch, return_exceptions=True)
                 batch_success = sum(1 for result in batch_results if result is True)
                 successful_registrations += batch_success
-                
+
                 if verbose:
                     console.print(f"[dim]Batch {batch_num} complete: {batch_success}/{len(batch)} successful[/dim]")
-                
+
                 # Wait before next batch (except for the last batch)
                 if i + batch_size < len(registration_tasks):
                     if verbose:
                         console.print(f"[dim]Waiting {batch_delay}s before next batch...[/dim]")
                     await asyncio.sleep(batch_delay)
-            
-            console.print(f"[green]✅ Successfully registered {successful_registrations}/{len(agent_cards)} agents[/green]")
+
+            console.print(
+                f"[green]✅ Successfully registered {successful_registrations}/{len(agent_cards)} agents[/green]"
+            )
 
             # Start all servers
             console.print(f"[dim]Starting {len(servers)} servers...[/dim]")
