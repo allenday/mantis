@@ -10,6 +10,16 @@ from ..proto.mantis.v1 import mantis_core_pb2
 from ..proto.mantis.v1.prompt_composition_pb2 import ExecutionContext as ProtoExecutionContext, SimulationContext
 from ..config import DEFAULT_MODEL
 
+# Observability imports
+try:
+    from ..observability import (
+        ExecutionTrace, ExecutionContext, ExecutionStatus,
+        get_structured_logger
+    )
+    OBSERVABILITY_AVAILABLE = True
+except ImportError:
+    OBSERVABILITY_AVAILABLE = False
+
 
 class ExecutionStrategy(ABC):
     """Abstract base class for execution strategies."""
@@ -34,26 +44,65 @@ class DirectExecutor(ExecutionStrategy):
         self._model_cache: Dict[str, Any] = {}
         self._tools: Dict[str, Any] = {}
         self._initialize_tools()
+        
+        # Observability logger
+        if OBSERVABILITY_AVAILABLE:
+            self.obs_logger = get_structured_logger("direct_executor")
+        else:
+            self.obs_logger = None
 
     async def execute_agent(
         self, simulation_input: mantis_core_pb2.SimulationInput, agent_spec: mantis_core_pb2.AgentSpec, agent_index: int
     ) -> mantis_core_pb2.AgentResponse:
         """Execute agent directly using pydantic-ai with modular prompt composition."""
+        
+        # Create execution trace
+        if OBSERVABILITY_AVAILABLE and self.obs_logger:
+            trace = ExecutionTrace(
+                operation="execute_agent",
+                component="DirectExecutor", 
+                metadata={
+                    "agent_index": agent_index,
+                    "query": simulation_input.query[:200] + "..." if len(simulation_input.query) > 200 else simulation_input.query,
+                    "max_depth": simulation_input.max_depth
+                }
+            )
+            
+            with ExecutionContext(trace):
+                self.obs_logger.info(f"Starting agent execution (index: {agent_index})")
+                try:
+                    result = await self._execute_agent_impl(simulation_input, agent_spec, agent_index)
+                    trace.mark_complete(ExecutionStatus.SUCCESS)
+                    self.obs_logger.info(f"Completed agent execution (index: {agent_index})")
+                    return result
+                except Exception as e:
+                    trace.mark_complete(ExecutionStatus.FAILED, str(e))
+                    self.obs_logger.error(f"Failed agent execution (index: {agent_index}): {e}", exc_info=True)
+                    raise
+        else:
+            return await self._execute_agent_impl(simulation_input, agent_spec, agent_index)
+    
+    async def _execute_agent_impl(
+        self, simulation_input: mantis_core_pb2.SimulationInput, agent_spec: mantis_core_pb2.AgentSpec, agent_index: int
+    ) -> mantis_core_pb2.AgentResponse:
+        """Internal implementation of agent execution."""
         from ..prompts import PromptCompositionEngine, CompositionStrategy
         from ..prompts.variables import create_composition_context
         from ..llm.structured_extractor import StructuredExtractor
 
         try:
-            # For now, create minimal agent card since agent_card_path is not in protobuf
-            # TODO: Add agent card loading mechanism to AgentSpec or pass separately
-            mantis_card = self._create_minimal_agent_card()
+            # Try to use default base agent, fallback to minimal
+            from ..config import get_default_base_agent
+            mantis_card = get_default_base_agent()
+            if not mantis_card:
+                mantis_card = self._create_minimal_agent_card()
 
             # Determine execution context and role using proto
             execution_context = ProtoExecutionContext()
-            execution_context.current_depth = agent_spec.current_depth
+            execution_context.current_depth = 0  # Always start at depth 0 for now
             execution_context.max_depth = simulation_input.max_depth
             execution_context.team_size = 1
-            execution_context.assigned_role = self._determine_agent_role(mantis_card, agent_spec)
+            execution_context.assigned_role = self._determine_agent_role(mantis_card, execution_context)
             execution_context.agent_index = agent_index
 
             # Compose prompt using modular system
@@ -69,13 +118,42 @@ class DirectExecutor(ExecutionStrategy):
                 context=context, strategy=CompositionStrategy.BLENDED
             )
 
-            # Execute using structured extractor (LLM integration)
+            # Log prompt composition details
+            if OBSERVABILITY_AVAILABLE and self.obs_logger:
+                self.obs_logger.info(
+                    "Prompt composition completed",
+                    structured_data={
+                        "modules_used": [m.get_module_name() for m in composed_prompt.modules_used],
+                        "variables_resolved": len(composed_prompt.variables_resolved),
+                        "composition_strategy": composed_prompt.strategy.value,
+                        "final_prompt_length": len(composed_prompt.final_prompt)
+                    }
+                )
+
+            # Execute using structured extractor with tools (LLM integration)
             extractor = StructuredExtractor()
 
             # Use the composed prompt as the system prompt
-            model = simulation_input.model if simulation_input.model else DEFAULT_MODEL
-            result = await extractor.extract_text_response(
-                prompt=composed_prompt.final_prompt, query=simulation_input.query, model=model
+            model = simulation_input.model_spec.model if simulation_input.model_spec and simulation_input.model_spec.model else DEFAULT_MODEL
+            
+            # Log model and tools being used
+            if OBSERVABILITY_AVAILABLE and self.obs_logger:
+                self.obs_logger.info(
+                    "Starting LLM execution with tools",
+                    structured_data={
+                        "model": model,
+                        "available_tools": list(self._tools.keys()),
+                        "prompt_length": len(composed_prompt.final_prompt),
+                        "query_length": len(simulation_input.query)
+                    }
+                )
+            
+            # Pass tools to the extractor for tool-enabled execution
+            result = await extractor.extract_text_response_with_tools(
+                prompt=composed_prompt.final_prompt, 
+                query=simulation_input.query, 
+                model=model,
+                tools=self._tools
             )
 
             # Create response
@@ -96,74 +174,53 @@ class DirectExecutor(ExecutionStrategy):
                 # Metadata field doesn't exist in this protobuf version
                 pass
 
+            # Log successful completion
+            if OBSERVABILITY_AVAILABLE and self.obs_logger:
+                self.obs_logger.info(
+                    "Agent execution completed successfully",
+                    structured_data={
+                        "response_length": len(result),
+                        "agent_index": agent_index
+                    }
+                )
+
             return response
 
         except Exception as e:
-            # Fallback to simple execution
-            response = mantis_core_pb2.AgentResponse()
-            response.text_response = (
-                f"Error in agent execution: {str(e)}\n\nFallback response for query: {simulation_input.query}"
-            )
-            response.output_modes.append("text/markdown")
-            return response
+            # Fail fast and clearly - no fallback
+            if OBSERVABILITY_AVAILABLE and self.obs_logger:
+                self.obs_logger.error(f"DirectExecutor failed: {str(e)}", exc_info=True)
+            raise Exception(f"DirectExecutor failed: {str(e)}") from e
 
     def get_strategy_type(self) -> mantis_core_pb2.ExecutionStrategy:
         return mantis_core_pb2.EXECUTION_STRATEGY_DIRECT
 
     def _initialize_tools(self):
-        """Initialize available tools for agent execution."""
+        """Initialize available tools for agent execution using native pydantic-ai tools."""
         try:
-            from ..tools.web_fetch import WebFetchTool, WebFetchConfig
-            from ..tools.web_search import WebSearchTool, WebSearchConfig
-            from ..tools.git_operations import GitOperationsTool, GitOperationsConfig
+            # Import native pydantic-ai tool functions directly
+            from ..tools.agent_registry import registry_search_agents, registry_get_agent_details
+            from ..tools.web_fetch import web_fetch_url
+            from ..tools.web_search import web_search
+            from ..tools.git_operations import git_analyze_repository
+            
+            # Add tools directly to our tools dictionary
+            self._tools.update({
+                'registry_search_agents': registry_search_agents,
+                'registry_get_agent_details': registry_get_agent_details,
+                'web_fetch_url': web_fetch_url,
+                'web_search': web_search,
+                'git_analyze_repository': git_analyze_repository,
+            })
+            
+            # Log what tools we loaded
+            if OBSERVABILITY_AVAILABLE and hasattr(self, 'obs_logger') and self.obs_logger:
+                self.obs_logger.info(f"Initialized {len(self._tools)} native pydantic-ai tools: {list(self._tools.keys())}")
 
-            # Initialize WebFetchTool with secure defaults
-            web_fetch_config = WebFetchConfig(
-                timeout=30.0,
-                user_agent="Mantis-Agent/1.0 (DirectExecutor)",
-                rate_limit_requests=60,
-                rate_limit_window=60,
-                verify_ssl=True,
-                max_content_size=10 * 1024 * 1024,  # 10MB limit
-            )
-            self._tools["web_fetch"] = WebFetchTool(web_fetch_config)
-
-            # Initialize WebSearchTool
-            web_search_config = WebSearchConfig(
-                max_results=10,
-                timeout=30.0,
-                rate_limit_requests=30,
-                rate_limit_window=60,
-                enable_suggestions=True,
-            )
-            self._tools["web_search"] = WebSearchTool(web_search_config)
-
-            # Initialize GitOperationsTool with secure defaults
-            git_config = GitOperationsConfig(
-                max_repo_size_mb=100.0,
-                max_files=1000,
-                allowed_schemes=["https"],
-                blocked_domains=["localhost", "127.0.0.1", "0.0.0.0", "192.168.", "10.", "172."],
-                clone_timeout=300.0,
-                temp_cleanup=True,
-                max_search_results=50,
-            )
-            self._tools["git_operations"] = GitOperationsTool(git_config)
-
-            # Initialize RegistryTool
-            from ..tools.registry_access import RegistryTool, RegistryConfig
-            from ..config import DEFAULT_REGISTRY
-            registry_config = RegistryConfig(
-                base_url=DEFAULT_REGISTRY,
-                timeout=30.0,
-                cache_ttl=300,  # 5 minutes
-                rate_limit_requests=30,
-                rate_limit_window=60,
-            )
-            self._tools["registry_tool"] = RegistryTool(registry_config)
-
-        except ImportError:
+        except ImportError as e:
             # Tools not available, continue without them
+            if OBSERVABILITY_AVAILABLE and hasattr(self, 'obs_logger') and self.obs_logger:
+                self.obs_logger.warning(f"Failed to load pydantic tools: {e}")
             pass
 
     def get_available_tools(self) -> Dict[str, Any]:
@@ -187,13 +244,13 @@ class DirectExecutor(ExecutionStrategy):
         mantis_card.agent_card.CopyFrom(agent_card)
         return mantis_card
 
-    def _determine_agent_role(self, mantis_card, simulation_input) -> str:
+    def _determine_agent_role(self, mantis_card, execution_context) -> str:
         """Determine the agent's role based on context and capabilities."""
         # For now, use simple heuristics
         # In the future, this could use the role assignment engine
 
-        current_depth = simulation_input.current_depth
-        max_depth = simulation_input.max_depth
+        current_depth = execution_context.current_depth
+        max_depth = execution_context.max_depth
 
         # Simple role assignment logic
         if current_depth == 0:
@@ -275,6 +332,10 @@ class SimulationOrchestrator:
 
         if user_request.HasField("max_depth"):
             simulation_input.max_depth = user_request.max_depth
+        else:
+            # Use default max_depth from config
+            from ..config import DEFAULT_MAX_DEPTH
+            simulation_input.max_depth = DEFAULT_MAX_DEPTH
 
         # Copy agent specifications
         for agent_spec in user_request.agents:
@@ -369,11 +430,10 @@ class SimulationOrchestrator:
                 response = await strategy.execute_agent(simulation_input, agent_spec, i)
                 agent_responses.append(response)
             except Exception as e:
-                # Create error response for this agent
-                error_response = mantis_core_pb2.AgentResponse()
-                error_response.text_response = f"Agent {i} failed: {str(e)}"
-                error_response.output_modes.append("text/plain")
-                agent_responses.append(error_response)
+                # Re-raise the exception with full traceback for debugging
+                import traceback
+                traceback.print_exc()
+                raise Exception(f"Agent {i} execution failed: {str(e)}") from e
 
         # Create simulation output
         simulation_output = mantis_core_pb2.SimulationOutput()
