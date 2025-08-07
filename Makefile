@@ -1,4 +1,4 @@
-.PHONY: help install install-dev proto check clean lint format typecheck test ci build verify-package publish docs-install docs-build docs-serve
+.PHONY: help install install-dev proto check clean lint format typecheck test ci build verify-package publish docs-install docs-build docs-serve generate-cards
 
 # Default target
 help:
@@ -19,6 +19,7 @@ help:
 	@echo "  docs-install - Install documentation dependencies"
 	@echo "  docs-build   - Build documentation"
 	@echo "  docs-serve   - Serve documentation locally"
+	@echo "  generate-cards - Generate agent cards from all prompts in agents/prompts/"
 
 # Python and venv setup
 PYTHON := python3
@@ -100,3 +101,24 @@ docs-build: docs-install
 
 docs-serve: docs-install
 	$(VENV)/bin/mkdocs serve --config-file mkdocs.yml
+
+# Generate agent cards from all prompts using dependency-based regeneration
+generate-cards:
+	@echo "Generating agent cards from agents/prompts/ to agents/cards/..."
+	@find agents/prompts -name "*.md" -type f | while read prompt_file; do \
+		rel_path=$$(echo "$$prompt_file" | sed 's|agents/prompts/||'); \
+		output_file="agents/cards/$$(echo "$$rel_path" | sed 's|\.md$$|.json|')"; \
+		$(MAKE) "$$output_file"; \
+	done
+	@echo "Agent card generation complete!"
+
+# Pattern rule for generating individual agent cards with dependency checking
+agents/cards/%.json: agents/prompts/%.md
+	@echo "Generating: $@ from $<"
+	@mkdir -p $(dir $@)
+	@if PYTHONPATH=src $(VENV_PYTHON) -m mantis agent generate --model claude-opus-4-0 --input "$<" --output "$@"; then \
+		echo "✅ Generated: $@"; \
+	else \
+		echo "❌ Failed to generate: $@"; \
+		exit 1; \
+	fi
