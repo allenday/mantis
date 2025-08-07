@@ -211,6 +211,7 @@ class DirectExecutor(ExecutionStrategy):
                 gitlab_get_issue,
             )
             from ..tools.jira_integration import jira_list_projects, jira_list_issues, jira_create_issue, jira_get_issue
+            from ..tools.divination import get_random_number, draw_tarot_card, cast_i_ching_trigram, draw_multiple_tarot_cards, flip_coin
 
             # Add tools directly to our tools dictionary
             self._tools.update(
@@ -228,6 +229,11 @@ class DirectExecutor(ExecutionStrategy):
                     "jira_list_issues": jira_list_issues,
                     "jira_create_issue": jira_create_issue,
                     "jira_get_issue": jira_get_issue,
+                    "get_random_number": get_random_number,
+                    "draw_tarot_card": draw_tarot_card,
+                    "cast_i_ching_trigram": cast_i_ching_trigram,
+                    "draw_multiple_tarot_cards": draw_multiple_tarot_cards,
+                    "flip_coin": flip_coin,
                 }
             )
 
