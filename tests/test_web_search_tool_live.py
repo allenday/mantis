@@ -4,6 +4,7 @@ Tests against real search engines - fail fast if they don't work.
 """
 
 import pytest
+import os
 
 from mantis.tools.web_search import web_search
 
@@ -11,6 +12,7 @@ from mantis.tools.web_search import web_search
 class TestWebSearchToolLive:
     """Live integration tests for web_search function."""
 
+    @pytest.mark.skipif(not os.getenv('ANTHROPIC_API_KEY'), reason="ANTHROPIC_API_KEY not set")
     @pytest.mark.asyncio
     async def test_search_python_live(self):
         """Test searching for Python - live data."""
@@ -25,6 +27,7 @@ class TestWebSearchToolLive:
         assert "python" in result.lower()
         assert len(result) > 100  # Should have substantial content
 
+    @pytest.mark.skipif(not os.getenv('ANTHROPIC_API_KEY'), reason="ANTHROPIC_API_KEY not set")
     @pytest.mark.asyncio
     async def test_search_github_live(self):
         """Test searching for GitHub - live data."""
@@ -39,6 +42,7 @@ class TestWebSearchToolLive:
         assert "github" in result.lower()
         assert len(result) > 100  # Should have substantial content
 
+    @pytest.mark.skipif(not os.getenv('ANTHROPIC_API_KEY'), reason="ANTHROPIC_API_KEY not set")
     @pytest.mark.asyncio
     async def test_search_empty_query_fails_fast(self):
         """Test that empty queries fail fast."""

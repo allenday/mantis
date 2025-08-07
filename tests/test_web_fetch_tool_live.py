@@ -4,6 +4,7 @@ Tests against real URLs - fail fast if they don't work.
 """
 
 import pytest
+import os
 
 from mantis.tools.web_fetch import web_fetch_url
 
@@ -11,6 +12,7 @@ from mantis.tools.web_fetch import web_fetch_url
 class TestWebFetchToolLive:
     """Live integration tests for web_fetch_url function."""
 
+    @pytest.mark.skipif(not os.getenv('ANTHROPIC_API_KEY'), reason="ANTHROPIC_API_KEY not set")
     @pytest.mark.asyncio
     async def test_fetch_github_api(self):
         """Test fetching GitHub API - live data."""
@@ -20,6 +22,7 @@ class TestWebFetchToolLive:
         assert "failed" not in result.lower()
         assert len(result) > 10  # Should have substantial content
 
+    @pytest.mark.skipif(not os.getenv('ANTHROPIC_API_KEY'), reason="ANTHROPIC_API_KEY not set")
     @pytest.mark.asyncio
     async def test_fetch_httpbin_json(self):
         """Test fetching JSON from httpbin - live data."""
@@ -32,6 +35,7 @@ class TestWebFetchToolLive:
         assert "error" not in result.lower()
         assert ('"slideshow"' in result or '"title"' in result)
 
+    @pytest.mark.skipif(not os.getenv('ANTHROPIC_API_KEY'), reason="ANTHROPIC_API_KEY not set")
     @pytest.mark.asyncio
     async def test_fetch_invalid_url_fails_fast(self):
         """Test that invalid URLs fail fast."""

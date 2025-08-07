@@ -3,6 +3,7 @@ Tests for SimulationOrchestrator.
 """
 
 import pytest
+import os
 from mantis.core import SimulationOrchestrator, UserRequestBuilder
 from mantis.proto.mantis.v1 import mantis_core_pb2
 
@@ -135,6 +136,7 @@ class TestSimulationOrchestrator:
         assert mantis_core_pb2.EXECUTION_STRATEGY_A2A in strategies
         assert len(strategies) == 2
 
+    @pytest.mark.skipif(not os.getenv('ANTHROPIC_API_KEY'), reason="ANTHROPIC_API_KEY not set")
     @pytest.mark.asyncio
     async def test_direct_executor(self):
         """Test DirectExecutor strategy."""

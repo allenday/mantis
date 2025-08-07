@@ -4,6 +4,7 @@ Tests against real repositories - fail fast if they don't work.
 """
 
 import pytest
+import os
 
 from mantis.tools.git_operations import git_analyze_repository
 
@@ -11,6 +12,7 @@ from mantis.tools.git_operations import git_analyze_repository
 class TestGitOperationsToolLive:
     """Live integration tests for git_analyze_repository function."""
 
+    @pytest.mark.skipif(not os.getenv('ANTHROPIC_API_KEY'), reason="ANTHROPIC_API_KEY not set")
     @pytest.mark.asyncio
     async def test_analyze_small_public_repo_live(self):
         """Test analyzing a small public repository - live data."""
@@ -24,6 +26,7 @@ class TestGitOperationsToolLive:
         assert "hello-world" in result.lower()
         assert len(result) > 50  # Should have substantial analysis
 
+    @pytest.mark.skipif(not os.getenv('ANTHROPIC_API_KEY'), reason="ANTHROPIC_API_KEY not set")
     @pytest.mark.asyncio 
     async def test_analyze_nonexistent_repo_fails_fast(self):
         """Test that nonexistent repos fail fast."""
