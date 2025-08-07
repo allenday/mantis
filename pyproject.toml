@@ -23,6 +23,7 @@ dependencies = [
     "uvicorn>=0.24.0",
     "fasta2a>=0.0.1",
     "protoc-gen-validate>=1.2.0",
+    "a2a-registry==0.1.4",
 ]
 
 [project.optional-dependencies]
