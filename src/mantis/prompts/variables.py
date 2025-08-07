@@ -99,30 +99,17 @@ def _resolve_template_variables(context: CompositionContext) -> Dict[str, Any]:
 
     variables["persona.original_content"] = original_content
 
-    # Role context variables - handle both dict and proto ExecutionContext
+    # Role context variables - using protobuf ExecutionContext
     exec_ctx = context.execution_context
-    if isinstance(exec_ctx, dict):
-        # Dict version (legacy)
-        variables["role.assigned"] = exec_ctx.get("assigned_role", "agent")
-        variables["role.current_depth"] = exec_ctx.get("current_depth", 0)
-        variables["role.max_depth"] = exec_ctx.get("max_depth", 3)
-        variables["role.is_leader"] = exec_ctx.get("assigned_role") == "leader"
-        variables["role.is_follower"] = exec_ctx.get("assigned_role") == "follower"
-        variables["role.is_narrator"] = exec_ctx.get("assigned_role") == "narrator"
-        variables["task.parent_task"] = exec_ctx.get("parent_task", "")
-        variables["team.size"] = exec_ctx.get("team_size", 1)
-        variables["team.available_agents"] = exec_ctx.get("available_agents", [])
-    else:
-        # Proto ExecutionContext version
-        variables["role.assigned"] = getattr(exec_ctx, "assigned_role", "agent")
-        variables["role.current_depth"] = getattr(exec_ctx, "current_depth", 0)
-        variables["role.max_depth"] = getattr(exec_ctx, "max_depth", 3)
-        variables["role.is_leader"] = getattr(exec_ctx, "assigned_role", "") == "leader"
-        variables["role.is_follower"] = getattr(exec_ctx, "assigned_role", "") == "follower"
-        variables["role.is_narrator"] = getattr(exec_ctx, "assigned_role", "") == "narrator"
-        variables["task.parent_task"] = getattr(exec_ctx, "parent_task", "")
-        variables["team.size"] = getattr(exec_ctx, "team_size", 1)
-        variables["team.available_agents"] = list(getattr(exec_ctx, "available_agents", []))
+    variables["role.assigned"] = getattr(exec_ctx, "assigned_role", "agent")
+    variables["role.current_depth"] = getattr(exec_ctx, "current_depth", 0)
+    variables["role.max_depth"] = getattr(exec_ctx, "max_depth", 3)
+    variables["role.is_leader"] = getattr(exec_ctx, "assigned_role", "") == "leader"
+    variables["role.is_follower"] = getattr(exec_ctx, "assigned_role", "") == "follower"
+    variables["role.is_narrator"] = getattr(exec_ctx, "assigned_role", "") == "narrator"
+    variables["task.parent_task"] = getattr(exec_ctx, "parent_task", "")
+    variables["team.size"] = getattr(exec_ctx, "team_size", 1)
+    variables["team.available_agents"] = list(getattr(exec_ctx, "available_agents", []))
 
     # Task context variables
     if hasattr(context.simulation_input, "query"):

@@ -10,13 +10,23 @@ for persona extraction, prompt composition, and other structured data tasks.
 import logging
 from typing import TypeVar, Type, Optional, Any
 
-# Load environment variables from .env file
+# Load environment variables early
 try:
     from dotenv import load_dotenv
-
     load_dotenv()
 except ImportError:
-    pass  # dotenv not available, skip
+    pass
+
+# Observability imports
+try:
+    from ..observability import (
+        trace_llm_interaction, complete_llm_interaction,
+        get_structured_logger
+    )
+    OBSERVABILITY_AVAILABLE = True
+except ImportError:
+    OBSERVABILITY_AVAILABLE = False
+
 
 # Handle pydantic-ai imports gracefully
 try:
@@ -31,6 +41,12 @@ except ImportError:
     Model = Any  # type: ignore
 
 logger = logging.getLogger(__name__)
+
+# Observability logger
+if OBSERVABILITY_AVAILABLE:
+    obs_logger = get_structured_logger("structured_extractor")
+else:
+    obs_logger = None
 
 T = TypeVar("T")  # Generic type for structured data
 
@@ -254,8 +270,25 @@ class StructuredExtractor:
         Returns:
             Text response from the LLM
         """
+        # Determine final model spec
+        final_model = model or self.model_spec
+        provider = final_model.split(':')[0] if ':' in final_model else 'unknown'
+        
+        # Start LLM interaction tracing if observability available
+        if OBSERVABILITY_AVAILABLE and obs_logger:
+            interaction = trace_llm_interaction(
+                model_spec=final_model,
+                provider=provider, 
+                system_prompt=prompt,
+                user_prompt=query
+            )
+            obs_logger.info(f"Starting LLM text extraction with {final_model}")
+        else:
+            interaction = None
+        
         try:
             # Override model if specified
+            original_model = None
             if model:
                 original_model = self.model_spec
                 self.model_spec = model
@@ -268,17 +301,112 @@ class StructuredExtractor:
 
             # Run and get text response
             result = await agent.run(query)
+            response_text = str(result.data)
+
+            # Complete LLM interaction tracing
+            if interaction and obs_logger:
+                complete_llm_interaction(interaction, response_text)
+                obs_logger.info(f"Completed LLM text extraction: {len(response_text)} chars")
 
             # Restore original model if we changed it
-            if model:
+            if original_model:
                 self.model_spec = original_model
                 self._model_cache = None
 
-            return str(result.data)
+            return response_text
 
         except Exception as e:
+            # Complete LLM interaction with error
+            if interaction and obs_logger:
+                complete_llm_interaction(interaction, "", error=str(e))
+                obs_logger.error(f"LLM text extraction failed: {e}")
+            
             logger.error(f"Text response extraction failed: {e}")
             raise StructuredExtractionError(f"Text response extraction failed: {e}")
+
+    async def extract_text_response_with_tools(
+        self, prompt: str, query: str, model: Optional[str] = None, tools: Optional[dict] = None
+    ) -> str:
+        """
+        Extract a text response with tool support enabled.
+
+        Args:
+            prompt: The composed system prompt
+            query: The user query
+            model: Optional model override
+            tools: Dictionary of native pydantic-ai tool functions
+
+        Returns:
+            Text response from the LLM
+        """
+        # Determine final model spec
+        final_model = model or self.model_spec
+        provider = final_model.split(':')[0] if ':' in final_model else 'unknown'
+        
+        # Start LLM interaction tracing if observability available
+        if OBSERVABILITY_AVAILABLE and obs_logger:
+            interaction = trace_llm_interaction(
+                model_spec=final_model,
+                provider=provider, 
+                system_prompt=prompt,
+                user_prompt=query,
+                tools_available=list(tools.keys()) if tools else []
+            )
+            obs_logger.info(f"Starting tool-enabled LLM text extraction with {final_model}")
+        else:
+            interaction = None
+        
+        try:
+            # Override model if specified
+            original_model = None
+            if model:
+                original_model = self.model_spec
+                self.model_spec = model
+                self._model_cache = None  # Clear cache to use new model
+
+            model_instance = self._create_model()
+
+            # Tools are already native pydantic-ai functions - use them directly
+            tool_functions = []
+            if tools:
+                # Tools should already be functions, extract them from the dictionary
+                tool_functions = list(tools.values())
+                if OBSERVABILITY_AVAILABLE and obs_logger:
+                    obs_logger.info(f"Using {len(tool_functions)} native pydantic-ai tools: {list(tools.keys())}")
+
+            # Create agent with native tools
+            agent = Agent(
+                model=model_instance, 
+                system_prompt=prompt,
+                tools=tool_functions if tool_functions else None
+            )
+
+            # Run and get text response
+            result = await agent.run(query)
+            response_text = str(result.data)
+
+            # Complete LLM interaction tracing
+            if interaction and obs_logger:
+                complete_llm_interaction(interaction, response_text)
+                obs_logger.info(f"Completed tool-enabled LLM text extraction: {len(response_text)} chars")
+
+            # Restore original model if we changed it
+            if original_model:
+                self.model_spec = original_model
+                self._model_cache = None
+
+            return response_text
+
+        except Exception as e:
+            # Complete LLM interaction with error
+            if interaction and obs_logger:
+                complete_llm_interaction(interaction, "", error=str(e))
+                obs_logger.error(f"Tool-enabled LLM text extraction failed: {e}")
+            
+            logger.error(f"Tool-enabled text response extraction failed: {e}")
+            raise StructuredExtractionError(f"Tool-enabled text response extraction failed: {e}")
+
+# Legacy conversion methods removed - we now use native pydantic-ai tools directly
 
     def _protobuf_to_pydantic(self, protobuf_type: Type) -> Type:
         """Convert protobuf message class to equivalent pydantic model."""
