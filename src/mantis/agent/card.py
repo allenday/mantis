@@ -512,6 +512,37 @@ def get_parsed_extensions(agent_card) -> Dict[str, Any]:
     return parsed_extensions
 
 
+def validate_mantis_agent_card(mantis_card: "MantisAgentCard") -> None:
+    """
+    Validate that a MantisAgentCard has all required extensions.
+    
+    Args:
+        mantis_card: MantisAgentCard to validate
+        
+    Raises:
+        ValueError: If required extensions are missing
+    """
+    missing_extensions = []
+    
+    # Check for required extension data
+    if not mantis_card.persona_characteristics.core_principles and not mantis_card.persona_characteristics.communication_style:
+        missing_extensions.append("PersonaCharacteristics")
+    
+    if not mantis_card.competency_scores.competency_scores and not mantis_card.competency_scores.role_adaptation.leader_score:
+        missing_extensions.append("CompetencyScores")
+    
+    if not mantis_card.domain_expertise.primary_domains and not mantis_card.domain_expertise.methodologies:
+        missing_extensions.append("DomainExpertise")
+    
+    if not mantis_card.skills_summary.primary_skill_tags and not mantis_card.skills_summary.skill_overview:
+        missing_extensions.append("SkillsSummary")
+    
+    if missing_extensions:
+        raise ValueError(f"MantisAgentCard validation failed: Missing required extensions: {missing_extensions}. "
+                        f"A valid MantisAgentCard must have all 4 extensions: PersonaCharacteristics, "
+                        f"CompetencyScores, DomainExpertise, and SkillsSummary.")
+
+
 def load_agent_card_from_json(agent_data: Dict[str, Any]) -> "MantisAgentCard":
     """
     Load AgentCard from JSON data, handling both MantisAgentCard and basic AgentCard formats.
@@ -521,13 +552,18 @@ def load_agent_card_from_json(agent_data: Dict[str, Any]) -> "MantisAgentCard":
 
     Returns:
         MantisAgentCard object
+        
+    Raises:
+        ValueError: If the card is missing required extensions
     """
     from ..proto.mantis.v1.mantis_persona_pb2 import MantisAgentCard
     from google.protobuf.json_format import ParseDict
 
     # If this has persona data, it's a MantisAgentCard JSON - load directly
     if "persona_characteristics" in agent_data or "competency_scores" in agent_data or "domain_expertise" in agent_data:
-        return ParseDict(agent_data, MantisAgentCard(), ignore_unknown_fields=True)
+        mantis_card = ParseDict(agent_data, MantisAgentCard(), ignore_unknown_fields=True)
+        validate_mantis_agent_card(mantis_card)
+        return mantis_card
 
     # Otherwise, load as basic AgentCard and convert
     base_card = json_to_protobuf_agent_card(agent_data)
@@ -557,17 +593,36 @@ def ensure_mantis_agent_card(agent_card) -> "MantisAgentCard":
 
     parsed_extensions = get_parsed_extensions(agent_card)
 
+    # Track which required extensions we've found
+    required_extensions = {
+        "PersonaCharacteristics": False,
+        "CompetencyScores": False, 
+        "DomainExpertise": False,
+        "SkillsSummary": False
+    }
+
     for uri, parsed_data in parsed_extensions.items():
         message_type_name = PERSONA_EXTENSION_REGISTRY.get(uri)
 
         if message_type_name == "PersonaCharacteristics":
             mantis_card.persona_characteristics.CopyFrom(parsed_data)
+            required_extensions["PersonaCharacteristics"] = True
         elif message_type_name == "CompetencyScores":
             mantis_card.competency_scores.CopyFrom(parsed_data)
+            required_extensions["CompetencyScores"] = True
         elif message_type_name == "DomainExpertise":
             mantis_card.domain_expertise.CopyFrom(parsed_data)
+            required_extensions["DomainExpertise"] = True
         elif message_type_name == "SkillsSummary":
             mantis_card.skills_summary.CopyFrom(parsed_data)
+            required_extensions["SkillsSummary"] = True
+
+    # Validate that all required extensions are present
+    missing_extensions = [ext for ext, found in required_extensions.items() if not found]
+    if missing_extensions:
+        raise ValueError(f"MantisAgentCard validation failed: Missing required extensions: {missing_extensions}. "
+                        f"A valid MantisAgentCard must have all 4 extensions: PersonaCharacteristics, "
+                        f"CompetencyScores, DomainExpertise, and SkillsSummary.")
 
     mantis_card.persona_title = agent_card.name
 
