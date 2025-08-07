@@ -204,6 +204,8 @@ class DirectExecutor(ExecutionStrategy):
             from ..tools.web_fetch import web_fetch_url
             from ..tools.web_search import web_search
             from ..tools.git_operations import git_analyze_repository
+            from ..tools.gitlab_integration import gitlab_list_projects, gitlab_list_issues, gitlab_create_issue, gitlab_get_issue
+            from ..tools.jira_integration import jira_list_projects, jira_list_issues, jira_create_issue, jira_get_issue
 
             # Add tools directly to our tools dictionary
             self._tools.update(
@@ -213,6 +215,14 @@ class DirectExecutor(ExecutionStrategy):
                     "web_fetch_url": web_fetch_url,
                     "web_search": web_search,
                     "git_analyze_repository": git_analyze_repository,
+                    "gitlab_list_projects": gitlab_list_projects,
+                    "gitlab_list_issues": gitlab_list_issues,
+                    "gitlab_create_issue": gitlab_create_issue,
+                    "gitlab_get_issue": gitlab_get_issue,
+                    "jira_list_projects": jira_list_projects,
+                    "jira_list_issues": jira_list_issues,
+                    "jira_create_issue": jira_create_issue,
+                    "jira_get_issue": jira_get_issue,
                 }
             )
 
