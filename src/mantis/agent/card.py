@@ -64,13 +64,12 @@ def _create_base_agent_card(name: str, content: str, path: Path):
     provider.url = "https://mantis.ai"
     agent_card.provider.CopyFrom(provider)
 
-    # Create basic skill based on persona
+    # Create basic skill based on persona (will be enhanced with LLM-generated data)
     skill = AgentSkill()
     skill.id = f"{name.lower().replace(' ', '_')}_primary_skill"
     skill.name = f"{name} Expertise"
     skill.description = description
-    skill.tags.extend(["strategic_thinking", "analysis", "advice"])
-    skill.examples.append(f"What would {name} think about this situation?")
+    # Tags and examples will be populated by LLM from SkillsSummary extension
     skill.input_modes.extend(["text/plain", "application/json"])
     skill.output_modes.extend(["text/plain", "text/markdown"])
     agent_card.skills.append(skill)
@@ -117,6 +116,18 @@ def _create_base_agent_card(name: str, content: str, path: Path):
     domain_params.update({"name": name, "source_file": str(path.name)})
     domain_extension.params.CopyFrom(domain_params)
     capabilities.extensions.append(domain_extension)
+
+    # Add skills-summary extension
+    skills_extension = AgentExtension()
+    skills_extension.uri = "https://mantis.ai/extensions/skills-summary/v1"
+    skills_extension.description = f"Skills summary for {name}"
+    skills_extension.required = False
+
+    # Add placeholder skills data
+    skills_params = Struct()
+    skills_params.update({"name": name, "source_file": str(path.name)})
+    skills_extension.params.CopyFrom(skills_params)
+    capabilities.extensions.append(skills_extension)
     agent_card.capabilities.CopyFrom(capabilities)
 
     return agent_card
@@ -130,6 +141,7 @@ def _enhance_with_llm(base_card, content: str, persona_name: str, model_spec: Op
         PersonaCharacteristics,
         CompetencyScores,
         DomainExpertise,
+        SkillsSummary,
     )
 
     try:
@@ -192,20 +204,66 @@ Be specific to the persona. Focus on what makes them uniquely valuable.""",
             user_prompt=f"Extract domain expertise from:\n\n{content}",
         )
 
+        # Extract skills summary with domain-specific skills
+        skills_summary = extractor.extract_protobuf_sync(
+            content=content,
+            protobuf_type=SkillsSummary,
+            system_prompt="""Generate detailed, domain-specific skills for this persona. Create:
+- skills: Array of SkillDefinition objects with:
+  * id: snake_case identifier (e.g., "strategic_planning", "diplomatic_negotiation")
+  * name: human-readable name (e.g., "Strategic Planning", "Diplomatic Negotiation")
+  * description: detailed description of what this skill encompasses
+  * examples: specific examples of how the persona demonstrates this skill (not generic)
+  * related_competencies: related skills or sub-competencies
+  * proficiency_score: 0.0-1.0 based on persona's strength in this area
+- primary_skill_tags: 5-7 primary tags for categorization/search (specific to persona)
+- secondary_skill_tags: 3-5 broader category tags
+- skill_overview: paragraph summarizing overall skill profile
+- signature_abilities: 3-5 unique capabilities that distinguish this persona
+
+Focus on SPECIFIC skills based on the persona's background, NOT generic categories.
+Make examples authentic to how this persona would demonstrate the skill.""",
+            user_prompt=f"Generate domain-specific skills for this persona:\n\n{content}",
+        )
+
         # Create enhanced MantisAgentCard
         mantis_card = MantisAgentCard()
         mantis_card.agent_card.CopyFrom(base_card)
         mantis_card.persona_characteristics.CopyFrom(characteristics)
         mantis_card.competency_scores.CopyFrom(competencies)
         mantis_card.domain_expertise.CopyFrom(expertise)
+        mantis_card.skills_summary.CopyFrom(skills_summary)
         mantis_card.persona_title = persona_name
 
         # Set original_content directly with full fidelity
         mantis_card.persona_characteristics.original_content = content
 
-        # Add skill tags from domain expertise
-        for domain in expertise.primary_domains[:3]:  # Top 3 domains
-            mantis_card.skill_tags.append(domain.lower().replace(" ", "_"))
+        # Add skill tags from skills summary (primary source) and domain expertise (fallback)
+        if skills_summary.primary_skill_tags:
+            mantis_card.skill_tags.extend(skills_summary.primary_skill_tags[:5])  # Top 5 primary tags
+        else:
+            # Fallback to domain expertise if skills summary has no tags
+            for domain in expertise.primary_domains[:3]:  # Top 3 domains
+                mantis_card.skill_tags.append(domain.lower().replace(" ", "_"))
+
+        # Update AgentSkill fields with data from SkillsSummary
+        if mantis_card.agent_card.skills and skills_summary.skills:
+            primary_skill = mantis_card.agent_card.skills[0]  # Update the primary skill
+            top_skill = skills_summary.skills[0]  # Use the top LLM-generated skill
+            
+            # Update skill fields with LLM-generated data
+            primary_skill.name = top_skill.name
+            primary_skill.description = top_skill.description
+            
+            # Clear existing placeholder data and add LLM-generated tags
+            primary_skill.tags.clear()
+            if skills_summary.primary_skill_tags:
+                primary_skill.tags.extend(skills_summary.primary_skill_tags[:5])
+            
+            # Clear existing placeholder data and add LLM-generated examples
+            primary_skill.examples.clear()
+            if top_skill.examples:
+                primary_skill.examples.extend(top_skill.examples)
 
         # Update the extensions with full LLM-extracted data
         from google.protobuf.json_format import MessageToDict
@@ -237,6 +295,15 @@ Be specific to the persona. Focus on what makes them uniquely valuable.""",
                 )
                 extension.params.Clear()
                 extension.params.update(domain_dict)
+
+            elif extension.uri == "https://mantis.ai/extensions/skills-summary/v1":
+                # Update skills extension with full skills summary data
+                skills_dict = MessageToDict(skills_summary, preserving_proto_field_name=True)
+                skills_dict.update(
+                    {"name": persona_name, "source_file": str(Path(content[:100]).stem if content else "generated")}
+                )
+                extension.params.Clear()
+                extension.params.update(skills_dict)
 
         return mantis_card
 
@@ -272,6 +339,8 @@ def parse_extension_data(extension_uri: str, extension_params: Dict[str, Any]) -
             CompetencyScores,
             RoleAdaptation,
             DomainExpertise,
+            SkillsSummary,
+            SkillDefinition,
         )
 
         # Map message type names to classes
@@ -280,6 +349,7 @@ def parse_extension_data(extension_uri: str, extension_params: Dict[str, Any]) -
             "CompetencyScores": CompetencyScores,
             "RoleAdaptation": RoleAdaptation,
             "DomainExpertise": DomainExpertise,
+            "SkillsSummary": SkillsSummary,
         }
 
         message_class = message_types.get(message_type_name)
@@ -319,7 +389,18 @@ def parse_extension_data(extension_uri: str, extension_params: Dict[str, Any]) -
                 if "narrator_score" in role_data:
                     message.role_adaptation.narrator_score = float(role_data["narrator_score"])
                 if "preferred_role" in role_data:
-                    message.role_adaptation.preferred_role = role_data["preferred_role"]
+                    # Convert string role preference to enum value
+                    from ..proto.mantis.v1.mantis_persona_pb2 import RolePreference
+                    role_str = role_data["preferred_role"]
+                    if role_str == "ROLE_PREFERENCE_LEADER":
+                        message.role_adaptation.preferred_role = RolePreference.ROLE_PREFERENCE_LEADER
+                    elif role_str == "ROLE_PREFERENCE_FOLLOWER":
+                        message.role_adaptation.preferred_role = RolePreference.ROLE_PREFERENCE_FOLLOWER
+                    elif role_str == "ROLE_PREFERENCE_NARRATOR":
+                        message.role_adaptation.preferred_role = RolePreference.ROLE_PREFERENCE_NARRATOR
+                    else:
+                        # Fallback to direct assignment for numeric values
+                        message.role_adaptation.preferred_role = role_data["preferred_role"]
                 if "role_flexibility" in role_data:
                     message.role_adaptation.role_flexibility = float(role_data["role_flexibility"])
 
@@ -332,6 +413,33 @@ def parse_extension_data(extension_uri: str, extension_params: Dict[str, Any]) -
                 message.methodologies.extend(extension_params["methodologies"])
             if "tools_and_frameworks" in extension_params:
                 message.tools_and_frameworks.extend(extension_params["tools_and_frameworks"])
+
+        elif message_type_name == "SkillsSummary":
+            if "skills" in extension_params:
+                for skill_data in extension_params["skills"]:
+                    skill_def = SkillDefinition()
+                    if "id" in skill_data:
+                        skill_def.id = skill_data["id"]
+                    if "name" in skill_data:
+                        skill_def.name = skill_data["name"]
+                    if "description" in skill_data:
+                        skill_def.description = skill_data["description"]
+                    if "examples" in skill_data:
+                        skill_def.examples.extend(skill_data["examples"])
+                    if "related_competencies" in skill_data:
+                        skill_def.related_competencies.extend(skill_data["related_competencies"])
+                    if "proficiency_score" in skill_data:
+                        skill_def.proficiency_score = float(skill_data["proficiency_score"])
+                    message.skills.append(skill_def)
+            
+            if "primary_skill_tags" in extension_params:
+                message.primary_skill_tags.extend(extension_params["primary_skill_tags"])
+            if "secondary_skill_tags" in extension_params:
+                message.secondary_skill_tags.extend(extension_params["secondary_skill_tags"])
+            if "skill_overview" in extension_params:
+                message.skill_overview = extension_params["skill_overview"]
+            if "signature_abilities" in extension_params:
+                message.signature_abilities.extend(extension_params["signature_abilities"])
 
         return message
 
@@ -415,6 +523,8 @@ def ensure_mantis_agent_card(agent_card) -> "MantisAgentCard":
             mantis_card.competency_scores.CopyFrom(parsed_data)
         elif message_type_name == "DomainExpertise":
             mantis_card.domain_expertise.CopyFrom(parsed_data)
+        elif message_type_name == "SkillsSummary":
+            mantis_card.skills_summary.CopyFrom(parsed_data)
 
     mantis_card.persona_title = agent_card.name
 

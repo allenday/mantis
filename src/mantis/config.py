@@ -25,4 +25,7 @@ PERSONA_EXTENSION_REGISTRY = {
     "https://polyhegel.ai/extensions/competency-scores/v1": "CompetencyScores",
     "https://polyhegel.ai/extensions/domain-expertise/v1": "DomainExpertise",
     "https://mantis.ai/extensions/persona-characteristics/v1": "PersonaCharacteristics",
+    "https://mantis.ai/extensions/competency-scores/v1": "CompetencyScores",
+    "https://mantis.ai/extensions/domain-expertise/v1": "DomainExpertise",
+    "https://mantis.ai/extensions/skills-summary/v1": "SkillsSummary",
 }

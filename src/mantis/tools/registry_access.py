@@ -174,10 +174,8 @@ class RegistryTool:
                 return cached_data["data"]
 
         try:
-            # Use the currently available list_agents method
-            result = await self._call_registry_jsonrpc(
-                "list_agents", {"include_inactive": include_inactive, "page_size": limit}
-            )
+            # Registry expects empty params for list_agents 
+            result = await self._call_registry_jsonrpc("list_agents", {})
 
             agents_data = result.get("agents", [])
             agent_cards = []
@@ -210,51 +208,73 @@ class RegistryTool:
             raise RegistryError(f"Failed to list agents: {str(e)}")
 
     async def search_agents(
-        self, query: str, limit: int = 5, filters: Optional[SearchFilters] = None
+        self, query: str, limit: int = 5, filters: Optional[SearchFilters] = None, similarity_threshold: float = 0.5
     ) -> List[AgentCard]:
         """
-        Search for agents using semantic queries.
-
-        Note: Advanced search functionality will be available in registry v0.1.3.
-        Currently falls back to local text filtering on agent list.
+        Search for agents using semantic/vector queries.
 
         Args:
             query: Search query (natural language)
             limit: Maximum number of agents to return
-            filters: Optional search filters
+            filters: Optional search filters  
+            similarity_threshold: Minimum similarity score (0.0-1.0, default 0.5)
 
         Returns:
             List of matching AgentCard objects
         """
-        logger.info(f"Searching agents with query: '{query}' (limit: {limit})")
+        logger.info(f"Searching agents with query: '{query}' (limit: {limit}, threshold: {similarity_threshold})")
 
-        # TODO: Replace with actual SearchAgents RPC call when available in v0.1.3
-        # For now, fall back to listing all agents and filtering locally
-        all_agents = await self.list_all_agents(limit=100)
-
-        # Apply local text filtering (similar to CLI implementation)
-        query_lower = query.lower()
-        filtered_agents = []
-
-        for agent in all_agents:
-            # Search in name, description, and skills
-            searchable_text = (
-                f"{agent.name} {agent.description or ''} "
-                f"{' '.join(agent.competencies)} "
-                f"{' '.join([skill.get('name', '') + ' ' + skill.get('description', '') for skill in agent.skills])}"
-            ).lower()
-
-            if query_lower in searchable_text:
+        try:
+            # Use registry's search_agents method with vector search
+            result = await self._call_registry_jsonrpc(
+                "search_agents", 
+                {
+                    "query": query,
+                    "search_mode": "SEARCH_MODE_VECTOR",
+                    "similarity_threshold": similarity_threshold,
+                    "max_results": limit,
+                    "skills": filters.required_skills if filters and filters.required_skills else None
+                }
+            )
+            
+            agents_data = result.get("agents", [])
+            similarity_scores = result.get("similarity_scores", [])
+            
+            # No local fallbacks - fail clearly if vector search returns no results
+            if not agents_data:
+                logger.warning(f"Vector search returned no results for query '{query}' with threshold {similarity_threshold}")
+                # Still return empty list but log the issue clearly
+            
+            # Convert to AgentCard objects
+            agent_cards = []
+            for i, agent_data in enumerate(agents_data):
+                similarity_score = similarity_scores[i] if i < len(similarity_scores) else None
+                agent_card = AgentCard(
+                    url=agent_data.get("url", ""),
+                    name=agent_data.get("name", "Unknown"),
+                    description=agent_data.get("description"),
+                    version=agent_data.get("version", "1.0.0"),
+                    provider=agent_data.get("provider", {}),
+                    skills=agent_data.get("skills", []),
+                    competencies=[skill.get("name", "") for skill in agent_data.get("skills", [])],
+                    trust_level=agent_data.get("trust_level", "UNVERIFIED"),
+                    health_score=agent_data.get("health_score"),
+                    status=agent_data.get("status", "UNKNOWN"),
+                    similarity_score=similarity_score
+                )
+                
                 # Apply additional filters if provided
-                if filters and not self._matches_filters(agent, filters):
+                if filters and not self._matches_filters(agent_card, filters):
                     continue
-                filtered_agents.append(agent)
-
-                if len(filtered_agents) >= limit:
-                    break
-
-        logger.info(f"Found {len(filtered_agents)} agents matching search criteria")
-        return filtered_agents
+                    
+                agent_cards.append(agent_card)
+            
+            logger.info(f"Found {len(agent_cards)} agents matching search criteria")
+            return agent_cards
+            
+        except Exception as e:
+            logger.error(f"Failed to search agents: {e}")
+            raise RegistryError(f"Failed to search agents: {str(e)}")
 
     def _matches_filters(self, agent: AgentCard, filters: SearchFilters) -> bool:
         """Check if agent matches the provided filters."""
