@@ -228,10 +228,10 @@ Be specific to the persona. Focus on what makes them uniquely valuable.""",
             content=content,
             result_type=SkillsSummaryData,
             system_prompt="""Generate domain-specific skills summary for this persona:
-- primary_skill_tags: 5-7 specific skill tags for search/categorization (avoid generic tags like "strategic_thinking", "analysis", "advice")
-- secondary_skill_tags: 3-5 broader category tags
+- primary_skill_tags: 5-7 specific skill tags for search/categorization (use readable text like "Political Strategy", "Power Dynamics" - avoid underscores and generic tags like "strategic_thinking", "analysis", "advice")
+- secondary_skill_tags: 3-5 broader category tags (use readable text like "Political Philosophy", "Leadership Theory")
 - skill_overview: paragraph summarizing the persona's overall skill profile
-- signature_abilities: 3-5 unique capabilities that distinguish this persona""",
+- signature_abilities: 3-5 unique capabilities that distinguish this persona (use readable text like "Strategic Political Analysis", "Power Structure Navigation")""",
             user_prompt=f"Generate skills summary for this persona:\n\n{content}",
         )
         
