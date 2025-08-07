@@ -173,11 +173,11 @@ class StructuredExtractor:
             model = self._create_model()
 
             # Create pydantic-ai agent
-            agent = Agent(model=model, result_type=result_type, system_prompt=system_prompt, **agent_kwargs)
+            agent = Agent(model, result_type=result_type, system_prompt=system_prompt, **agent_kwargs)  # type: ignore
 
             # Run extraction
             result = await agent.run(user_prompt)
-            return result.data
+            return result  # type: ignore
 
         except Exception as e:
             logger.error(f"LLM extraction failed: {e}")
@@ -293,11 +293,11 @@ class StructuredExtractor:
             model_instance = self._create_model()
 
             # Create a simple text agent (no structured output)
-            agent = Agent(model=model_instance, system_prompt=prompt)
+            agent = Agent(model_instance, system_prompt=prompt)  # type: ignore
 
             # Run and get text response
             result = await agent.run(query)
-            response_text = str(result.data)
+            response_text = str(result)  # type: ignore
 
             # Complete LLM interaction tracing
             if interaction and obs_logger:
@@ -374,14 +374,14 @@ class StructuredExtractor:
 
             # Create agent with native tools
             agent = Agent(
-                model=model_instance,
+                model_instance,
                 system_prompt=prompt,
                 tools=tool_functions or None,  # type: ignore[arg-type]
             )
 
             # Run and get text response
             result = await agent.run(query)
-            response_text = str(result.data)
+            response_text = str(result)  # type: ignore
 
             # Complete LLM interaction tracing
             if interaction and obs_logger:
