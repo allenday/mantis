@@ -6,7 +6,6 @@ Simplified to only support pydantic-ai integration.
 import logging
 import aiohttp
 from typing import Optional
-from urllib.parse import quote_plus
 
 # Observability imports
 try:
@@ -110,9 +109,6 @@ async def jira_list_issues(jira_url: str, username: str, api_token: str, project
             jql = f'project = "{project_key}" AND resolution != Unresolved'
         else:  # all
             jql = f'project = "{project_key}"'
-        
-        # URL encode the JQL query
-        encoded_jql = quote_plus(jql)
         
         api_url = f"{jira_url.rstrip('/')}/rest/api/2/search"
         params = {
