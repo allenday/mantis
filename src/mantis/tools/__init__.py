@@ -11,7 +11,7 @@ from .git_operations import git_analyze_repository
 
 __all__ = [
     "registry_search_agents",
-    "registry_get_agent_details", 
+    "registry_get_agent_details",
     "web_fetch_url",
     "web_search",
     "git_analyze_repository",

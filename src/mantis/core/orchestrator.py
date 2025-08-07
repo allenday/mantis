@@ -12,10 +12,8 @@ from ..config import DEFAULT_MODEL
 
 # Observability imports
 try:
-    from ..observability import (
-        ExecutionTrace, ExecutionContext, ExecutionStatus,
-        get_structured_logger
-    )
+    from ..observability import ExecutionTrace, ExecutionContext, ExecutionStatus, get_structured_logger
+
     OBSERVABILITY_AVAILABLE = True
 except ImportError:
     OBSERVABILITY_AVAILABLE = False
@@ -44,30 +42,34 @@ class DirectExecutor(ExecutionStrategy):
         self._model_cache: Dict[str, Any] = {}
         self._tools: Dict[str, Any] = {}
         self._initialize_tools()
-        
+
         # Observability logger
         if OBSERVABILITY_AVAILABLE:
             self.obs_logger = get_structured_logger("direct_executor")
         else:
-            self.obs_logger = None
+            self.obs_logger = None  # type: ignore
 
     async def execute_agent(
         self, simulation_input: mantis_core_pb2.SimulationInput, agent_spec: mantis_core_pb2.AgentSpec, agent_index: int
     ) -> mantis_core_pb2.AgentResponse:
         """Execute agent directly using pydantic-ai with modular prompt composition."""
-        
+
         # Create execution trace
         if OBSERVABILITY_AVAILABLE and self.obs_logger:
             trace = ExecutionTrace(
                 operation="execute_agent",
-                component="DirectExecutor", 
+                component="DirectExecutor",
                 metadata={
                     "agent_index": agent_index,
-                    "query": simulation_input.query[:200] + "..." if len(simulation_input.query) > 200 else simulation_input.query,
-                    "max_depth": simulation_input.max_depth
-                }
+                    "query": (
+                        simulation_input.query[:200] + "..."
+                        if len(simulation_input.query) > 200
+                        else simulation_input.query
+                    ),
+                    "max_depth": simulation_input.max_depth,
+                },
             )
-            
+
             with ExecutionContext(trace):
                 self.obs_logger.info(f"Starting agent execution (index: {agent_index})")
                 try:
@@ -81,7 +83,7 @@ class DirectExecutor(ExecutionStrategy):
                     raise
         else:
             return await self._execute_agent_impl(simulation_input, agent_spec, agent_index)
-    
+
     async def _execute_agent_impl(
         self, simulation_input: mantis_core_pb2.SimulationInput, agent_spec: mantis_core_pb2.AgentSpec, agent_index: int
     ) -> mantis_core_pb2.AgentResponse:
@@ -93,6 +95,7 @@ class DirectExecutor(ExecutionStrategy):
         try:
             # Try to use default base agent, fallback to minimal
             from ..config import get_default_base_agent
+
             mantis_card = get_default_base_agent()
             if not mantis_card:
                 mantis_card = self._create_minimal_agent_card()
@@ -126,16 +129,20 @@ class DirectExecutor(ExecutionStrategy):
                         "modules_used": [m.get_module_name() for m in composed_prompt.modules_used],
                         "variables_resolved": len(composed_prompt.variables_resolved),
                         "composition_strategy": composed_prompt.strategy.value,
-                        "final_prompt_length": len(composed_prompt.final_prompt)
-                    }
+                        "final_prompt_length": len(composed_prompt.final_prompt),
+                    },
                 )
 
             # Execute using structured extractor with tools (LLM integration)
             extractor = StructuredExtractor()
 
             # Use the composed prompt as the system prompt
-            model = simulation_input.model_spec.model if simulation_input.model_spec and simulation_input.model_spec.model else DEFAULT_MODEL
-            
+            model = (
+                simulation_input.model_spec.model
+                if simulation_input.model_spec and simulation_input.model_spec.model
+                else DEFAULT_MODEL
+            )
+
             # Log model and tools being used
             if OBSERVABILITY_AVAILABLE and self.obs_logger:
                 self.obs_logger.info(
@@ -144,16 +151,13 @@ class DirectExecutor(ExecutionStrategy):
                         "model": model,
                         "available_tools": list(self._tools.keys()),
                         "prompt_length": len(composed_prompt.final_prompt),
-                        "query_length": len(simulation_input.query)
-                    }
+                        "query_length": len(simulation_input.query),
+                    },
                 )
-            
+
             # Pass tools to the extractor for tool-enabled execution
             result = await extractor.extract_text_response_with_tools(
-                prompt=composed_prompt.final_prompt, 
-                query=simulation_input.query, 
-                model=model,
-                tools=self._tools
+                prompt=composed_prompt.final_prompt, query=simulation_input.query, model=model, tools=self._tools
             )
 
             # Create response
@@ -178,10 +182,7 @@ class DirectExecutor(ExecutionStrategy):
             if OBSERVABILITY_AVAILABLE and self.obs_logger:
                 self.obs_logger.info(
                     "Agent execution completed successfully",
-                    structured_data={
-                        "response_length": len(result),
-                        "agent_index": agent_index
-                    }
+                    structured_data={"response_length": len(result), "agent_index": agent_index},
                 )
 
             return response
@@ -203,23 +204,27 @@ class DirectExecutor(ExecutionStrategy):
             from ..tools.web_fetch import web_fetch_url
             from ..tools.web_search import web_search
             from ..tools.git_operations import git_analyze_repository
-            
+
             # Add tools directly to our tools dictionary
-            self._tools.update({
-                'registry_search_agents': registry_search_agents,
-                'registry_get_agent_details': registry_get_agent_details,
-                'web_fetch_url': web_fetch_url,
-                'web_search': web_search,
-                'git_analyze_repository': git_analyze_repository,
-            })
-            
+            self._tools.update(
+                {
+                    "registry_search_agents": registry_search_agents,
+                    "registry_get_agent_details": registry_get_agent_details,
+                    "web_fetch_url": web_fetch_url,
+                    "web_search": web_search,
+                    "git_analyze_repository": git_analyze_repository,
+                }
+            )
+
             # Log what tools we loaded
-            if OBSERVABILITY_AVAILABLE and hasattr(self, 'obs_logger') and self.obs_logger:
-                self.obs_logger.info(f"Initialized {len(self._tools)} native pydantic-ai tools: {list(self._tools.keys())}")
+            if OBSERVABILITY_AVAILABLE and hasattr(self, "obs_logger") and self.obs_logger:
+                self.obs_logger.info(
+                    f"Initialized {len(self._tools)} native pydantic-ai tools: {list(self._tools.keys())}"
+                )
 
         except ImportError as e:
             # Tools not available, continue without them
-            if OBSERVABILITY_AVAILABLE and hasattr(self, 'obs_logger') and self.obs_logger:
+            if OBSERVABILITY_AVAILABLE and hasattr(self, "obs_logger") and self.obs_logger:
                 self.obs_logger.warning(f"Failed to load pydantic tools: {e}")
             pass
 
@@ -335,6 +340,7 @@ class SimulationOrchestrator:
         else:
             # Use default max_depth from config
             from ..config import DEFAULT_MAX_DEPTH
+
             simulation_input.max_depth = DEFAULT_MAX_DEPTH
 
         # Copy agent specifications
@@ -432,6 +438,7 @@ class SimulationOrchestrator:
             except Exception as e:
                 # Re-raise the exception with full traceback for debugging
                 import traceback
+
                 traceback.print_exc()
                 raise Exception(f"Agent {i} execution failed: {str(e)}") from e
 
