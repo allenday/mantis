@@ -22,6 +22,7 @@ message MantisAgentCard {
   optional PersonaCharacteristics persona_characteristics = 2;
   optional CompetencyScores competency_scores = 3;
   optional DomainExpertise domain_expertise = 4;
+  optional SkillsSummary skills_summary = 5;
   
   // Computed/derived fields for display
   optional string persona_title = 10;      // e.g., "Master Strategist"
@@ -111,4 +112,44 @@ message DomainExpertise {
   
   // Tools and frameworks the persona is familiar with
   repeated string tools_and_frameworks = 4;
+}
+
+// Individual skill definition with detailed information
+message SkillDefinition {
+  // Unique identifier for the skill (e.g., "strategic_planning", "diplomatic_negotiation")
+  string id = 1;
+  
+  // Human-readable name for the skill (e.g., "Strategic Planning", "Diplomatic Negotiation")
+  string name = 2;
+  
+  // Detailed description of what this skill encompasses
+  string description = 3;
+  
+  // Specific examples of how the persona demonstrates this skill
+  repeated string examples = 4;
+  
+  // Related competencies or sub-skills
+  repeated string related_competencies = 5;
+  
+  // Proficiency level or strength indicator (0.0 - 1.0)
+  float proficiency_score = 6 [(validate.rules).float = {gte: 0.0, lte: 1.0}];
+}
+
+// Skills summary with LLM-generated, domain-specific skills
+// URI: https://mantis.ai/extensions/skills-summary/v1
+message SkillsSummary {
+  // Collection of detailed skill definitions
+  repeated SkillDefinition skills = 1;
+  
+  // Primary skill tags for quick categorization and search
+  repeated string primary_skill_tags = 2;
+  
+  // Secondary skill tags for broader categorization
+  repeated string secondary_skill_tags = 3;
+  
+  // Overall skill assessment summary
+  string skill_overview = 4;
+  
+  // Unique or standout capabilities that distinguish this persona
+  repeated string signature_abilities = 5;
 }
