@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from . import prompt_composition_pb2 as mantis_dot_v1_dot_prompt__composition__pb2
+from . import mantis_prompt_pb2 as mantis_dot_v1_dot_mantis__prompt__pb2
 
 GRPC_GENERATED_VERSION = '1.71.2'
 GRPC_VERSION = grpc.__version__
@@ -18,7 +18,7 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + f' but the generated code in mantis/v1/prompt_composition_pb2_grpc.py depends on'
+        + f' but the generated code in mantis/v1/mantis_prompt_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
@@ -26,7 +26,8 @@ if _version_not_supported:
 
 
 class PromptCompositionServiceStub(object):
-    """Prompt composition service for A2A networking
+    """DEPRECATED: Complex prompt composition replaced with simple ContextualPrompt assembly
+    This service is maintained for backward compatibility only
     """
 
     def __init__(self, channel):
@@ -37,29 +38,30 @@ class PromptCompositionServiceStub(object):
         """
         self.ComposePrompt = channel.unary_unary(
                 '/mantis.prompts.PromptCompositionService/ComposePrompt',
-                request_serializer=mantis_dot_v1_dot_prompt__composition__pb2.PromptCompositionRequest.SerializeToString,
-                response_deserializer=mantis_dot_v1_dot_prompt__composition__pb2.PromptCompositionResponse.FromString,
+                request_serializer=mantis_dot_v1_dot_mantis__prompt__pb2.PromptCompositionRequest.SerializeToString,
+                response_deserializer=mantis_dot_v1_dot_mantis__prompt__pb2.PromptCompositionResponse.FromString,
                 _registered_method=True)
         self.GetCapabilities = channel.unary_unary(
                 '/mantis.prompts.PromptCompositionService/GetCapabilities',
-                request_serializer=mantis_dot_v1_dot_prompt__composition__pb2.CapabilitiesRequest.SerializeToString,
-                response_deserializer=mantis_dot_v1_dot_prompt__composition__pb2.CapabilitiesResponse.FromString,
+                request_serializer=mantis_dot_v1_dot_mantis__prompt__pb2.PromptCapabilitiesRequest.SerializeToString,
+                response_deserializer=mantis_dot_v1_dot_mantis__prompt__pb2.PromptCapabilitiesResponse.FromString,
                 _registered_method=True)
 
 
 class PromptCompositionServiceServicer(object):
-    """Prompt composition service for A2A networking
+    """DEPRECATED: Complex prompt composition replaced with simple ContextualPrompt assembly
+    This service is maintained for backward compatibility only
     """
 
     def ComposePrompt(self, request, context):
-        """Compose a modular prompt from agent card and execution context
+        """DEPRECATED: Use ContextualPrompt for simple template assembly instead
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def GetCapabilities(self, request, context):
-        """Get available composition strategies and modules
+        """DEPRECATED: Simple template assembly no longer requires complex capabilities
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -70,13 +72,13 @@ def add_PromptCompositionServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'ComposePrompt': grpc.unary_unary_rpc_method_handler(
                     servicer.ComposePrompt,
-                    request_deserializer=mantis_dot_v1_dot_prompt__composition__pb2.PromptCompositionRequest.FromString,
-                    response_serializer=mantis_dot_v1_dot_prompt__composition__pb2.PromptCompositionResponse.SerializeToString,
+                    request_deserializer=mantis_dot_v1_dot_mantis__prompt__pb2.PromptCompositionRequest.FromString,
+                    response_serializer=mantis_dot_v1_dot_mantis__prompt__pb2.PromptCompositionResponse.SerializeToString,
             ),
             'GetCapabilities': grpc.unary_unary_rpc_method_handler(
                     servicer.GetCapabilities,
-                    request_deserializer=mantis_dot_v1_dot_prompt__composition__pb2.CapabilitiesRequest.FromString,
-                    response_serializer=mantis_dot_v1_dot_prompt__composition__pb2.CapabilitiesResponse.SerializeToString,
+                    request_deserializer=mantis_dot_v1_dot_mantis__prompt__pb2.PromptCapabilitiesRequest.FromString,
+                    response_serializer=mantis_dot_v1_dot_mantis__prompt__pb2.PromptCapabilitiesResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -87,7 +89,8 @@ def add_PromptCompositionServiceServicer_to_server(servicer, server):
 
  # This class is part of an EXPERIMENTAL API.
 class PromptCompositionService(object):
-    """Prompt composition service for A2A networking
+    """DEPRECATED: Complex prompt composition replaced with simple ContextualPrompt assembly
+    This service is maintained for backward compatibility only
     """
 
     @staticmethod
@@ -105,8 +108,8 @@ class PromptCompositionService(object):
             request,
             target,
             '/mantis.prompts.PromptCompositionService/ComposePrompt',
-            mantis_dot_v1_dot_prompt__composition__pb2.PromptCompositionRequest.SerializeToString,
-            mantis_dot_v1_dot_prompt__composition__pb2.PromptCompositionResponse.FromString,
+            mantis_dot_v1_dot_mantis__prompt__pb2.PromptCompositionRequest.SerializeToString,
+            mantis_dot_v1_dot_mantis__prompt__pb2.PromptCompositionResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -132,8 +135,8 @@ class PromptCompositionService(object):
             request,
             target,
             '/mantis.prompts.PromptCompositionService/GetCapabilities',
-            mantis_dot_v1_dot_prompt__composition__pb2.CapabilitiesRequest.SerializeToString,
-            mantis_dot_v1_dot_prompt__composition__pb2.CapabilitiesResponse.FromString,
+            mantis_dot_v1_dot_mantis__prompt__pb2.PromptCapabilitiesRequest.SerializeToString,
+            mantis_dot_v1_dot_mantis__prompt__pb2.PromptCapabilitiesResponse.FromString,
             options,
             channel_credentials,
             insecure,

@@ -60,9 +60,8 @@ def main():
     proto_files = [
         "validate/validate.proto",  # Generate validation support first
         "mantis/v1/mantis_core.proto",
-        "mantis/v1/mantis_service.proto",
+        "mantis/v1/mantis_prompt.proto",
         "mantis/v1/mantis_persona.proto",
-        "mantis/v1/prompt_composition.proto",
     ]
 
     for proto_file in proto_files:
@@ -181,12 +180,33 @@ def main():
                         relative_import = f"from {dots} import {module_name} as"
                         content = content.replace(import_pattern, relative_import)
 
-            # Fix mantis.v1 imports to be relative within the same package
-            if "mantis/v1" in str(proto_file):
-                # Fix broken double imports first
-                content = content.replace("from mantis.v1 from . import", "from . import")
-                # Then fix regular mantis.v1 imports
-                content = content.replace("from mantis.v1 import", "from . import")
+            # Fix imports for flat structure - all files are in the same directory
+            # Fix malformed imports that have various patterns of double "from" keywords
+            import re
+            
+            # Multiple patterns to handle different malformed import variations
+            patterns = [
+                # Pattern like "from a2a.v1 from . import"
+                (r'from\s+([a-zA-Z0-9._/]+)\s+from\s+\.\s+import\s+([a-zA-Z0-9_]+)\s+as\s+([a-zA-Z0-9_]+)', r'from . import \2 as \3'),
+                # Pattern like "from . from . import"
+                (r'from\s+\.\s+from\s+\.\s+import\s+([a-zA-Z0-9_]+)\s+as\s+([a-zA-Z0-9_]+)', r'from . import \1 as \2'),
+                # Pattern like "from mantis.v1 from . import"
+                (r'from\s+mantis\.v1\s+from\s+\.\s+import\s+([a-zA-Z0-9_]+)\s+as\s+([a-zA-Z0-9_]+)', r'from . import \1 as \2'),
+            ]
+            
+            # Apply all patterns
+            for pattern, replacement in patterns:
+                content = re.sub(pattern, replacement, content)
+            
+            # Also fix specific problematic patterns
+            content = content.replace(
+                "from ...validate import validate_pb2 as validate_dot_validate__pb2",
+                "from . import validate_pb2 as validate_dot_validate__pb2"
+            )
+            content = content.replace(
+                "from .validate import validate_pb2 as validate_dot_validate__pb2",
+                "from . import validate_pb2 as validate_dot_validate__pb2"
+            )
 
             # Write back if changed
             if content != original_content:
@@ -197,6 +217,53 @@ def main():
 
     fix_imports()
 
+    # Test imports to ensure generated files work correctly
+    def test_imports():
+        """Test that all generated proto files can be imported successfully."""
+        print("🧪 Testing imports in generated files...")
+        
+        # Get all generated pb2 files
+        pb2_files = list(output_dir.glob("*_pb2.py"))
+        if not pb2_files:
+            print("⚠️  No _pb2.py files found to test")
+            return True
+            
+        # Test each generated module
+        import sys
+        import importlib.util
+        
+        # Add the proto package to sys.path temporarily
+        proto_package_path = str(output_dir.parent)  # src/mantis
+        if proto_package_path not in sys.path:
+            sys.path.insert(0, proto_package_path)
+            
+        success = True
+        for pb2_file in pb2_files:
+            module_name = f"mantis.proto.{pb2_file.stem}"
+            try:
+                spec = importlib.util.spec_from_file_location(module_name, pb2_file)
+                if spec is None or spec.loader is None:
+                    print(f"  ❌ Could not load spec for {pb2_file.name}")
+                    success = False
+                    continue
+                    
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                print(f"  ✅ Successfully imported {pb2_file.name}")
+                
+            except Exception as e:
+                print(f"  ❌ Failed to import {pb2_file.name}: {str(e)}")
+                success = False
+                
+        # Remove from sys.path
+        if proto_package_path in sys.path:
+            sys.path.remove(proto_package_path)
+            
+        return success
+
+    # Run import tests
+    import_success = test_imports()
+    
     # List generated files
     if output_dir.exists():
         generated_files = list(output_dir.rglob("*.py"))
@@ -208,6 +275,12 @@ def main():
                 print(f"  - {rel_path}")
         else:
             print("⚠️  No Python files were generated")
+    
+    if not import_success:
+        print("\n❌ Some imports failed. Check the errors above.")
+        return 1
+    else:
+        print("\n✅ All imports successful!")
 
     return 0
 
