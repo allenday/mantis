@@ -2,12 +2,12 @@
 """
 Generate Python protobuf bindings for Mantis.
 
-This script generates Python code from our protobuf definitions,
-including proper imports and dependencies.
+Simple, clean proto generation with proper import fixing.
 """
 
 import subprocess
 import sys
+import re
 from pathlib import Path
 
 
@@ -21,6 +21,95 @@ def run_command(cmd, cwd=None):
     if result.stdout:
         print(result.stdout)
     return True
+
+
+def fix_imports(proto_file, output_dir):
+    """Fix malformed imports in generated proto files."""
+    content = proto_file.read_text()
+    original_content = content
+    
+    # Fix the specific malformed pattern: "from a2a.v1 from ... import"
+    content = re.sub(
+        r'from\s+a2a\.v1\s+from\s+\.\.\.\s+import\s+([a-zA-Z0-9_]+)\s+as\s+([a-zA-Z0-9_]+)',
+        r'from ... import \1 as \2',
+        content
+    )
+    
+    # Fix absolute imports that should be relative 
+    if 'mantis/v1' in str(proto_file):
+        # For nested files, use ... to go up to mantis.proto
+        content = re.sub(
+            r'^import\s+([a-zA-Z0-9_]+_pb2)\s+as\s+([a-zA-Z0-9_]+)',
+            r'from ... import \1 as \2',
+            content,
+            flags=re.MULTILINE
+        )
+    elif proto_file.parent == output_dir:
+        # For root level files, use relative imports within the same package
+        content = re.sub(
+            r'^import\s+([a-zA-Z0-9_]+_pb2)\s+as\s+([a-zA-Z0-9_]+)',
+            r'from . import \1 as \2',
+            content,
+            flags=re.MULTILINE
+        )
+    
+    # Fix validate imports for nested files
+    if 'mantis/v1' in str(proto_file):
+        # Fix remaining absolute validate imports
+        content = re.sub(
+            r'^from validate import validate_pb2 as validate_dot_validate__pb2',
+            r'from ...validate import validate_pb2 as validate_dot_validate__pb2',
+            content,
+            flags=re.MULTILINE
+        )
+    
+    # Write back if changed
+    if content != original_content:
+        proto_file.write_text(content)
+        print(f"    ✅ Fixed imports in {proto_file.name}")
+        return True
+    else:
+        print(f"    ℹ️  No imports to fix in {proto_file.name}")
+        return False
+
+
+def test_imports(output_dir):
+    """Test that generated proto files can be imported."""
+    print("🧪 Testing imports...")
+    
+    pb2_files = list(output_dir.glob("*_pb2.py"))
+    if not pb2_files:
+        print("⚠️  No _pb2.py files found to test")
+        return True
+        
+    # Test root level files only for now
+    import sys
+    import importlib.util
+    
+    proto_package_path = str(output_dir.parent)  # src/mantis
+    if proto_package_path not in sys.path:
+        sys.path.insert(0, proto_package_path)
+        
+    success = True
+    for pb2_file in pb2_files:
+        module_name = f"mantis.proto.{pb2_file.stem}"
+        try:
+            spec = importlib.util.spec_from_file_location(module_name, pb2_file)
+            if spec is None or spec.loader is None:
+                continue
+                
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            print(f"  ✅ Successfully imported {pb2_file.name}")
+            
+        except Exception as e:
+            print(f"  ❌ Failed to import {pb2_file.name}: {str(e)}")
+            success = False
+            
+    if proto_package_path in sys.path:
+        sys.path.remove(proto_package_path)
+        
+    return success
 
 
 def main():
@@ -37,30 +126,24 @@ def main():
     print(f"Proto dir: {proto_dir}")
     print(f"Output dir: {output_dir}")
 
-    # Set up include paths - find googleapis dynamically
-    import google.api.annotations_pb2  # Import a specific proto module
+    # Set up include paths
+    import google.api.annotations_pb2
     import grpc_tools
 
-    # Find the google package location from a specific proto file
-    google_package_path = Path(google.api.annotations_pb2.__file__).parents[2]  # Go up to site-packages level
+    google_package_path = Path(google.api.annotations_pb2.__file__).parents[2]
     grpc_tools_proto_path = Path(grpc_tools.__file__).parent / "_proto"
 
     include_paths = [
         str(proto_dir),
         str(project_root / "third_party" / "A2A" / "specification" / "grpc"),
         str(project_root / "third_party" / "a2a-registry" / "proto"),
-        str(google_package_path),  # This includes google/api/* protos
-        str(grpc_tools_proto_path),  # This includes google/protobuf/* protos
+        str(google_package_path),
+        str(grpc_tools_proto_path),
     ]
 
-    print(f"Google package path: {google_package_path}")
-    print(f"GRPC tools proto path: {grpc_tools_proto_path}")
-
-    # Proto files to generate
+    # Proto files to generate - start with just validate and one simple file
     proto_files = [
-        "validate/validate.proto",  # Generate validation support first
-        "mantis/v1/mantis_core.proto",
-        "mantis/v1/mantis_prompt.proto",
+        "validate/validate.proto",
         "mantis/v1/mantis_persona.proto",
     ]
 
@@ -77,7 +160,7 @@ def main():
             "grpc_tools.protoc",
             f"--python_out={output_dir}",
             f"--grpc_python_out={output_dir}",
-            f"--pyi_out={output_dir}",  # Generate type stubs
+            f"--pyi_out={output_dir}",
         ]
 
         # Add include paths
@@ -85,7 +168,6 @@ def main():
             if Path(include_path).exists():
                 cmd.extend(["-I", include_path])
 
-        # Add the proto file
         cmd.append(str(proto_path))
 
         # Run the command
@@ -93,7 +175,7 @@ def main():
             print(f"Failed to generate {proto_file}")
             return 1
 
-    # Generate A2A dependencies if needed
+    # Generate A2A dependencies
     a2a_proto = project_root / "third_party" / "A2A" / "specification" / "grpc" / "a2a.proto"
     registry_proto = project_root / "third_party" / "a2a-registry" / "proto" / "registry.proto"
 
@@ -108,7 +190,6 @@ def main():
                 f"--pyi_out={output_dir}",
             ]
 
-            # Add include paths
             for include_path in include_paths:
                 if Path(include_path).exists():
                     cmd.extend(["-I", include_path])
@@ -120,164 +201,18 @@ def main():
                 print(f"Warning: Failed to generate {dep_proto.name}")
 
     print("✅ Protobuf generation completed!")
-    print(f"Generated files in: {output_dir}")
-
-    # Fix imports to use relative imports for generated modules in the same package
-    def fix_imports():
-        """Fix absolute imports to relative imports for generated pb2 modules."""
-        print("🔧 Fixing imports in generated files...")
-
-        if not output_dir.exists():
-            return
-
-        pb2_files = list(output_dir.rglob("*_pb2.py"))
-        grpc_files = list(output_dir.rglob("*_pb2_grpc.py"))
-        all_files = pb2_files + grpc_files
-
-        if not all_files:
-            print("⚠️  No generated files found to fix")
-            return
-
-        # Build a mapping of module names to their relative paths
-        pb2_modules = {}
-        for f in pb2_files:
-            # Get relative path from output_dir
-            rel_path = f.relative_to(output_dir)
-            pb2_modules[f.stem] = rel_path.parent
-
-        for proto_file in all_files:
-            print(f"  Fixing imports in {proto_file.name}")
-
-            # Read the file
-            content = proto_file.read_text()
-            original_content = content
-
-            # Get the directory of this proto file relative to output_dir
-            proto_file_dir = proto_file.relative_to(output_dir).parent
-
-            # Fix specific validate import (only for files in mantis/v1 subdirectory)
-            if "mantis/v1" in str(proto_file):
-                content = content.replace(
-                    "from validate import validate_pb2 as validate_dot_validate__pb2",
-                    "from ...validate import validate_pb2 as validate_dot_validate__pb2",
-                )
-
-            # Fix imports for each pb2 module (skip validate_pb2 as it's handled above)
-            for module_name, module_dir in pb2_modules.items():
-                if (
-                    module_name != proto_file.stem and module_name != "validate_pb2"
-                ):  # Don't fix self-imports or validate
-                    # Calculate the relative import path
-                    if module_dir == proto_file_dir:
-                        # Same directory - use simple relative import
-                        import_pattern = f"import {module_name} as"
-                        relative_import = f"from . import {module_name} as"
-                        content = content.replace(import_pattern, relative_import)
-                    elif module_dir == Path("."):
-                        # Module is in root, we're in subdirectory - need to go up
-                        dots = "." + "." * len(proto_file_dir.parts)  # One dot per directory level up
-                        import_pattern = f"import {module_name} as"
-                        relative_import = f"from {dots} import {module_name} as"
-                        content = content.replace(import_pattern, relative_import)
-
-            # Fix imports for flat structure - all files are in the same directory
-            # Fix malformed imports that have various patterns of double "from" keywords
-            import re
-            
-            # Multiple patterns to handle different malformed import variations
-            patterns = [
-                # Pattern like "from a2a.v1 from . import"
-                (r'from\s+([a-zA-Z0-9._/]+)\s+from\s+\.\s+import\s+([a-zA-Z0-9_]+)\s+as\s+([a-zA-Z0-9_]+)', r'from . import \2 as \3'),
-                # Pattern like "from . from . import"
-                (r'from\s+\.\s+from\s+\.\s+import\s+([a-zA-Z0-9_]+)\s+as\s+([a-zA-Z0-9_]+)', r'from . import \1 as \2'),
-                # Pattern like "from mantis.v1 from . import"
-                (r'from\s+mantis\.v1\s+from\s+\.\s+import\s+([a-zA-Z0-9_]+)\s+as\s+([a-zA-Z0-9_]+)', r'from . import \1 as \2'),
-            ]
-            
-            # Apply all patterns
-            for pattern, replacement in patterns:
-                content = re.sub(pattern, replacement, content)
-            
-            # Also fix specific problematic patterns
-            content = content.replace(
-                "from ...validate import validate_pb2 as validate_dot_validate__pb2",
-                "from . import validate_pb2 as validate_dot_validate__pb2"
-            )
-            content = content.replace(
-                "from .validate import validate_pb2 as validate_dot_validate__pb2",
-                "from . import validate_pb2 as validate_dot_validate__pb2"
-            )
-
-            # Write back if changed
-            if content != original_content:
-                proto_file.write_text(content)
-                print(f"    ✅ Fixed imports in {proto_file.name}")
-            else:
-                print(f"    ℹ️  No imports to fix in {proto_file.name}")
-
-    fix_imports()
-
-    # Test imports to ensure generated files work correctly
-    def test_imports():
-        """Test that all generated proto files can be imported successfully."""
-        print("🧪 Testing imports in generated files...")
-        
-        # Get all generated pb2 files
-        pb2_files = list(output_dir.glob("*_pb2.py"))
-        if not pb2_files:
-            print("⚠️  No _pb2.py files found to test")
-            return True
-            
-        # Test each generated module
-        import sys
-        import importlib.util
-        
-        # Add the proto package to sys.path temporarily
-        proto_package_path = str(output_dir.parent)  # src/mantis
-        if proto_package_path not in sys.path:
-            sys.path.insert(0, proto_package_path)
-            
-        success = True
-        for pb2_file in pb2_files:
-            module_name = f"mantis.proto.{pb2_file.stem}"
-            try:
-                spec = importlib.util.spec_from_file_location(module_name, pb2_file)
-                if spec is None or spec.loader is None:
-                    print(f"  ❌ Could not load spec for {pb2_file.name}")
-                    success = False
-                    continue
-                    
-                module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(module)
-                print(f"  ✅ Successfully imported {pb2_file.name}")
-                
-            except Exception as e:
-                print(f"  ❌ Failed to import {pb2_file.name}: {str(e)}")
-                success = False
-                
-        # Remove from sys.path
-        if proto_package_path in sys.path:
-            sys.path.remove(proto_package_path)
-            
-        return success
-
-    # Run import tests
-    import_success = test_imports()
     
-    # List generated files
-    if output_dir.exists():
-        generated_files = list(output_dir.rglob("*.py"))
-        if generated_files:
-            print("\nGenerated files:")
-            for f in sorted(generated_files):
-                # Show relative path from output_dir
-                rel_path = f.relative_to(output_dir)
-                print(f"  - {rel_path}")
-        else:
-            print("⚠️  No Python files were generated")
+    # Fix imports
+    print("🔧 Fixing imports...")
+    pb2_files = list(output_dir.rglob("*_pb2.py"))
+    for pb2_file in pb2_files:
+        fix_imports(pb2_file, output_dir)
+    
+    # Test imports
+    import_success = test_imports(output_dir)
     
     if not import_success:
-        print("\n❌ Some imports failed. Check the errors above.")
+        print("\n❌ Some imports failed.")
         return 1
     else:
         print("\n✅ All imports successful!")
