@@ -6,10 +6,9 @@ Integrates A2A Task lifecycle management with flexible prompt architecture.
 
 from typing import Optional, Dict, Any, List
 import asyncio
-import time
 import uuid
 from google.protobuf import timestamp_pb2
-from .contextual_prompt import create_simulation_prompt, ContextualPromptBuilder, create_a2a_message_from_prompt
+from .contextual_prompt import create_simulation_prompt, ContextualPromptBuilder
 from ..proto.mantis.v1 import mantis_persona_pb2
 from ..proto import a2a_pb2
 from ..config import DEFAULT_MODEL
@@ -131,7 +130,7 @@ class SimulationOutput:
         
         return artifact
     
-    def to_a2a_message(self, role: int = None) -> a2a_pb2.Message:
+    def to_a2a_message(self, role: Optional[int] = None) -> a2a_pb2.Message:
         """Convert the entire simulation output to a single A2A Message."""
         if role is None:
             role = a2a_pb2.ROLE_AGENT
@@ -141,7 +140,7 @@ class SimulationOutput:
         summary_msg.message_id = f"summary-{uuid.uuid4().hex[:12]}"
         summary_msg.context_id = self._task.context_id
         summary_msg.task_id = self._task.id
-        summary_msg.role = role
+        summary_msg.role = role  # type: ignore[assignment]
         
         # Create summary text
         final_response = self.get_final_response()
@@ -345,7 +344,7 @@ class SimpleOrchestrator:
         task = self.active_tasks[task_id]
         
         # Update task status
-        task.status.state = new_state
+        task.status.state = new_state  # type: ignore[assignment]
         
         # Update timestamp
         timestamp = timestamp_pb2.Timestamp()
@@ -370,7 +369,7 @@ class SimpleOrchestrator:
         self,
         task_id: str,
         response_text: str,
-        role: int = None
+        role: Optional[int] = None
     ) -> a2a_pb2.Message:
         """Create an A2A Message from a response string."""
         
@@ -384,7 +383,7 @@ class SimpleOrchestrator:
         response_message.message_id = f"resp-{uuid.uuid4().hex[:12]}"
         response_message.context_id = task.context_id
         response_message.task_id = task_id
-        response_message.role = role or a2a_pb2.ROLE_AGENT
+        response_message.role = role or a2a_pb2.ROLE_AGENT  # type: ignore[assignment]
         
         # Add response text as part
         text_part = a2a_pb2.Part()
@@ -685,7 +684,7 @@ async def demo_a2a_taskstate_integration():
         context_id=context_id
     )
     
-    task2 = await orchestrator.execute_task_with_a2a_lifecycle(
+    _task2 = await orchestrator.execute_task_with_a2a_lifecycle(
         query="How does context threading work?",
         context_id=context_id
     )
