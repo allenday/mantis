@@ -202,7 +202,7 @@ def create_a2a_message_from_prompt(
     """Convert a ContextualPrompt to an A2A Message for protocol compatibility."""
     
     message = a2a_pb2.Message()
-    message.role = a2a_pb2.USER  # Set as user role
+    message.role = a2a_pb2.ROLE_USER  # Set as user role
     
     # Create text part with assembled prompt
     text_part = a2a_pb2.Part()
