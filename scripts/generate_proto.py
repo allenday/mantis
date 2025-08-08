@@ -35,6 +35,24 @@ def fix_imports(proto_file, output_dir):
         content
     )
     
+    # Fix a2a.v1 imports to use relative imports  
+    if 'mantis/v1' in str(proto_file):
+        # For nested files, fix a2a.v1 imports to use ... 
+        content = re.sub(
+            r'^from a2a\.v1 import a2a_pb2 as ([a-zA-Z0-9_]+)',
+            r'from ... import a2a_pb2 as \1',
+            content,
+            flags=re.MULTILINE
+        )
+        
+        # Fix mantis.v1 imports to use relative imports
+        content = re.sub(
+            r'^from mantis\.v1 import ([a-zA-Z0-9_]+) as ([a-zA-Z0-9_]+)',
+            r'from . import \1 as \2',
+            content,
+            flags=re.MULTILINE
+        )
+    
     # Fix absolute imports that should be relative 
     if 'mantis/v1' in str(proto_file):
         # For nested files, use ... to go up to mantis.proto
