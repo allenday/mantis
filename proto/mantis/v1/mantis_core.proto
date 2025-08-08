@@ -2,16 +2,39 @@ syntax = "proto3";
 
 package mantis.core;
 
+import "google/api/annotations.proto";
+import "google/api/client.proto";
+import "google/api/field_behavior.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
-import "a2a.proto";
+import "a2a/v1/a2a.proto";
+import "mantis/v1/mantis_persona.proto";
 
-// Core user request - everything the user can specify
+option csharp_namespace = "Mantis.Core.V1";
+option go_package = "google.golang.org/mantis/core/v1";
+option java_multiple_files = true;
+option java_outer_classname = "MantisCoreProto";
+option java_package = "com.mantis.core.v1";
+
+// Main Mantis orchestration service for multi-agent coordination
+service MantisService {
+  // Process a single user request with direct agent execution
+  rpc ProcessUserRequest(UserRequest) returns (SimulationOutput);
+  
+  // Process a team request with multi-agent coordination
+  rpc ProcessTeamRequest(TeamExecutionRequest) returns (TeamExecutionResult);
+  
+  // Process a narrator request for synthesizing team responses
+  rpc ProcessNarratorRequest(NarratorRequest) returns (AgentResponse);
+}
+
+// DEPRECATED: Use SimulationInput instead
 message UserRequest {
+  option deprecated = true;
   // Required: the main query/prompt text
   string query = 1;
 
-  // Optional: original query/prompt, passed through in cases request chaining.
+  // Optional: original query/prompt, passed through when request chaining.
   optional string context = 2;
 
   // Optional: structured data as JSON string
@@ -19,12 +42,18 @@ message UserRequest {
   
   // Optional: model specification (falls back to default)
   optional ModelSpec model_spec = 4;
-  
+
+  // Optional: minimum recursion depth (default 1)
+  optional int32 min_depth = 5;
+
   // Optional: maximum recursion depth (default 1)
-  optional int32 max_depth = 5;
+  optional int32 max_depth = 6;
   
   // Agent specifications
-  repeated AgentSpec agents = 6;
+  repeated AgentSpec agents = 7;
+  
+  // Execution strategy (optional, defaults to EXECUTION_STRATEGY_DIRECT)
+  optional ExecutionStrategy execution_strategy = 8;
 }
 
 // Model specification - reusable across user request and agents
@@ -36,15 +65,14 @@ message ModelSpec {
   optional double temperature = 2;
 }
 
-// Recursion policy enum - RFC 2119 terminology
-enum RecursionPolicy {
-  RECURSION_POLICY_UNSPECIFIED = 0;
-  RECURSION_POLICY_MAY = 1;      // Agent may recurse (default for leaders)
-  RECURSION_POLICY_MUST = 2;     // Agent must recurse
-  RECURSION_POLICY_MUST_NOT = 3; // Agent must not recurse (default for followers)
+// Team formation strategy enum
+enum TeamFormationStrategy {
+  TEAM_FORMATION_STRATEGY_UNSPECIFIED = 0;
+  TEAM_FORMATION_STRATEGY_RANDOM = 1;        // Random agent selection
+  TEAM_FORMATION_STRATEGY_HOMOGENEOUS = 2;   // Similar agents selection
 }
 
-// Unified agent specification
+// Simplified agent specification
 message AgentSpec {
   // Optional: count (default 1)
   optional int32 count = 1;
@@ -52,42 +80,81 @@ message AgentSpec {
   // Optional: model specification
   optional ModelSpec model_spec = 2;
   
-  // Optional: recursion policy
-  optional RecursionPolicy recursion_policy = 3;
-  
   // Optional: current depth (set during execution)
-  optional int32 current_depth = 4;
+  optional int32 current_depth = 3;
 }
 
-// Processed simulation input
+// Primary input for simulation execution with deep A2A integration
 message SimulationInput {
-  // The query to process
-  string query = 1;
-    
-  // Optional context
-  optional string context = 2;
+  // A2A context threading for conversation continuity
+  string context_id = 1;
+  string parent_context_id = 2;
   
-  // Optional: structured data as JSON string
-  optional string structured_data = 3;
+  // Required: the main query/prompt text
+  string query = 3;
+  
+  // Optional: original query/prompt, passed through when request chaining
+  optional string context = 4;
+  
+  // A2A structured input artifacts
+  repeated a2a.v1.Artifact input_artifacts = 5;
   
   // Optional: model specification (falls back to default)
-  optional ModelSpec model_spec = 4;
+  optional ModelSpec model_spec = 6;
+  
+  // Optional: minimum recursion depth (default 1)
+  optional int32 min_depth = 7;
   
   // Optional: maximum recursion depth (default 1)
-  optional int32 max_depth = 5;
+  optional int32 max_depth = 8;
   
   // Agent specifications
-  repeated AgentSpec agents = 6;
+  repeated AgentSpec agents = 9;
   
-  // Execution strategy
-  ExecutionStrategy execution_strategy = 7;
+  // Execution strategy (optional, defaults to EXECUTION_STRATEGY_DIRECT)
+  optional ExecutionStrategy execution_strategy = 10;
 }
 
-// Execution strategy enum
+// Contextual execution with A2A context_id propagation
+message ContextualExecution {
+  // A2A context threading
+  string context_id = 1;
+  string parent_context_id = 2;
+  
+  // Current recursion depth
+  int32 current_depth = 3;
+  
+  // Maximum allowed recursion depth
+  int32 max_depth = 4;
+  
+  // Team size at current depth
+  int32 team_size = 5;
+  
+  // Assigned role for this agent
+  string assigned_role = 6;
+  
+  // Agent index in team
+  int32 agent_index = 7;
+  
+  // Parent task ID (A2A integration)
+  optional string parent_task_id = 8;
+  
+  // Available agent IDs that can be delegated to
+  repeated string available_agent_ids = 9;
+  
+  // Execution start time
+  double start_time = 10;
+  
+  // Execution strategy being used
+  ExecutionStrategy strategy = 11;
+}
+
+
+// Execution strategy enum (simplified)
 enum ExecutionStrategy {
   EXECUTION_STRATEGY_UNSPECIFIED = 0;
-  EXECUTION_STRATEGY_DIRECT = 1;
-  EXECUTION_STRATEGY_A2A = 2;
+  EXECUTION_STRATEGY_DIRECT = 1;   // Direct execution
+  EXECUTION_STRATEGY_A2A = 2;      // A2A distributed execution
 }
 
 // Status enumeration for execution results
@@ -110,11 +177,19 @@ enum ErrorType {
   ERROR_TYPE_RECURSION_LIMIT = 6;
 }
 
-// Recursion conditions for hierarchical policy
-enum RecursionCondition {
-  RECURSION_CONDITION_UNSPECIFIED = 0;  
-  RECURSION_CONDITION_REENTRANT = 1;    // Can recurse (like leaders)
-  RECURSION_CONDITION_TERMINAL = 2;     // Cannot recurse (like followers)
+// Flexible contextual prompt design for A2A integration
+message ContextualPrompt {
+  // Agent identifier for targeting
+  string agent_name = 1;
+  
+  // Context content for prompt customization
+  string context_content = 2;
+  
+  // Priority for ordering within prefix/suffix groups
+  int32 priority = 3;
+  
+  // Ready-to-use A2A Message template
+  a2a.v1.Message message_template = 4;
 }
 
 // Structured error information
@@ -130,49 +205,150 @@ message ExecutionResult {
   optional ErrorInfo error_info = 2;
 }
 
-// Structured agent response - mirrors A2A AgentCard capabilities with extensions
+// Agent response using A2A Message with Parts and Artifacts
 message AgentResponse {
-  // Primary textual response (markdown, advice, reasoning)
-  string text_response = 1;
+  // A2A Message with rich content structure
+  a2a.v1.Message response_message = 1;
   
-  // Structured extensions - like competency scores, role adaptations, domain expertise
-  repeated a2a.v1.AgentExtension extensions = 2;
+  // A2A Artifacts containing structured outputs
+  repeated a2a.v1.Artifact response_artifacts = 2;
   
-  // Output modalities used (text/plain, text/markdown, application/json)
-  repeated string output_modes = 3;
+  // A2A Task reference for execution tracking
+  optional a2a.v1.Task execution_task = 3;
   
-  // Skills that were activated for this response
-  repeated a2a.v1.AgentSkill activated_skills = 4;
+  // Final A2A TaskState
+  optional a2a.v1.TaskState final_state = 4;
 }
 
 
 
-// Unified simulation result - represents both individual agent output and complete simulation
+// Simulation output with deep A2A integration
 message SimulationOutput {
-  // A2A agent URL from AgentCard (e.g., "http://agent.example.com/") - empty for root simulation
-  optional string agent_url = 1;
+  // A2A context threading
+  string context_id = 1;
   
-  // Recursion condition this agent operated under - only set for individual agents
-  optional RecursionCondition recursion_condition = 2;
+  // A2A agent URL from AgentCard (e.g., "http://agent.example.com/") - empty for root simulation
+  optional string agent_url = 2;
   
   // Nested agent results if this agent/simulation spawned sub-agents
   repeated SimulationOutput results = 3;
   
-  // Final synthesized response - can contain both text and structured data like A2A AgentCard extensions
-  AgentResponse response = 4;
+  // A2A Message with rich structured content
+  a2a.v1.Message response_message = 4;
+  
+  // A2A Artifacts containing structured outputs
+  repeated a2a.v1.Artifact response_artifacts = 5;
+  
+  // A2A Task for execution tracking
+  a2a.v1.Task simulation_task = 6;
+  
+  // Final A2A TaskState
+  a2a.v1.TaskState final_state = 7;
   
   // Total execution time for this agent/simulation (in seconds)
-  double total_time = 5;
+  double total_time = 8;
   
-  // Which execution strategy was used at each recursion level
-  repeated ExecutionStrategy execution_strategies = 6;
+  // Execution strategy used
+  ExecutionStrategy execution_strategy = 9;
   
   // Total number of agents that participated in this simulation branch
-  int32 team_size = 7;
+  int32 team_size = 10;
   
   // Current recursion depth for this agent/simulation
-  int32 recursion_depth = 8;
+  int32 recursion_depth = 11;
   
   // Combined execution status and error information
-  ExecutionResult execution_result = 9;
+  ExecutionResult execution_result = 12;
+}
+
+// Encapsulated agent interface hiding complexity
+message AgentInterface {
+  // Agent identification
+  string agent_id = 1;
+  string name = 2;
+  string description = 3;
+  
+  // Simplified agent summaries
+  string capabilities_summary = 4;
+  string persona_summary = 5;
+  string role_preference = 6;
+  
+  // Availability status
+  bool available = 7;
+  
+  // Reference to full A2A AgentCard (optional)
+  optional a2a.v1.AgentCard agent_card = 8;
+}
+
+// Team execution result with A2A integration and streaming
+message TeamExecutionResult {
+  // A2A context threading
+  string context_id = 1;
+  
+  // A2A Task for team coordination
+  a2a.v1.Task team_coordination_task = 2;
+  
+  // Individual A2A Tasks for team members
+  repeated a2a.v1.Task member_tasks = 3;
+  
+  // A2A Messages from team members
+  repeated a2a.v1.Message member_messages = 4;
+  
+  // A2A Artifacts produced by team members
+  repeated a2a.v1.Artifact member_artifacts = 5;
+  
+  // Final A2A TaskState for team
+  a2a.v1.TaskState team_final_state = 6;
+  
+  // Which execution strategy was used for the team
+  ExecutionStrategy execution_strategy = 7;
+  
+  // Total execution time for the entire team (in seconds)
+  double total_team_time = 8;
+  
+  // Real-time streaming updates
+  repeated a2a.v1.StreamResponse streaming_updates = 9;
+  
+  // Combined execution result for the team operation
+  ExecutionResult team_execution_result = 10;
+}
+
+// Updated team execution request with flexible ContextualPrompt design
+message TeamExecutionRequest {
+  // Base simulation input with A2A integration
+  SimulationInput simulation_input = 1;
+  
+  // Number of team members to select
+  int32 team_size = 2;
+  
+  // Team formation strategy
+  TeamFormationStrategy formation_strategy = 3;
+  
+  // Preferred execution strategy for team members
+  ExecutionStrategy preferred_execution_strategy = 4;
+  
+  // Additional configuration for team formation
+  google.protobuf.Struct formation_config = 5;
+  
+  // New flexible contextual prompts
+  repeated ContextualPrompt prefixes = 6;   // Applied before base query
+  repeated ContextualPrompt suffixes = 7;   // Applied after base query
+}
+
+// Request for narrative synthesis from team responses  
+message NarratorRequest {
+  // Original user request context
+  UserRequest user_request = 1;
+  
+  // Team execution results to synthesize
+  TeamExecutionResult team_result = 2;
+  
+  // Narrator strategy identifier (e.g., "tarot_reader", "debate_moderator")
+  string narrator_strategy = 3;
+  
+  // Execution strategy for the narrator agent
+  ExecutionStrategy execution_strategy = 4;
+  
+  // Additional configuration for narrative synthesis
+  google.protobuf.Struct narrator_config = 5;
 }

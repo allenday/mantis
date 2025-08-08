@@ -14,6 +14,7 @@ enum RolePreference {
 }
 
 // Enriched AgentCard that includes parsed persona extension data
+// Note: For simplified agent interface use mantis.core.AgentInterface which encapsulates this complexity
 message MantisAgentCard {
   // The base A2A AgentCard
   a2a.v1.AgentCard agent_card = 1;
