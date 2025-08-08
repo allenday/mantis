@@ -141,10 +141,11 @@ def main():
         str(grpc_tools_proto_path),
     ]
 
-    # Proto files to generate - keep it simple to avoid A2A conflicts
+    # Proto files to generate - now including mantis_core for PRD compliance
     proto_files = [
         "validate/validate.proto",
-        "mantis/v1/mantis_persona.proto", 
+        "mantis/v1/mantis_persona.proto",
+        "mantis/v1/mantis_core.proto", 
     ]
 
     for proto_file in proto_files:

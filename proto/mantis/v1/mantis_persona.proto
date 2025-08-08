@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package mantis.persona.v1;
 
-import "a2a.proto";
+import "a2a/v1/a2a.proto";
 import "validate/validate.proto";
 
 // Role preferences for multi-agent scenarios
