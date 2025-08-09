@@ -16,14 +16,10 @@ SIMULATION_BASE_SUFFIX = (
     "and contributes meaningfully to the overall simulation."
 )
 
-PERSONA_ADHERENCE_SUFFIX = (
-    "Stay true to your persona characteristics and communication style as you respond."
-)
+PERSONA_ADHERENCE_SUFFIX = "Stay true to your persona characteristics and communication style as you respond."
 
 # Team coordination templates
-TEAM_COORDINATION_PREFIX = (
-    "You are working as part of a multi-agent team to address this challenge."
-)
+TEAM_COORDINATION_PREFIX = "You are working as part of a multi-agent team to address this challenge."
 
 TEAM_COLLABORATION_SUFFIX = (
     "Collaborate effectively with your team members while bringing your unique perspective to bear."
@@ -70,9 +66,7 @@ TAROT_TEAM_CONTEXT = (
 )
 
 # Error and fallback templates
-FALLBACK_AGENT_CONTEXT = (
-    "You are an AI agent with your own expertise and perspective."
-)
+FALLBACK_AGENT_CONTEXT = "You are an AI agent with your own expertise and perspective."
 
 CAPABILITY_CONTEXT_HEADER = "## Your Capabilities"
 
