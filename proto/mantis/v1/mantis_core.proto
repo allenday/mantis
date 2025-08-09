@@ -7,7 +7,7 @@ import "google/api/client.proto";
 import "google/api/field_behavior.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
-import "a2a/v1/a2a.proto";
+import "a2a.proto";
 import "mantis/v1/mantis_persona.proto";
 
 option csharp_namespace = "Mantis.Core.V1";
@@ -18,8 +18,13 @@ option java_package = "com.mantis.core.v1";
 
 // Main Mantis orchestration service for multi-agent coordination
 service MantisService {
-  // Process a single user request with direct agent execution
-  rpc ProcessUserRequest(UserRequest) returns (SimulationOutput);
+  // PRIMARY METHOD: Process simulation input with context threading for recursive agent invocation
+  rpc ProcessSimulationInput(SimulationInput) returns (SimulationOutput);
+  
+  // DEPRECATED: Process a single user request with direct agent execution
+  rpc ProcessUserRequest(UserRequest) returns (SimulationOutput) {
+    option deprecated = true;
+  };
   
   // Process a team request with multi-agent coordination
   rpc ProcessTeamRequest(TeamExecutionRequest) returns (TeamExecutionResult);
@@ -72,6 +77,14 @@ enum TeamFormationStrategy {
   TEAM_FORMATION_STRATEGY_HOMOGENEOUS = 2;   // Similar agents selection
 }
 
+// Recursion policy for agent behavior
+enum RecursionPolicy {
+  RECURSION_POLICY_UNSPECIFIED = 0;
+  RECURSION_POLICY_MAY = 1;        // Agent may recurse if it chooses
+  RECURSION_POLICY_MUST = 2;       // Agent must recurse - enforces delegation
+  RECURSION_POLICY_MUST_NOT = 3;   // Agent must not recurse - no delegation
+}
+
 // Simplified agent specification
 message AgentSpec {
   // Optional: count (default 1)
@@ -82,6 +95,12 @@ message AgentSpec {
   
   // Optional: current depth (set during execution)
   optional int32 current_depth = 3;
+  
+  // Optional: recursion policy (default MAY)
+  optional RecursionPolicy recursion_policy = 4;
+  
+  // Optional: specific agent to use for this spec
+  optional AgentInterface agent = 5;
 }
 
 // Primary input for simulation execution with deep A2A integration
@@ -175,6 +194,7 @@ enum ErrorType {
   ERROR_TYPE_TIMEOUT = 4;
   ERROR_TYPE_AUTHENTICATION = 5;
   ERROR_TYPE_RECURSION_LIMIT = 6;
+  ERROR_TYPE_RECURSION_POLICY_VIOLATION = 7;  // Agent failed to follow recursion policy
 }
 
 // Flexible contextual prompt design for A2A integration

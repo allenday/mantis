@@ -5,7 +5,7 @@ import warnings
 
 from mantis.v1 import mantis_core_pb2 as mantis_dot_v1_dot_mantis__core__pb2
 
-GRPC_GENERATED_VERSION = '1.74.0'
+GRPC_GENERATED_VERSION = '1.71.2'
 GRPC_VERSION = grpc.__version__
 _version_not_supported = False
 
@@ -35,6 +35,11 @@ class MantisServiceStub(object):
         Args:
             channel: A grpc.Channel.
         """
+        self.ProcessSimulationInput = channel.unary_unary(
+                '/mantis.core.MantisService/ProcessSimulationInput',
+                request_serializer=mantis_dot_v1_dot_mantis__core__pb2.SimulationInput.SerializeToString,
+                response_deserializer=mantis_dot_v1_dot_mantis__core__pb2.SimulationOutput.FromString,
+                _registered_method=True)
         self.ProcessUserRequest = channel.unary_unary(
                 '/mantis.core.MantisService/ProcessUserRequest',
                 request_serializer=mantis_dot_v1_dot_mantis__core__pb2.UserRequest.SerializeToString,
@@ -56,8 +61,15 @@ class MantisServiceServicer(object):
     """Main Mantis orchestration service for multi-agent coordination
     """
 
+    def ProcessSimulationInput(self, request, context):
+        """PRIMARY METHOD: Process simulation input with context threading for recursive agent invocation
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def ProcessUserRequest(self, request, context):
-        """Process a single user request with direct agent execution
+        """DEPRECATED: Process a single user request with direct agent execution
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -80,6 +92,11 @@ class MantisServiceServicer(object):
 
 def add_MantisServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
+            'ProcessSimulationInput': grpc.unary_unary_rpc_method_handler(
+                    servicer.ProcessSimulationInput,
+                    request_deserializer=mantis_dot_v1_dot_mantis__core__pb2.SimulationInput.FromString,
+                    response_serializer=mantis_dot_v1_dot_mantis__core__pb2.SimulationOutput.SerializeToString,
+            ),
             'ProcessUserRequest': grpc.unary_unary_rpc_method_handler(
                     servicer.ProcessUserRequest,
                     request_deserializer=mantis_dot_v1_dot_mantis__core__pb2.UserRequest.FromString,
@@ -106,6 +123,33 @@ def add_MantisServiceServicer_to_server(servicer, server):
 class MantisService(object):
     """Main Mantis orchestration service for multi-agent coordination
     """
+
+    @staticmethod
+    def ProcessSimulationInput(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/mantis.core.MantisService/ProcessSimulationInput',
+            mantis_dot_v1_dot_mantis__core__pb2.SimulationInput.SerializeToString,
+            mantis_dot_v1_dot_mantis__core__pb2.SimulationOutput.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
 
     @staticmethod
     def ProcessUserRequest(request,
