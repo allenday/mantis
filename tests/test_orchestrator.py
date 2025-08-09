@@ -4,7 +4,7 @@ Tests for SimulationOrchestrator.
 
 import pytest
 import os
-from mantis.core import SimulationOrchestrator, UserRequestBuilder
+from mantis.core import SimulationOrchestrator, SimulationInputBuilder as UserRequestBuilder
 from mantis.proto.mantis.v1 import mantis_core_pb2
 
 

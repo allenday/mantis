@@ -4,7 +4,7 @@ Tests for UserRequestBuilder.
 
 import pytest
 import json
-from mantis.core import UserRequestBuilder
+from mantis.core import SimulationInputBuilder as UserRequestBuilder
 from mantis.proto.mantis.v1 import mantis_core_pb2
 
 
