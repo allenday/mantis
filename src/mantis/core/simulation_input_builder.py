@@ -2,7 +2,7 @@
 SimulationInput builder for converting CLI arguments to protobuf messages.
 """
 
-from typing import List, Optional, Union, Dict, Any
+from typing import List, Optional, Union
 import uuid
 import asyncio
 
@@ -38,16 +38,19 @@ class SimulationInputBuilder:
         self._context = context.strip() if context else None
         return self
 
-    def structured_data(self, data: str) -> "SimulationInputBuilder":
+    def structured_data(self, data: Union[str, dict]) -> "SimulationInputBuilder":
         """Set structured data for the request."""
-        self._structured_data = data.strip() if data else None
+        if isinstance(data, dict):
+            import json
+
+            self._structured_data = json.dumps(data)
+        elif isinstance(data, str):
+            self._structured_data = data.strip() if data else None
+        else:
+            self._structured_data = str(data) if data else None
         return self
 
-    def model_spec(
-        self, 
-        model: Optional[str] = None, 
-        temperature: Optional[float] = None
-    ) -> "SimulationInputBuilder":
+    def model_spec(self, model: Optional[str] = None, temperature: Optional[float] = None) -> "SimulationInputBuilder":
         """Set model specification."""
         if model or temperature is not None:
             spec = mantis_core_pb2.ModelSpec()
@@ -62,8 +65,10 @@ class SimulationInputBuilder:
 
     def max_depth(self, depth: int) -> "SimulationInputBuilder":
         """Set maximum depth for recursive processing."""
-        if depth < 0:
-            raise ValueError(f"Max depth must be non-negative, got {depth}")
+        if depth < 1:
+            raise ValueError(f"Max depth must be at least 1, got {depth}")
+        if depth > 10:
+            raise ValueError(f"Max depth cannot exceed 10 for safety, got {depth}")
         self._max_depth = depth
         return self
 
@@ -72,7 +77,7 @@ class SimulationInputBuilder:
         count: Optional[int] = None,
         model: Optional[str] = None,
         temperature: Optional[float] = None,
-        recursion_policy: Optional[Union[str, mantis_core_pb2.RecursionPolicy]] = None
+        recursion_policy: Optional[Union[str, mantis_core_pb2.RecursionPolicy]] = None,
     ) -> "SimulationInputBuilder":
         """Add an agent specification."""
         spec = mantis_core_pb2.AgentSpec()
@@ -147,7 +152,9 @@ class SimulationInputBuilder:
                 except ValueError as e:
                     raise ValueError(f"Invalid agent specification '{spec}': {e}")
             else:
-                raise ValueError(f"Invalid agent specification format '{spec}'. Expected format: 'name', 'name:count', or 'name:count:policy'")
+                raise ValueError(
+                    f"Invalid agent specification format '{spec}'. Expected format: 'name', 'name:count', or 'name:count:policy'"
+                )
 
         return self
 
@@ -158,8 +165,8 @@ class SimulationInputBuilder:
         if not self._query:
             errors.append("Query is required")
 
-        if self._max_depth is not None and self._max_depth < 0:
-            errors.append("Max depth must be non-negative")
+        if self._max_depth is not None and self._max_depth < 1:
+            errors.append("Max depth must be at least 1")
 
         for i, agent in enumerate(self._agents):
             if agent.count <= 0:
@@ -176,22 +183,34 @@ class SimulationInputBuilder:
 
         simulation_input = mantis_core_pb2.SimulationInput()
         simulation_input.query = self._query  # type: ignore  # Validated above
-        
+
         # Generate unique context ID
         try:
             loop_time = asyncio.get_event_loop().time()
         except RuntimeError:
             import time
+
             loop_time = time.time()
-        
+
         simulation_input.context_id = f"cli_{int(loop_time)}_{uuid.uuid4().hex[:8]}"
-        
+
         if self._context:
             simulation_input.context = self._context
 
+        if self._structured_data:
+            # Note: SimulationInput doesn't have structured_data field in current schema
+            # Store it in context for now as a workaround
+            if simulation_input.context:
+                simulation_input.context += f"\n\nStructured Data: {self._structured_data}"
+            else:
+                simulation_input.context = f"Structured Data: {self._structured_data}"
+
+        if self._model_spec:
+            simulation_input.model_spec.CopyFrom(self._model_spec)
+
         # Set execution strategy to DIRECT by default
         simulation_input.execution_strategy = mantis_core_pb2.EXECUTION_STRATEGY_DIRECT
-        
+
         # Set depth
         if self._max_depth is not None:
             simulation_input.max_depth = self._max_depth
@@ -199,7 +218,14 @@ class SimulationInputBuilder:
             simulation_input.max_depth = DEFAULT_MAX_DEPTH
         simulation_input.min_depth = 0
 
-        # Add agent specifications
+        # Add agent specifications - ensure at least one agent exists
+        if not self._agents:
+            # Add default agent if none specified
+            default_agent = mantis_core_pb2.AgentSpec()
+            default_agent.count = 1
+            default_agent.recursion_policy = mantis_core_pb2.RECURSION_POLICY_MAY
+            self._agents.append(default_agent)
+
         for agent_spec in self._agents:
             simulation_input.agents.append(agent_spec)
 
