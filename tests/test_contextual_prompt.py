@@ -3,7 +3,7 @@ Unit tests for ContextualPrompt template assembly system.
 """
 
 import pytest
-from mantis.core.contextual_prompt import (
+from mantis.prompt import (
     ContextualPrompt,
     ContextualPromptBuilder,
     create_simulation_prompt,

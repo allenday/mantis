@@ -13,7 +13,7 @@ import pytest
 import uuid
 from unittest.mock import Mock
 
-from mantis.core.contextual_prompt import ContextualPrompt
+from mantis.prompt import ContextualPrompt
 from mantis.proto.mantis.v1 import mantis_persona_pb2
 from mantis.proto import a2a_pb2
 
