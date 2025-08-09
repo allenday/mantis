@@ -22,7 +22,7 @@ class TestProtobufImports:
         assert hasattr(mantis_core_pb2, 'SimulationOutput')
         assert hasattr(mantis_core_pb2, 'TeamExecutionRequest')
         assert hasattr(mantis_core_pb2, 'AgentInterface')
-        assert hasattr(mantis_core_pb2, 'MantisService')
+        assert hasattr(mantis_core_pb2, 'UserRequest')
 
     def test_mantis_persona_protobuf_import(self):
         """Test that mantis_persona_pb2 imports correctly."""
@@ -120,12 +120,12 @@ class TestProtobufMessageCreation:
         
         # Test nested A2A AgentCard
         a2a_card = a2a_pb2.AgentCard()
-        a2a_card.id = "test-agent"
         a2a_card.name = "TestAgent"
+        a2a_card.description = "A test agent"
         
         agent_card.agent_card.CopyFrom(a2a_card)
-        assert agent_card.agent_card.id == "test-agent"
         assert agent_card.agent_card.name == "TestAgent"
+        assert agent_card.agent_card.description == "A test agent"
 
     def test_a2a_message_creation(self):
         """Test A2A Message creation and content structure."""

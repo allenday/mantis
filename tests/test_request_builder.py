@@ -34,8 +34,9 @@ class TestUserRequestBuilder:
                   .build())
         
         assert request.query == "Complex query"
-        assert request.context == "Some context"
-        assert '"key": "value"' in request.structured_data
+        # structured_data gets embedded in context since SimulationInput doesn't have structured_data field
+        assert "Some context" in request.context
+        assert '"key": "value"' in request.context
         assert request.model_spec.model == "claude-3-5-sonnet"
         assert request.model_spec.temperature == 0.8
         assert request.max_depth == 1
@@ -120,7 +121,7 @@ class TestUserRequestBuilder:
         with pytest.raises(ValueError, match="Max depth must be at least 1"):
             builder.query("test").max_depth(0).build()
             
-        with pytest.raises(ValueError, match="Max depth cannot exceed 1 for safety"):
+        with pytest.raises(ValueError, match="Max depth cannot exceed 10 for safety"):
             builder.query("test").max_depth(15).build()
             
         # Invalid agent count
@@ -168,8 +169,10 @@ class TestUserRequestBuilder:
         data = {"users": ["alice", "bob"], "count": 42}
         request = builder.query("test").structured_data(data).build()
         
-        # Should be JSON string
-        parsed_data = json.loads(request.structured_data)
+        # Since structured_data gets embedded in context, extract it
+        assert "Structured Data:" in request.context
+        json_part = request.context.split("Structured Data: ")[1]
+        parsed_data = json.loads(json_part)
         assert parsed_data == data
 
     def test_recursion_policy_aliases(self):
@@ -189,11 +192,11 @@ class TestUserRequestBuilder:
         builder = UserRequestBuilder()
         request = builder.query("minimal test").build()
         
-        # These should not be set
+        # These should not be set (note: SimulationInput doesn't have structured_data field)
         assert not request.HasField("context")
-        assert not request.HasField("structured_data")
         assert not request.HasField("model_spec")
-        assert not request.HasField("max_depth")
+        # max_depth has a default value, so it's always set
+        assert request.max_depth == 1  # DEFAULT_MAX_DEPTH
         
         # But agents should be added by default
         assert len(request.agents) == 1

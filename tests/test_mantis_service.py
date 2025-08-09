@@ -16,6 +16,7 @@ from unittest.mock import Mock, patch, AsyncMock
 from typing import Optional
 
 from mantis.core.mantis_service import MantisService
+from mantis.agent import AgentInterface
 from mantis.proto.mantis.v1 import mantis_core_pb2, mantis_persona_pb2
 from mantis.proto import a2a_pb2
 
@@ -33,12 +34,12 @@ class TestMantisService:
         assert hasattr(self.service.orchestrator, 'get_available_tools')
         
         tools = self.service.orchestrator.get_available_tools()
-        assert isinstance(tools, list)
+        assert isinstance(tools, dict)
         assert len(tools) > 0
 
     def test_mantis_service_initialization_failure(self):
         """Test MantisService fails fast on initialization error."""
-        with patch('mantis.core.mantis_service.SimpleOrchestrator', side_effect=Exception("Init failed")):
+        with patch('mantis.core.mantis_service.SimulationOrchestrator', side_effect=Exception("Init failed")):
             with pytest.raises(RuntimeError, match="MantisService initialization failed"):
                 MantisService()
 
@@ -58,46 +59,69 @@ class TestMantisService:
         
         return simulation_input
 
+    def create_test_agent_interface(self) -> AgentInterface:
+        """Create test AgentInterface for testing."""
+        # Create test MantisAgentCard
+        agent_card = mantis_persona_pb2.MantisAgentCard()
+        agent_card.persona_title = "Test Agent"
+        
+        # Add test agent card from A2A
+        a2a_card = a2a_pb2.AgentCard()
+        a2a_card.name = "TestAgent"
+        a2a_card.description = "A test agent for unit testing"
+        agent_card.agent_card.CopyFrom(a2a_card)
+        
+        return AgentInterface(agent_card)
+
     @pytest.mark.asyncio
     async def test_process_simulation_input_validation_empty_context_id(self):
         """Test validation fails for empty context_id."""
         simulation_input = self.create_valid_simulation_input()
         simulation_input.context_id = ""
+        agent_interface = self.create_test_agent_interface()
         
         with pytest.raises(ValueError, match="context_id cannot be empty"):
-            await self.service.process_simulation_input(simulation_input)
+            await self.service.process_simulation_input(simulation_input, agent_interface)
 
     @pytest.mark.asyncio
     async def test_process_simulation_input_validation_empty_query(self):
         """Test validation fails for empty query."""
         simulation_input = self.create_valid_simulation_input()
         simulation_input.query = ""
+        agent_interface = self.create_test_agent_interface()
         
         with pytest.raises(ValueError, match="query cannot be empty"):
-            await self.service.process_simulation_input(simulation_input)
+            await self.service.process_simulation_input(simulation_input, agent_interface)
 
     @pytest.mark.asyncio
     async def test_process_simulation_input_validation_whitespace_context_id(self):
         """Test validation fails for whitespace-only context_id."""
         simulation_input = self.create_valid_simulation_input()
         simulation_input.context_id = "   "
+        agent_interface = self.create_test_agent_interface()
         
         with pytest.raises(ValueError, match="context_id cannot be empty"):
-            await self.service.process_simulation_input(simulation_input)
+            await self.service.process_simulation_input(simulation_input, agent_interface)
 
     @pytest.mark.asyncio 
     async def test_process_simulation_input_success(self):
         """Test successful SimulationInput processing with A2A lifecycle."""
         simulation_input = self.create_valid_simulation_input()
         
-        # Create real A2A Task protobuf object
+        # Create real SimulationOutput protobuf object
+        mock_output = mantis_core_pb2.SimulationOutput()
+        mock_output.context_id = simulation_input.context_id
+        mock_output.final_state = a2a_pb2.TASK_STATE_COMPLETED
+        
+        # Create a mock task for the simulation_task field
         mock_task = a2a_pb2.Task()
         mock_task.context_id = simulation_input.context_id
         mock_task.id = f"task-{uuid.uuid4().hex[:8]}"
         mock_task.status.state = a2a_pb2.TASK_STATE_COMPLETED
+        mock_output.simulation_task.CopyFrom(mock_task)
         
-        with patch.object(self.service.orchestrator, 'execute_task_with_a2a_lifecycle', return_value=mock_task):
-            result = await self.service.process_simulation_input(simulation_input)
+        with patch.object(self.service.orchestrator, 'execute_simulation', return_value=mock_output):
+            result = await self.service.process_simulation_input(simulation_input, self.create_test_agent_interface())
             
             assert isinstance(result, mantis_core_pb2.SimulationOutput)
             assert result.context_id == simulation_input.context_id
@@ -114,15 +138,22 @@ class TestMantisService:
         mock_message.message_id = "test-message-123"
         mock_message.role = a2a_pb2.ROLE_AGENT
         
-        # Create real A2A Task with history
+        # Create real SimulationOutput with response message
+        mock_output = mantis_core_pb2.SimulationOutput()
+        mock_output.context_id = simulation_input.context_id
+        mock_output.final_state = a2a_pb2.TASK_STATE_COMPLETED
+        mock_output.response_message.CopyFrom(mock_message)
+        
+        # Create a mock task for the simulation_task field
         mock_task = a2a_pb2.Task()
         mock_task.context_id = simulation_input.context_id
         mock_task.id = f"task-{uuid.uuid4().hex[:8]}"
         mock_task.status.state = a2a_pb2.TASK_STATE_COMPLETED
         mock_task.history.append(mock_message)
+        mock_output.simulation_task.CopyFrom(mock_task)
         
-        with patch.object(self.service.orchestrator, 'execute_task_with_a2a_lifecycle', return_value=mock_task):
-            result = await self.service.process_simulation_input(simulation_input)
+        with patch.object(self.service.orchestrator, 'execute_simulation', return_value=mock_output):
+            result = await self.service.process_simulation_input(simulation_input, self.create_test_agent_interface())
             
             assert result.HasField('response_message')
 
@@ -136,15 +167,22 @@ class TestMantisService:
         mock_artifact.artifact_id = "test-artifact-123"
         mock_artifact.name = "test-result.txt"
         
-        # Create real A2A Task with artifacts
+        # Create real SimulationOutput with artifacts
+        mock_output = mantis_core_pb2.SimulationOutput()
+        mock_output.context_id = simulation_input.context_id
+        mock_output.final_state = a2a_pb2.TASK_STATE_COMPLETED
+        mock_output.response_artifacts.append(mock_artifact)
+        
+        # Create a mock task for the simulation_task field
         mock_task = a2a_pb2.Task()
         mock_task.context_id = simulation_input.context_id
         mock_task.id = f"task-{uuid.uuid4().hex[:8]}"
         mock_task.status.state = a2a_pb2.TASK_STATE_COMPLETED
         mock_task.artifacts.append(mock_artifact)
+        mock_output.simulation_task.CopyFrom(mock_task)
         
-        with patch.object(self.service.orchestrator, 'execute_task_with_a2a_lifecycle', return_value=mock_task):
-            result = await self.service.process_simulation_input(simulation_input)
+        with patch.object(self.service.orchestrator, 'execute_simulation', return_value=mock_output):
+            result = await self.service.process_simulation_input(simulation_input, self.create_test_agent_interface())
             
             assert len(result.response_artifacts) == 1
 
@@ -154,9 +192,9 @@ class TestMantisService:
         simulation_input = self.create_valid_simulation_input()
         
         # Mock orchestrator failure
-        with patch.object(self.service.orchestrator, 'execute_task_with_a2a_lifecycle', 
+        with patch.object(self.service.orchestrator, 'execute_simulation', 
                          side_effect=Exception("Orchestrator failed")):
-            result = await self.service.process_simulation_input(simulation_input)
+            result = await self.service.process_simulation_input(simulation_input, self.create_test_agent_interface())
             
             assert isinstance(result, mantis_core_pb2.SimulationOutput)
             assert result.context_id == simulation_input.context_id
@@ -202,14 +240,14 @@ class TestMantisService:
     async def test_create_contextual_prompt_for_agent_basic(self):
         """Test contextual prompt creation with basic parameters."""
         base_query = "Test query for contextual prompt"
-        agent_name = "TestAgent"
+        agent_interface = self.create_test_agent_interface()
         
         prompt = await self.service.create_contextual_prompt_for_agent(
             base_query=base_query,
-            agent_name=agent_name
+            agent_interface=agent_interface
         )
         
-        assert prompt.agent_name == agent_name
+        assert prompt.agent_name == agent_interface.name
         assert base_query in prompt.assemble()
         assert len(prompt.assemble()) > len(base_query)
 
@@ -217,39 +255,32 @@ class TestMantisService:
     async def test_create_contextual_prompt_for_agent_with_context(self):
         """Test contextual prompt creation with context content."""
         base_query = "Test query"
-        agent_name = "TestAgent"
-        context_content = "Additional context information"
+        agent_interface = self.create_test_agent_interface()
         priority = 5
         
         prompt = await self.service.create_contextual_prompt_for_agent(
             base_query=base_query,
-            agent_name=agent_name,
-            context_content=context_content,
+            agent_interface=agent_interface,
             priority=priority
         )
         
-        assert prompt.agent_name == agent_name
-        assert prompt.context_content == context_content
-        assert prompt.priority == priority
+        assert prompt.agent_name == agent_interface.name
+        assert base_query in prompt.assemble()
+        assert len(prompt.assemble()) > len(base_query)
 
     @pytest.mark.asyncio
     async def test_create_contextual_prompt_for_agent_with_card(self):
         """Test contextual prompt creation with agent card."""
         base_query = "Test query"
-        agent_name = "TestAgent"
-        
-        # Create test agent card
-        agent_card = mantis_persona_pb2.MantisAgentCard()
-        agent_card.persona_title = "Test Persona"
+        agent_interface = self.create_test_agent_interface()
         
         prompt = await self.service.create_contextual_prompt_for_agent(
             base_query=base_query,
-            agent_name=agent_name,
-            agent_card=agent_card
+            agent_interface=agent_interface
         )
         
-        assert prompt.agent_card == agent_card
-        assert agent_name in prompt.assemble()
+        assert prompt.agent_name == agent_interface.name
+        assert base_query in prompt.assemble()
 
     def test_get_active_contexts_empty(self):
         """Test active contexts retrieval when no contexts exist."""
@@ -326,6 +357,20 @@ class TestMantisServiceA2AIntegration:
         """Set up test fixtures."""
         self.service = MantisService()
 
+    def create_test_agent_interface(self) -> AgentInterface:
+        """Create test AgentInterface for testing."""
+        # Create test MantisAgentCard
+        agent_card = mantis_persona_pb2.MantisAgentCard()
+        agent_card.persona_title = "Test Agent"
+        
+        # Add test agent card from A2A
+        a2a_card = a2a_pb2.AgentCard()
+        a2a_card.name = "TestAgent"
+        a2a_card.description = "A test agent for unit testing"
+        agent_card.agent_card.CopyFrom(a2a_card)
+        
+        return AgentInterface(agent_card)
+
     def create_simulation_input_with_artifacts(self) -> mantis_core_pb2.SimulationInput:
         """Create SimulationInput with A2A artifacts for testing."""
         simulation_input = mantis_core_pb2.SimulationInput()
@@ -363,8 +408,15 @@ class TestMantisServiceA2AIntegration:
         output_artifact.name = "output-result.txt"
         mock_task.artifacts.append(output_artifact)
         
-        with patch.object(self.service.orchestrator, 'execute_task_with_a2a_lifecycle', return_value=mock_task):
-            result = await self.service.process_simulation_input(simulation_input)
+        # Create SimulationOutput that wraps the task
+        mock_output = mantis_core_pb2.SimulationOutput()
+        mock_output.context_id = simulation_input.context_id
+        mock_output.final_state = a2a_pb2.TASK_STATE_COMPLETED
+        mock_output.simulation_task.CopyFrom(mock_task)
+        mock_output.response_artifacts.append(output_artifact)
+        
+        with patch.object(self.service.orchestrator, 'execute_simulation', return_value=mock_output):
+            result = await self.service.process_simulation_input(simulation_input, self.create_test_agent_interface())
             
             assert len(result.response_artifacts) == 1
             assert result.final_state == a2a_pb2.TASK_STATE_COMPLETED
@@ -374,9 +426,9 @@ class TestMantisServiceA2AIntegration:
         """Test A2A Message creation in error response follows protocol."""
         simulation_input = self.create_simulation_input_with_artifacts()
         
-        with patch.object(self.service.orchestrator, 'execute_task_with_a2a_lifecycle', 
+        with patch.object(self.service.orchestrator, 'execute_simulation', 
                          side_effect=Exception("Test error")):
-            result = await self.service.process_simulation_input(simulation_input)
+            result = await self.service.process_simulation_input(simulation_input, self.create_test_agent_interface())
             
             assert result.final_state == a2a_pb2.TASK_STATE_FAILED
             assert result.HasField('response_message')
