@@ -93,8 +93,8 @@ class DirectExecutor(ExecutionStrategy):
         self, simulation_input: mantis_core_pb2.SimulationInput, agent_spec: mantis_core_pb2.AgentSpec, agent_index: int
     ) -> mantis_core_pb2.AgentResponse:
         """Internal implementation of agent execution."""
-        from ..prompts import PromptCompositionEngine
-        from ..prompts.variables import create_composition_context
+        from ..prompt import PromptCompositionEngine
+        from ..prompt.variables import create_composition_context
         from ..llm.structured_extractor import StructuredExtractor
 
         try:

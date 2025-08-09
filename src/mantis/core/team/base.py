@@ -31,7 +31,7 @@ class AbstractTeam(ABC):
                 from ..executor import DirectExecutor
                 self._executor = DirectExecutor()
             elif self.execution_strategy == mantis_core_pb2.EXECUTION_STRATEGY_A2A:
-                from ..a2a_executor import A2AExecutor  # Will be implemented separately
+                from ..executor import A2AExecutor
                 self._executor = A2AExecutor()
             else:
                 raise ValueError(f"Unsupported execution strategy: {self.execution_strategy}")
@@ -86,8 +86,8 @@ class AbstractTeam(ABC):
         Returns:
             Agent response from team member
         """
-        from ...prompts import PromptCompositionEngine, CompositionStrategy
-        from ...prompts.variables import create_composition_context
+        from ...prompt import PromptCompositionEngine, CompositionStrategy
+        from ...prompt.variables import create_composition_context
         from ...llm.structured_extractor import StructuredExtractor
         from ...config import DEFAULT_MODEL
 
