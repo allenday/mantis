@@ -195,7 +195,7 @@ def _display_simulation_input(simulation_input: mantis_core_pb2.SimulationInput,
         try:
             from google.protobuf.json_format import MessageToJson
 
-            json_str = MessageToJson(user_request, indent=2)
+            json_str = MessageToJson(simulation_input, indent=2)
             syntax = Syntax(json_str, "json", theme="monokai", line_numbers=False)
             console.print(Panel(syntax, title="Full UserRequest (JSON)", border_style="dim"))
         except Exception as e:

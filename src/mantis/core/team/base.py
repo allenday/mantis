@@ -91,8 +91,6 @@ class AbstractTeam(ABC):
         from ...llm.structured_extractor import StructuredExtractor
         from ...config import DEFAULT_MODEL
 
-        executor = self._get_executor()
-        
         # Create execution context for team member
         execution_context = {
             "current_depth": 1,  # Team members are depth 1

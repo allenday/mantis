@@ -3,13 +3,11 @@ Abstract narrator patterns for multi-agent response synthesis.
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any, List, Optional
 
 from ..proto.mantis.v1 import mantis_core_pb2
 from ..proto.mantis.v1.mantis_core_pb2 import ContextualExecution as ProtoExecutionContext
 from ..proto.mantis.v1.mantis_persona_pb2 import MantisAgentCard, RolePreference
 from .team_formation import AbstractTeamFormation, TarotTeamFormation
-from google.protobuf import struct_pb2
 
 
 class AbstractNarrator(ABC):
@@ -97,8 +95,6 @@ class AbstractNarrator(ABC):
         from ..llm.structured_extractor import StructuredExtractor
         from ..config import DEFAULT_MODEL
 
-        executor = self._get_executor()
-        
         # Get narrator agent
         narrator_card = await self.get_narrator_agent()
         
