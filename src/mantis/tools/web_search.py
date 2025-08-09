@@ -5,22 +5,9 @@ Simplified to only support pydantic-ai integration.
 
 import logging
 from duckduckgo_search import DDGS
-
-# Observability imports
-try:
-    from ..observability import get_structured_logger
-
-    OBSERVABILITY_AVAILABLE = True
-except ImportError:
-    OBSERVABILITY_AVAILABLE = False
+from .base import log_tool_invocation, log_tool_result
 
 logger = logging.getLogger(__name__)
-
-# Observability logger
-if OBSERVABILITY_AVAILABLE:
-    obs_logger = get_structured_logger("web_search")
-else:
-    obs_logger = None  # type: ignore
 
 
 async def web_search(query: str, max_results: int = 10) -> str:
@@ -36,8 +23,7 @@ async def web_search(query: str, max_results: int = 10) -> str:
     Returns:
         Formatted search results with titles, URLs, and snippets
     """
-    if OBSERVABILITY_AVAILABLE and obs_logger:
-        obs_logger.info(f"🎯 TOOL_INVOKED: web_search for '{query}', max_results: {max_results}")
+    log_tool_invocation("web_search", "web_search", {"query": query, "max_results": max_results})
 
     try:
         # Use DuckDuckGo search
@@ -45,6 +31,7 @@ async def web_search(query: str, max_results: int = 10) -> str:
             results = list(ddgs.text(query, max_results=max_results))
 
             if not results:
+                log_tool_result("web_search", "web_search", {"results_count": 0, "query": query})
                 return f"No results found for query: '{query}'"
 
             # Format results for LLM
@@ -54,13 +41,10 @@ async def web_search(query: str, max_results: int = 10) -> str:
 
             result_text = f"Found {len(results)} results for '{query}':\n\n" + "\n\n".join(formatted_results)
 
-            if OBSERVABILITY_AVAILABLE and obs_logger:
-                obs_logger.info(f"Web search returned {len(results)} results")
+            log_tool_result("web_search", "web_search", {"results_count": len(results), "query": query})
 
             return result_text
 
     except Exception as e:
         error_msg = f"Error searching for '{query}': {str(e)}"
-        if OBSERVABILITY_AVAILABLE and obs_logger:
-            obs_logger.error(f"Web search exception: {e}")
         return error_msg

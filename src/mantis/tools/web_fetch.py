@@ -5,22 +5,9 @@ Simplified to only support pydantic-ai integration.
 
 import logging
 import aiohttp
-
-# Observability imports
-try:
-    from ..observability import get_structured_logger
-
-    OBSERVABILITY_AVAILABLE = True
-except ImportError:
-    OBSERVABILITY_AVAILABLE = False
+from .base import log_tool_invocation, log_tool_result
 
 logger = logging.getLogger(__name__)
-
-# Observability logger
-if OBSERVABILITY_AVAILABLE:
-    obs_logger = get_structured_logger("web_fetch")
-else:
-    obs_logger = None  # type: ignore
 
 
 async def web_fetch_url(url: str) -> str:
@@ -35,8 +22,7 @@ async def web_fetch_url(url: str) -> str:
     Returns:
         Success message with content length or error message
     """
-    if OBSERVABILITY_AVAILABLE and obs_logger:
-        obs_logger.info(f"🎯 TOOL_INVOKED: web_fetch_url for {url}")
+    log_tool_invocation("web_fetch", "web_fetch_url", {"url": url})
 
     try:
         # Create secure session with proper settings
@@ -55,17 +41,22 @@ async def web_fetch_url(url: str) -> str:
                 content_text = content.decode("utf-8", errors="ignore")
 
                 if response.status == 200:
-                    if OBSERVABILITY_AVAILABLE and obs_logger:
-                        obs_logger.info(f"Web fetch successful: {len(content_text)} chars")
+                    log_tool_result("web_fetch", "web_fetch_url", {
+                        "url": url, 
+                        "status_code": response.status, 
+                        "content_length": len(content_text),
+                        "success": True
+                    })
                     return content_text  # Return actual content for LLM/testing
                 else:
                     error_msg = f"Failed to fetch URL {url}: HTTP {response.status}"
-                    if OBSERVABILITY_AVAILABLE and obs_logger:
-                        obs_logger.error(f"Web fetch failed: HTTP {response.status}")
+                    log_tool_result("web_fetch", "web_fetch_url", {
+                        "url": url, 
+                        "status_code": response.status, 
+                        "success": False
+                    })
                     return error_msg
 
     except Exception as e:
         error_msg = f"Error fetching URL {url}: {str(e)}"
-        if OBSERVABILITY_AVAILABLE and obs_logger:
-            obs_logger.error(f"Web fetch exception: {e}")
         return error_msg
