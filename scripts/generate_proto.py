@@ -27,60 +27,60 @@ def fix_imports(proto_file, output_dir):
     """Fix malformed imports in generated proto files."""
     content = proto_file.read_text()
     original_content = content
-    
+
     # Fix the specific malformed pattern: "from a2a.v1 from ... import"
     content = re.sub(
-        r'from\s+a2a\.v1\s+from\s+\.\.\.\s+import\s+([a-zA-Z0-9_]+)\s+as\s+([a-zA-Z0-9_]+)',
-        r'from ... import \1 as \2',
-        content
+        r"from\s+a2a\.v1\s+from\s+\.\.\.\s+import\s+([a-zA-Z0-9_]+)\s+as\s+([a-zA-Z0-9_]+)",
+        r"from ... import \1 as \2",
+        content,
     )
-    
-    # Fix a2a.v1 imports to use relative imports  
-    if 'mantis/v1' in str(proto_file):
-        # For nested files, fix a2a.v1 imports to use ... 
+
+    # Fix a2a.v1 imports to use relative imports
+    if "mantis/v1" in str(proto_file):
+        # For nested files, fix a2a.v1 imports to use ...
         content = re.sub(
-            r'^from a2a\.v1 import a2a_pb2 as ([a-zA-Z0-9_]+)',
-            r'from ... import a2a_pb2 as \1',
+            r"^from a2a\.v1 import a2a_pb2 as ([a-zA-Z0-9_]+)",
+            r"from ... import a2a_pb2 as \1",
             content,
-            flags=re.MULTILINE
+            flags=re.MULTILINE,
         )
-        
+
         # Fix mantis.v1 imports to use relative imports
         content = re.sub(
-            r'^from mantis\.v1 import ([a-zA-Z0-9_]+) as ([a-zA-Z0-9_]+)',
-            r'from . import \1 as \2',
+            r"^from mantis\.v1 import ([a-zA-Z0-9_]+) as ([a-zA-Z0-9_]+)",
+            r"from . import \1 as \2",
             content,
-            flags=re.MULTILINE
+            flags=re.MULTILINE,
         )
-    
-    # Fix absolute imports that should be relative 
-    if 'mantis/v1' in str(proto_file):
+
+    # Fix absolute imports that should be relative
+    if "mantis/v1" in str(proto_file):
         # For nested files, use ... to go up to mantis.proto
         content = re.sub(
-            r'^import\s+([a-zA-Z0-9_]+_pb2)\s+as\s+([a-zA-Z0-9_]+)',
-            r'from ... import \1 as \2',
+            r"^import\s+([a-zA-Z0-9_]+_pb2)\s+as\s+([a-zA-Z0-9_]+)",
+            r"from ... import \1 as \2",
             content,
-            flags=re.MULTILINE
+            flags=re.MULTILINE,
         )
     elif proto_file.parent == output_dir:
         # For root level files, use relative imports within the same package
         content = re.sub(
-            r'^import\s+([a-zA-Z0-9_]+_pb2)\s+as\s+([a-zA-Z0-9_]+)',
-            r'from . import \1 as \2',
+            r"^import\s+([a-zA-Z0-9_]+_pb2)\s+as\s+([a-zA-Z0-9_]+)",
+            r"from . import \1 as \2",
             content,
-            flags=re.MULTILINE
+            flags=re.MULTILINE,
         )
-    
+
     # Fix validate imports for nested files
-    if 'mantis/v1' in str(proto_file):
+    if "mantis/v1" in str(proto_file):
         # Fix remaining absolute validate imports
         content = re.sub(
-            r'^from validate import validate_pb2 as validate_dot_validate__pb2',
-            r'from ...validate import validate_pb2 as validate_dot_validate__pb2',
+            r"^from validate import validate_pb2 as validate_dot_validate__pb2",
+            r"from ...validate import validate_pb2 as validate_dot_validate__pb2",
             content,
-            flags=re.MULTILINE
+            flags=re.MULTILINE,
         )
-    
+
     # Write back if changed
     if content != original_content:
         proto_file.write_text(content)
@@ -94,20 +94,20 @@ def fix_imports(proto_file, output_dir):
 def test_imports(output_dir):
     """Test that generated proto files can be imported."""
     print("🧪 Testing imports...")
-    
+
     pb2_files = list(output_dir.glob("*_pb2.py"))
     if not pb2_files:
         print("⚠️  No _pb2.py files found to test")
         return True
-        
+
     # Test root level files only for now
     import sys
     import importlib.util
-    
+
     proto_package_path = str(output_dir.parent)  # src/mantis
     if proto_package_path not in sys.path:
         sys.path.insert(0, proto_package_path)
-        
+
     success = True
     for pb2_file in pb2_files:
         module_name = f"mantis.proto.{pb2_file.stem}"
@@ -115,18 +115,18 @@ def test_imports(output_dir):
             spec = importlib.util.spec_from_file_location(module_name, pb2_file)
             if spec is None or spec.loader is None:
                 continue
-                
+
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             print(f"  ✅ Successfully imported {pb2_file.name}")
-            
+
         except Exception as e:
             print(f"  ❌ Failed to import {pb2_file.name}: {str(e)}")
             success = False
-            
+
     if proto_package_path in sys.path:
         sys.path.remove(proto_package_path)
-        
+
     return success
 
 
@@ -222,16 +222,16 @@ def main():
                 print(f"Warning: Failed to generate {dep_proto.name}")
 
     print("✅ Protobuf generation completed!")
-    
+
     # Fix imports
     print("🔧 Fixing imports...")
     pb2_files = list(output_dir.rglob("*_pb2.py"))
     for pb2_file in pb2_files:
         fix_imports(pb2_file, output_dir)
-    
+
     # Test imports
     import_success = test_imports(output_dir)
-    
+
     if not import_success:
         print("\n❌ Some imports failed.")
         return 1

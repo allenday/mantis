@@ -76,9 +76,7 @@ def simulate(
 
         if verbose:
             console.print("[green]✅ SimulationInput built successfully[/green]")
-            console.print(
-                f"[dim]Agents: {len(simulation_input.agents)}, Max depth: {simulation_input.max_depth}[/dim]"
-            )
+            console.print(f"[dim]Agents: {len(simulation_input.agents)}, Max depth: {simulation_input.max_depth}[/dim]")
 
         if dry_run:
             _display_simulation_input(simulation_input, verbose)
