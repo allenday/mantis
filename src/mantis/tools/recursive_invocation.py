@@ -6,9 +6,10 @@ No global state, clean dependency injection.
 """
 
 import asyncio
-from typing import Dict, Any, Optional, TYPE_CHECKING
+from typing import Dict, Optional, TYPE_CHECKING
 from ..observability.logger import get_structured_logger
 from ..core.orchestrator import current_agent_context
+from ..proto.mantis.v1 import mantis_core_pb2
 
 if TYPE_CHECKING:
     from ..core.orchestrator import SimulationOrchestrator

@@ -93,7 +93,7 @@ class DirectExecutor(ExecutionStrategy):
         self, simulation_input: mantis_core_pb2.SimulationInput, agent_spec: mantis_core_pb2.AgentSpec, agent_index: int
     ) -> mantis_core_pb2.AgentResponse:
         """Internal implementation of agent execution."""
-        from ..prompt import PromptCompositionEngine
+        from ..prompt import PromptCompositionEngine, CompositionStrategy
         from ..prompt.variables import create_composition_context
         from ..llm.structured_extractor import StructuredExtractor
 
@@ -124,7 +124,7 @@ class DirectExecutor(ExecutionStrategy):
 
             # Use the updated enum value
             composed_prompt = await composition_engine.compose_prompt(
-                context=context, strategy=COMPOSITION_STRATEGY_BLENDED
+                context=context, strategy=CompositionStrategy.BLENDED
             )
 
             # Log prompt composition details
