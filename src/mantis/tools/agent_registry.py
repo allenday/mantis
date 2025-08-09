@@ -5,7 +5,6 @@ Simplified to only support pydantic-ai integration.
 
 import logging
 import aiohttp
-import json
 from typing import List
 
 # Observability imports
@@ -128,46 +127,39 @@ async def registry_get_agent_details(agent_url: str) -> str:
 async def list_all_agents(page_size: int = 200, include_inactive: bool = False) -> List[MantisAgentCard]:
     """
     List all agents from the registry using JSONRPC transport.
-    
+
     Args:
         page_size: Number of agents to fetch per page (default: 200)
         include_inactive: Whether to include inactive agents (default: False)
-        
+
     Returns:
         List of MantisAgentCard objects
     """
     if OBSERVABILITY_AVAILABLE and obs_logger:
         obs_logger.info(f"🎯 TOOL_INVOKED: list_all_agents (page_size: {page_size})")
-    
+
     try:
         # JSONRPC request to registry
-        jsonrpc_request = {
-            "jsonrpc": "2.0",
-            "method": "list_agents",
-            "params": {},
-            "id": 1
-        }
-        
+        jsonrpc_request = {"jsonrpc": "2.0", "method": "list_agents", "params": {}, "id": 1}
+
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                f"{DEFAULT_REGISTRY}/jsonrpc",
-                json=jsonrpc_request,
-                headers={"Content-Type": "application/json"}
+                f"{DEFAULT_REGISTRY}/jsonrpc", json=jsonrpc_request, headers={"Content-Type": "application/json"}
             ) as response:
                 if response.status != 200:
                     raise Exception(f"HTTP {response.status}: {await response.text()}")
-                
+
                 data = await response.json()
-                
+
                 if "error" in data:
                     raise Exception(f"JSONRPC Error: {data['error']}")
-                
+
                 result = data.get("result", {})
                 registry_agent_cards = result.get("agents", [])
-                
+
                 if OBSERVABILITY_AVAILABLE and obs_logger:
                     obs_logger.info(f"Retrieved {len(registry_agent_cards)} agents from registry")
-                
+
                 # Convert registry agent cards to MantisAgentCard objects
                 mantis_cards = []
                 for registry_card in registry_agent_cards:
@@ -176,13 +168,13 @@ async def list_all_agents(page_size: int = 200, include_inactive: bool = False) 
                         # Convert to MantisAgentCard using the existing loader
                         mantis_card = load_agent_card_from_json(registry_card)
                         mantis_cards.append(mantis_card)
-                        
+
                     except Exception as e:
                         logger.warning(f"Failed to parse agent card: {e}")
                         continue
-                
+
                 return mantis_cards
-                
+
     except Exception as e:
         error_msg = f"Error listing agents from registry: {str(e)}"
         if OBSERVABILITY_AVAILABLE and obs_logger:

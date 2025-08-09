@@ -41,20 +41,22 @@ async def web_fetch_url(url: str) -> str:
                 content_text = content.decode("utf-8", errors="ignore")
 
                 if response.status == 200:
-                    log_tool_result("web_fetch", "web_fetch_url", {
-                        "url": url, 
-                        "status_code": response.status, 
-                        "content_length": len(content_text),
-                        "success": True
-                    })
+                    log_tool_result(
+                        "web_fetch",
+                        "web_fetch_url",
+                        {
+                            "url": url,
+                            "status_code": response.status,
+                            "content_length": len(content_text),
+                            "success": True,
+                        },
+                    )
                     return content_text  # Return actual content for LLM/testing
                 else:
                     error_msg = f"Failed to fetch URL {url}: HTTP {response.status}"
-                    log_tool_result("web_fetch", "web_fetch_url", {
-                        "url": url, 
-                        "status_code": response.status, 
-                        "success": False
-                    })
+                    log_tool_result(
+                        "web_fetch", "web_fetch_url", {"url": url, "status_code": response.status, "success": False}
+                    )
                     return error_msg
 
     except Exception as e:
