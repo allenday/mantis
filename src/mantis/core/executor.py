@@ -166,10 +166,24 @@ class DirectExecutor(ExecutionStrategy):
                 prompt=composed_prompt.final_prompt, query=simulation_input.query, model=model, tools=self._tools
             )
 
+            # Create response message
+            from ..proto import a2a_pb2
+            import uuid
+
+            response_message = a2a_pb2.Message()
+            response_message.message_id = f"agent-resp-{uuid.uuid4().hex[:12]}"
+            response_message.context_id = simulation_input.context_id or ""
+            response_message.role = a2a_pb2.ROLE_AGENT
+
+            # Add text content
+            text_part = a2a_pb2.Part()
+            text_part.text = result
+            response_message.content.append(text_part)
+
             # Create response
             response = mantis_core_pb2.AgentResponse()
-            response.text_response = result
-            response.output_modes.append("text/markdown")
+            response.response_message.CopyFrom(response_message)
+            response.final_state = a2a_pb2.TASK_STATE_COMPLETED
 
             # Add metadata about prompt composition (if metadata field exists)
             try:
@@ -217,7 +231,13 @@ class DirectExecutor(ExecutionStrategy):
                 gitlab_get_issue,
             )
             from ..tools.jira_integration import jira_list_projects, jira_list_issues, jira_create_issue, jira_get_issue
-            from ..tools.divination import get_random_number, draw_tarot_card, cast_i_ching_trigram, draw_multiple_tarot_cards, flip_coin
+            from ..tools.divination import (
+                get_random_number,
+                draw_tarot_card,
+                cast_i_ching_trigram,
+                draw_multiple_tarot_cards,
+                flip_coin,
+            )
 
             # Add tools directly to our tools dictionary
             self._tools.update(
