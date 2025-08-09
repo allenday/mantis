@@ -8,12 +8,13 @@ to provide better modularity and separation of concerns.
 
 import time
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 
 from ..proto.mantis.v1 import mantis_core_pb2
+from ..config import DEFAULT_MODEL
+
 # from ..proto.mantis.v1.prompt_composition_pb2 import COMPOSITION_STRATEGY_BLENDED  # DEPRECATED
 COMPOSITION_STRATEGY_BLENDED = "blended"  # Fallback for deprecated import
-from ..config import DEFAULT_MODEL
 
 # Observability imports
 try:

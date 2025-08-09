@@ -4,10 +4,10 @@ Abstract team formation base class and factory.
 
 import asyncio
 from abc import ABC, abstractmethod
-from typing import Dict, Any, List, Optional
+from typing import List
 
 from ...proto.mantis.v1 import mantis_core_pb2
-from ...proto.mantis.v1.mantis_persona_pb2 import RolePreference
+from ...proto.mantis.v1.mantis_persona_pb2 import RolePreference, MantisAgentCard
 from ...agent import AgentInterface
 from google.protobuf import struct_pb2
 
