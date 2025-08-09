@@ -11,6 +11,8 @@ from .factory import (
     create_simulation_prompt_with_interface,
     create_a2a_message_from_prompt
 )
+from .composition_engine import PromptCompositionEngine, CompositionStrategy, ComposedPrompt
+from .variables import CompositionContext, create_composition_context
 from .templates import *
 
 __all__ = [
@@ -19,5 +21,10 @@ __all__ = [
     "create_simulation_prompt",
     "create_simulation_prompt_with_interface", 
     "create_a2a_message_from_prompt",
+    "PromptCompositionEngine",
+    "CompositionStrategy", 
+    "ComposedPrompt",
+    "CompositionContext",
+    "create_composition_context",
     # Template constants will be exported from templates module
 ]
