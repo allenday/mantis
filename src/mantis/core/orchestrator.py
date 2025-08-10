@@ -102,14 +102,39 @@ class SimulationOrchestrator:
         )
 
         try:
-            # Determine agent - use Chief of Staff for coordination by default
-            target_agent_card = await self._get_chief_of_staff_agent()
-
+            # CRITICAL FIX: Use specified agent if provided, otherwise use Chief of Staff
+            target_agent_card = None
             if simulation_input.agents and len(simulation_input.agents) > 0:
                 agent_spec = simulation_input.agents[0]
                 if agent_spec.HasField("agent") and agent_spec.agent:
-                    # TODO: Load specific agent from registry
-                    logger.info(f"Would use specified agent: {agent_spec.agent.name}")
+                    # Load specific agent by name from registry using the agent info in the spec
+                    from ..tools.agent_registry import get_agent_by_name
+                    try:
+                        # Get the full MantisAgentCard from registry using the agent name
+                        target_agent_card = await get_agent_by_name(agent_spec.agent.name)
+                        
+                        logger.info(
+                            f"Using specified agent from registry: {agent_spec.agent.name}",
+                            structured_data={
+                                "agent_name": agent_spec.agent.name,
+                                "agent_id": agent_spec.agent.agent_id,
+                                "context_id": simulation_input.context_id
+                            }
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to load specified agent '{agent_spec.agent.name}' from registry: {e}, falling back to Chief of Staff",
+                            structured_data={"context_id": simulation_input.context_id}
+                        )
+                        target_agent_card = None
+                    
+            # Fallback to Chief of Staff for coordination if no specific agent provided
+            if not target_agent_card:
+                target_agent_card = await self._get_chief_of_staff_agent()
+                logger.info(
+                    "Using Chief of Staff agent (no specific agent provided or fallback)",
+                    structured_data={"context_id": simulation_input.context_id}
+                )
 
             # Execute the simulation
             disable_tools = (simulation_input.max_depth <= 0)
