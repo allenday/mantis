@@ -196,14 +196,24 @@ async def invoke_multiple_agents(
 
 
 async def _validate_agent_exists(agent_name: str) -> None:
-    """Validate that agent exists in registry."""
+    """Validate that agent exists in registry or mock agents."""
     from ..tools.agent_registry import list_all_agents
+    from ..tools.team_formation import _get_mock_agents
     from ..agent import AgentInterface
 
     try:
-        all_agents = await list_all_agents()
+        # Try to get agents from registry first
+        try:
+            all_agents = await list_all_agents()
+            if not all_agents:
+                logger.warning("Registry returned no agents, using mock agents for validation")
+                all_agents = _get_mock_agents()
+        except Exception as registry_error:
+            logger.warning(f"Registry access failed: {registry_error}, using mock agents for validation")
+            all_agents = _get_mock_agents()
+            
         if not all_agents:
-            raise ValueError("No agents available in registry")
+            raise ValueError("No agents available from registry or local fallback")
 
         # Check if agent exists by name or ID
         available_agents = []

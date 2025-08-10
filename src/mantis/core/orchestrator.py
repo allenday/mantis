@@ -50,12 +50,12 @@ class SimulationOrchestrator:
 
             # Create bound methods for recursive invocation tools
             async def bound_invoke_agent_by_name(
-                agent_name: str, query: str, context: Optional[str] = None, max_depth: int = 1
+                agent_name: str, query: str, context: Optional[str] = None, max_depth: int = 0
             ):
                 return await invoke_agent_by_name(agent_name, query, self, context, max_depth)
 
             async def bound_invoke_multiple_agents(
-                agent_names: list, query_template: str, individual_contexts: Optional[list] = None, max_depth: int = 1
+                agent_names: list, query_template: str, individual_contexts: Optional[list] = None, max_depth: int = 0
             ):
                 return await invoke_multiple_agents(agent_names, query_template, self, individual_contexts, max_depth)
 
@@ -280,16 +280,30 @@ class SimulationOrchestrator:
         return output
 
     async def _get_chief_of_staff_agent(self) -> mantis_persona_pb2.MantisAgentCard:
-        """Get Chief of Staff agent card from registry."""
+        """Get Chief of Staff agent card from registry with local fallback."""
         from ..tools.agent_registry import list_all_agents
+        from ..config import get_default_base_agent
 
         logger.info("Loading Chief of Staff agent from registry")
 
-        # Get all agents from registry - fail fast if this doesn't work
-        all_agents = await list_all_agents()
-
-        if not all_agents or len(all_agents) == 0:
-            raise ValueError("No agents found in registry - cannot proceed without valid agent data")
+        try:
+            # Try to get all agents from registry
+            all_agents = await list_all_agents()
+            
+            if not all_agents or len(all_agents) == 0:
+                logger.warning("No agents found in registry, trying local fallback")
+                raise ValueError("Registry unavailable or empty")
+                
+        except Exception as registry_error:
+            logger.warning(f"Registry access failed: {registry_error}, using local fallback")
+            
+            # Fall back to local Chief of Staff agent
+            local_agent = get_default_base_agent()
+            if local_agent:
+                logger.info("Using local Chief of Staff agent as fallback")
+                return local_agent
+            else:
+                raise ValueError("No agents available - registry failed and no local fallback found")
 
         # Look for the actual Chief of Staff agent first
         chief_of_staff = None
