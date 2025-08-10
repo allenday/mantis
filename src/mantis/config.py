@@ -10,7 +10,7 @@ from .proto.mantis.v1.mantis_persona_pb2 import MantisAgentCard
 # Default model configuration - matches cli.py default
 DEFAULT_MODEL = "anthropic:claude-3-5-haiku-20241022"
 DEFAULT_TEMPERATURE = 0.7
-DEFAULT_MAX_DEPTH = 1  # Start at depth 0, allow 1 level deep
+DEFAULT_MAX_DEPTH = 1  # One level of recursion - CoS can invoke team, team cannot recurse
 
 # Server configuration
 DEFAULT_HOST = "0.0.0.0"

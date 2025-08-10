@@ -10,7 +10,7 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 
 from .core import cli, use_global_options, error_handler
-from ..core import UserRequestBuilder, SimulationOrchestrator
+from ..core import SimulationOrchestrator, SimulationInputBuilder
 from ..proto.mantis.v1 import mantis_core_pb2
 
 console = Console()
@@ -38,7 +38,7 @@ def simulate(
     dry_run: bool = False,
     model: Optional[str] = None,
     verbose: bool = False,
-):
+) -> int:
     """
     Run a multi-agent simulation with the specified query.
 
@@ -60,11 +60,11 @@ def simulate(
       mantis simulate "Complex problem" --max-depth 3 --model claude-3-5-sonnet --temperature 0.8
     """
     if verbose:
-        console.print(f"[dim]Building UserRequest for query: {query[:50]}{'...' if len(query) > 50 else ''}[/dim]")
+        console.print(f"[dim]Building SimulationInput for query: {query[:50]}{'...' if len(query) > 50 else ''}[/dim]")
 
     try:
-        # Build UserRequest from CLI arguments
-        user_request = UserRequestBuilder.from_cli_args(
+        # Build SimulationInput from CLI arguments
+        simulation_input = SimulationInputBuilder.from_cli_args(
             query=query,
             context=context,
             structured_data=structured_data,
@@ -75,14 +75,12 @@ def simulate(
         )
 
         if verbose:
-            console.print("[green]✅ UserRequest built successfully[/green]")
-            console.print(
-                f"[dim]Agents: {len(user_request.agents)}, Max depth: {user_request.max_depth or 'default'}[/dim]"
-            )
+            console.print("[green]✅ SimulationInput built successfully[/green]")
+            console.print(f"[dim]Agents: {len(simulation_input.agents)}, Max depth: {simulation_input.max_depth}[/dim]")
 
         if dry_run:
-            _display_user_request(user_request, verbose)
-            return
+            _display_simulation_input(simulation_input, verbose)
+            return 0
 
         # Execute the simulation using the orchestrator
         console.print("[blue]ℹ️  Starting simulation...[/blue]")
@@ -93,7 +91,7 @@ def simulate(
         import asyncio
 
         try:
-            simulation_output = asyncio.run(orchestrator.execute_simulation(user_request))
+            simulation_output = asyncio.run(orchestrator.execute_simulation(simulation_input))
 
             # Display results
             _display_simulation_output(simulation_output, verbose)
@@ -104,6 +102,7 @@ def simulate(
                 return 1
             else:
                 console.print("[green]✅ Simulation completed successfully[/green]")
+                return 0
 
         except Exception as e:
             console.print(f"[red]❌ Simulation execution failed: {e}[/red]")
@@ -121,7 +120,7 @@ def simulate(
         return 1
 
 
-def _display_simulation_output(simulation_output: mantis_core_pb2.SimulationOutput, verbose: bool = False):
+def _display_simulation_output(simulation_output: mantis_core_pb2.SimulationOutput, verbose: bool = False) -> None:
     """Display SimulationOutput in a formatted way."""
     # Display main response
     console.print(
@@ -163,37 +162,24 @@ def _display_simulation_output(simulation_output: mantis_core_pb2.SimulationOutp
         console.print(f"\n[dim]Output Modes: {', '.join(simulation_output.response.output_modes)}[/dim]")
 
 
-def _display_user_request(user_request: mantis_core_pb2.UserRequest, verbose: bool = False):
-    """Display UserRequest in a formatted way."""
+def _display_simulation_input(simulation_input: mantis_core_pb2.SimulationInput, verbose: bool = False) -> None:
+    """Display SimulationInput in a formatted way."""
     console.print(
         Panel(
-            f"[bold]Query:[/bold] {user_request.query}\n"
-            + (f"[bold]Context:[/bold] {user_request.context}\n" if user_request.HasField("context") else "")
-            + (
-                f"[bold]Structured Data:[/bold] {user_request.structured_data}\n"
-                if user_request.HasField("structured_data")
-                else ""
-            )
-            + (
-                f"[bold]Model:[/bold] {user_request.model_spec.model or 'default'}\n"
-                if user_request.HasField("model_spec")
-                else ""
-            )
-            + (
-                f"[bold]Temperature:[/bold] {user_request.model_spec.temperature}\n"
-                if user_request.HasField("model_spec") and user_request.model_spec.HasField("temperature")
-                else ""
-            )
-            + (f"[bold]Max Depth:[/bold] {user_request.max_depth}\n" if user_request.HasField("max_depth") else "")
-            + f"[bold]Agents:[/bold] {len(user_request.agents)}",
-            title="UserRequest Summary",
+            f"[bold]Query:[/bold] {simulation_input.query}\n"
+            + f"[bold]Context ID:[/bold] {simulation_input.context_id}\n"
+            + (f"[bold]Context:[/bold] {simulation_input.context}\n" if simulation_input.context else "")
+            + f"[bold]Max Depth:[/bold] {simulation_input.max_depth}\n"
+            + f"[bold]Execution Strategy:[/bold] {mantis_core_pb2.ExecutionStrategy.Name(simulation_input.execution_strategy)}\n"
+            + f"[bold]Agents:[/bold] {len(simulation_input.agents)}",
+            title="SimulationInput Summary",
             border_style="blue",
         )
     )
 
-    if verbose and user_request.agents:
+    if verbose and simulation_input.agents:
         console.print("\n[bold]Agent Specifications:[/bold]")
-        for i, agent in enumerate(user_request.agents):
+        for i, agent in enumerate(simulation_input.agents):
             policy_name = (
                 mantis_core_pb2.RecursionPolicy.Name(agent.recursion_policy)
                 if agent.HasField("recursion_policy")
@@ -208,7 +194,7 @@ def _display_user_request(user_request: mantis_core_pb2.UserRequest, verbose: bo
         try:
             from google.protobuf.json_format import MessageToJson
 
-            json_str = MessageToJson(user_request, indent=2)
+            json_str = MessageToJson(simulation_input, indent=2)
             syntax = Syntax(json_str, "json", theme="monokai", line_numbers=False)
             console.print(Panel(syntax, title="Full UserRequest (JSON)", border_style="dim"))
         except Exception as e:

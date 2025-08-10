@@ -5,7 +5,7 @@ Agent command for the Mantis CLI - generate command only.
 
 import json
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 
 import rich_click as click
 from rich.console import Console
@@ -15,7 +15,7 @@ from .core import cli, use_global_options
 console = Console()
 
 
-def display_agent_card_summary(agent_card, verbose: bool = False) -> None:
+def display_agent_card_summary(agent_card: Any, verbose: bool = False) -> None:
     """Display a rich summary of AgentCard information with persona extensions."""
     from rich.panel import Panel
     from rich.table import Table
@@ -368,7 +368,7 @@ def display_agent_card_summary(agent_card, verbose: bool = False) -> None:
 
 @cli.group()
 @use_global_options(["verbose"])
-def agent(verbose: bool):
+def agent(verbose: bool) -> None:
     """
     Generate and work with agents.
     """
@@ -754,7 +754,7 @@ def serve_single(
             debug=verbose,
         )
 
-        async def register_agent():
+        async def register_agent() -> None:
             """Register agent with the A2A registry using JSON-RPC."""
             try:
                 # Convert protobuf AgentCard to dict
@@ -922,7 +922,7 @@ def serve_all(
         from fasta2a.storage import InMemoryStorage
         from fasta2a.broker import InMemoryBroker
 
-        async def register_agent_with_registry(agent_card, registry_url: str):
+        async def register_agent_with_registry(agent_card: Any, registry_url: str) -> bool:
             """Register an agent card with the A2A registry using JSON-RPC."""
             try:
                 # Get base card reference
@@ -971,7 +971,7 @@ def serve_all(
                 console.print(f"[yellow]⚠️ Error registering {base_card.name} with registry: {e}[/yellow]")
                 return False
 
-        async def run_server(app, port, name):
+        async def run_server(app: Any, port: int, name: str) -> None:
             """Run a single FastA2A server"""
             try:
                 config = uvicorn.Config(app, host=host, port=port, log_level="info" if verbose else "warning")
@@ -983,7 +983,7 @@ def serve_all(
                 console.print(f"[red]❌ ERROR starting server for {name} on port {port}: {e}[/red]")
                 raise
 
-        async def run_all_servers():
+        async def run_all_servers() -> None:
             # Create FastA2A apps for each agent
             servers = []
             registration_tasks = []

@@ -19,7 +19,7 @@ from .models import ToolInvocation, LLMInteraction, ExecutionTrace
 class StructuredFormatter(logging.Formatter):
     """JSON formatter for structured logging."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
 
     def format(self, record: logging.LogRecord) -> str:

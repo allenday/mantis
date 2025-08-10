@@ -84,8 +84,11 @@ async def git_analyze_repository(repo_url: str) -> str:
                 if commit_result.returncode == 0:
                     repo_info.append(f"Latest Commit: {commit_result.stdout.strip()}")
 
-            except Exception:
-                pass  # Skip if git commands fail
+            except Exception as e:
+                logger.warning(f"Git command failed for repository {repo_url}: {e}", exc_info=True)
+                if OBSERVABILITY_AVAILABLE and obs_logger:
+                    obs_logger.warning(f"SECURITY_AUDIT: Git operation failure for {repo_url}: {e}")
+                # Continue with analysis but log the security-relevant failure
 
             # Count files and estimate size
             try:
@@ -98,8 +101,11 @@ async def git_analyze_repository(repo_url: str) -> str:
                     size = size_result.stdout.split()[0]
                     repo_info.append(f"Size: {size}")
 
-            except Exception:
-                pass  # Skip if commands fail
+            except Exception as e:
+                logger.warning(f"File system operation failed for repository {repo_url}: {e}", exc_info=True)
+                if OBSERVABILITY_AVAILABLE and obs_logger:
+                    obs_logger.warning(f"Filesystem operation failure for {repo_url}: {e}")
+                # Continue with analysis despite filesystem operation failure
 
             result_text = "\\n".join(repo_info)
 

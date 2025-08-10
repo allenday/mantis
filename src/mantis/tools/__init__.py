@@ -10,6 +10,7 @@ from .web_search import web_search
 from .git_operations import git_analyze_repository
 from .gitlab_integration import gitlab_list_projects, gitlab_list_issues, gitlab_create_issue, gitlab_get_issue
 from .jira_integration import jira_list_projects, jira_list_issues, jira_create_issue, jira_get_issue
+from .divination import get_random_number, draw_tarot_card, cast_i_ching_trigram, draw_multiple_tarot_cards, flip_coin
 
 __all__ = [
     "registry_search_agents",
@@ -25,4 +26,9 @@ __all__ = [
     "jira_list_issues",
     "jira_create_issue",
     "jira_get_issue",
+    "get_random_number",
+    "draw_tarot_card",
+    "cast_i_ching_trigram",
+    "draw_multiple_tarot_cards",
+    "flip_coin",
 ]

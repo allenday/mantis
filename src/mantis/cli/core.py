@@ -41,7 +41,7 @@ GLOBAL_OPTIONS = {
 }
 
 
-def use_global_options(option_names: List[str]) -> Callable:
+def use_global_options(option_names: List[str]) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
     Decorator to apply selected global options to a command.
 
@@ -57,7 +57,7 @@ def use_global_options(option_names: List[str]) -> Callable:
             pass
     """
 
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         # Apply options in reverse order so they appear in correct order in help
         for option_name in reversed(option_names):
             if option_name in GLOBAL_OPTIONS:
@@ -80,7 +80,7 @@ def validate_model_string(ctx: click.Context, param: click.Parameter, value: Opt
         return value
 
     try:
-        from ..models import get_model_manager
+        from ..models import get_model_manager  # type: ignore[import-untyped]
 
         manager = get_model_manager()
         model = manager.find_model(value)
@@ -135,7 +135,7 @@ GLOBAL_OPTIONS["model"] = click.option(
 @click.group(invoke_without_command=True)
 @click.option("--version", is_flag=True, help="Show version information")
 @click.pass_context
-def cli(ctx: click.Context, version: bool):
+def cli(ctx: click.Context, version: bool) -> None:
     """
     Mantis - Multi-agent AI framework for strategic divination
 
@@ -163,11 +163,11 @@ def cli(ctx: click.Context, version: bool):
             )
 
 
-def error_handler(func: Callable) -> Callable:
+def error_handler(func: Callable[..., Any]) -> Callable[..., Any]:
     """Decorator to provide consistent error handling across commands."""
 
     @functools.wraps(func)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
         try:
             return func(*args, **kwargs)
         except KeyboardInterrupt:

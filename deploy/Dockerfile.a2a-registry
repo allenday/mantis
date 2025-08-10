@@ -1,0 +1,24 @@
+FROM python:3.11
+
+# Set working directory
+WORKDIR /app
+
+# Copy and install a2a-registry prerelease wheel
+COPY a2a_registry-0.1.5-py3-none-any.whl /tmp/
+RUN pip install --no-cache-dir /tmp/a2a_registry-0.1.5-py3-none-any.whl
+
+# Expose the registry port
+EXPOSE 8080
+
+# Set default environment variables
+ENV REGISTRY_HOST=0.0.0.0
+ENV REGISTRY_PORT=8080
+ENV REGISTRY_LOG_LEVEL=INFO
+ENV REGISTRY_STORAGE_TYPE=memory
+
+# Health check using Python
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')" || exit 1
+
+# Run the registry
+CMD ["a2a-registry", "serve", "--host", "0.0.0.0", "--port", "8080"]
