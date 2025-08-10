@@ -585,11 +585,15 @@ class StructuredExtractor:
                     else:
                         try:
                             setattr(protobuf_obj, field_name, value)
-                        except (TypeError, ValueError):
-                            pass  # Skip invalid assignments
+                        except (TypeError, ValueError) as e:
+                            logger.warning(f"Failed to set protobuf field {field_name}={value}: {e}")
+                            raise StructuredExtractionError(f"Invalid protobuf field assignment: {field_name}={value}: {e}")
 
-                except Exception:
-                    pass  # Skip fields that can't be processed
+                except Exception as e:
+                    logger.error(f"Critical error processing protobuf field {field_name}: {e}", exc_info=True)
+                    if obs_logger:
+                        obs_logger.error(f"Protobuf field processing error: {field_name}={value}: {e}")
+                    raise StructuredExtractionError(f"Critical protobuf processing error for field {field_name}: {e}")
 
         return protobuf_obj
 
@@ -600,8 +604,9 @@ class StructuredExtractor:
             if hasattr(protobuf_obj, field_name) and value is not None:
                 try:
                     setattr(protobuf_obj, field_name, value)
-                except (TypeError, ValueError):
-                    pass  # Skip invalid assignments
+                except (TypeError, ValueError) as e:
+                    logger.warning(f"Failed to set nested protobuf field {field_name}={value}: {e}")
+                    raise StructuredExtractionError(f"Invalid nested protobuf field assignment: {field_name}={value}: {e}")
         return protobuf_obj
 
 
