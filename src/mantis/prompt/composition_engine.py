@@ -3,10 +3,9 @@ Core prompt composition engine that orchestrates module selection and prompt ass
 """
 
 import logging
-from pydantic import BaseModel, ConfigDict
-from enum import Enum
-from typing import List, Dict, Any
+from typing import List
 
+from ..proto.mantis.v1 import mantis_core_pb2
 from .variables import CompositionContext
 from .modules.base import BasePromptModule
 from .modules.persona import PersonaModule
@@ -18,24 +17,7 @@ from .modules.capability import CapabilityModule
 logger = logging.getLogger(__name__)
 
 
-class CompositionStrategy(Enum):
-    """Different strategies for combining prompt modules."""
-
-    LAYERED = "layered"  # Clear sections with separators (debugging)
-    BLENDED = "blended"  # Seamless integration (production)
-    CONDITIONAL = "conditional"  # Rule-based combinations
-
-
-class ComposedPrompt(BaseModel):
-    """Result of prompt composition containing final prompt and metadata."""
-
-    final_prompt: str
-    modules_used: List[BasePromptModule]
-    variables_resolved: Dict[str, Any]
-    strategy: CompositionStrategy
-    metadata: Dict[str, Any]
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+# Now using protobuf CompositionStrategy and ComposedPrompt instead of Pydantic models
 
 
 class PromptCompositionEngine:
@@ -56,8 +38,8 @@ class PromptCompositionEngine:
         logger.info(f"Registered {len(self.modules)} core prompt modules")
 
     async def compose_prompt(
-        self, context: CompositionContext, strategy: CompositionStrategy = CompositionStrategy.BLENDED
-    ) -> ComposedPrompt:
+        self, context: CompositionContext, strategy: mantis_core_pb2.CompositionStrategy = mantis_core_pb2.COMPOSITION_STRATEGY_BLENDED
+    ) -> mantis_core_pb2.ComposedPrompt:
         """
         Compose a prompt using selected modules and specified strategy.
 
@@ -66,9 +48,10 @@ class PromptCompositionEngine:
             strategy: How to combine modules (layered, blended, conditional)
 
         Returns:
-            ComposedPrompt with final prompt text and metadata
+            ComposedPrompt protobuf message with final prompt text and metadata
         """
-        logger.info(f"Composing prompt with {strategy.value} strategy")
+        strategy_name = mantis_core_pb2.CompositionStrategy.Name(strategy)
+        logger.info(f"Composing prompt with {strategy_name} strategy")
 
         # Select applicable modules
         applicable_modules = self._select_modules(context)
@@ -76,7 +59,7 @@ class PromptCompositionEngine:
 
         # Generate content from each module
         module_contents = []
-        variables_resolved: dict[str, Any] = {}
+        variables_resolved = {}
 
         for module in applicable_modules:
             try:
@@ -95,17 +78,25 @@ class PromptCompositionEngine:
         # Combine content using selected strategy
         final_prompt = self._combine_content(module_contents, strategy)
 
-        return ComposedPrompt(
-            final_prompt=final_prompt,
-            modules_used=[m for m, _ in module_contents],
-            variables_resolved=variables_resolved,
-            strategy=strategy,
-            metadata={
-                "total_modules": len(applicable_modules),
-                "active_modules": len(module_contents),
-                "prompt_length": len(final_prompt),
-            },
-        )
+        # Create protobuf ComposedPrompt
+        composed_prompt = mantis_core_pb2.ComposedPrompt()
+        composed_prompt.final_prompt = final_prompt
+        composed_prompt.modules_used.extend([m.get_module_name() for m, _ in module_contents])
+        composed_prompt.strategy = strategy
+        
+        # Convert variables_resolved dict to protobuf Struct
+        if variables_resolved:
+            composed_prompt.variables_resolved.update(variables_resolved)
+        
+        # Add metadata as protobuf Struct
+        metadata = {
+            "total_modules": len(applicable_modules),
+            "active_modules": len(module_contents), 
+            "prompt_length": len(final_prompt),
+        }
+        composed_prompt.metadata.update(metadata)
+
+        return composed_prompt
 
     def _select_modules(self, context: CompositionContext) -> List[BasePromptModule]:
         """Select modules applicable to the current context."""
@@ -123,21 +114,22 @@ class PromptCompositionEngine:
         return applicable
 
     def _combine_content(
-        self, module_contents: List[tuple[BasePromptModule, str]], strategy: CompositionStrategy
+        self, module_contents: List[tuple[BasePromptModule, str]], strategy: mantis_core_pb2.CompositionStrategy
     ) -> str:
         """Combine module content using the specified strategy."""
 
         if not module_contents:
             return "# No applicable modules found for this context."
 
-        if strategy == CompositionStrategy.LAYERED:
+        if strategy == mantis_core_pb2.COMPOSITION_STRATEGY_LAYERED:
             return self._layered_combination(module_contents)
-        elif strategy == CompositionStrategy.BLENDED:
+        elif strategy == mantis_core_pb2.COMPOSITION_STRATEGY_BLENDED:
             return self._blended_combination(module_contents)
-        elif strategy == CompositionStrategy.CONDITIONAL:
+        elif strategy == mantis_core_pb2.COMPOSITION_STRATEGY_CONDITIONAL:
             return self._conditional_combination(module_contents)
         else:
-            raise ValueError(f"Unknown composition strategy: {strategy}")
+            strategy_name = mantis_core_pb2.CompositionStrategy.Name(strategy)
+            raise ValueError(f"Unknown composition strategy: {strategy_name}")
 
     def _layered_combination(self, module_contents: List[tuple[BasePromptModule, str]]) -> str:
         """Combine modules in clear, separated sections."""
