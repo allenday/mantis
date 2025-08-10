@@ -367,10 +367,21 @@ class StructuredExtractor:
             # Tools are already native pydantic-ai functions - use them directly
             tool_functions: List[Any] = []
             if tools:
-                # Tools should already be functions, extract them from the dictionary
-                tool_functions = list(tools.values())
-                if OBSERVABILITY_AVAILABLE and obs_logger:
-                    obs_logger.info(f"Using {len(tool_functions)} native pydantic-ai tools: {list(tools.keys())}")
+                try:
+                    # Tools should already be functions, extract them from the dictionary
+                    tools_values = tools.values()
+                    if tools_values is not None:
+                        tool_functions = list(tools_values)
+                        if OBSERVABILITY_AVAILABLE and obs_logger:
+                            obs_logger.info(f"Using {len(tool_functions)} native pydantic-ai tools: {list(tools.keys())}")
+                    else:
+                        if OBSERVABILITY_AVAILABLE and obs_logger:
+                            obs_logger.warning("tools.values() returned None, using empty tool list")
+                        tool_functions = []
+                except (TypeError, AttributeError) as e:
+                    if OBSERVABILITY_AVAILABLE and obs_logger:
+                        obs_logger.warning(f"Error extracting tool functions from tools dict: {e}, using empty tool list")
+                    tool_functions = []
 
             # Create agent with native tools
             agent = Agent(

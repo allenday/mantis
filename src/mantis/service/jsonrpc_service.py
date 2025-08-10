@@ -152,7 +152,7 @@ class MantisJSONRPCService:
         result = await self.orchestrator.execute_simulation(simulation_input)
 
         # Convert protobuf SimulationOutput to dictionary using native protobuf JSON conversion
-        return MessageToDict(result, preserving_proto_field_name=True, including_default_value_fields=True)
+        return MessageToDict(result, preserving_proto_field_name=True)
 
     async def get_service_info(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Get service information."""

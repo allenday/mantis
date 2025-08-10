@@ -186,9 +186,12 @@ Focus on multiple schools of thought including virtue ethics, existentialism, an
                     result = response_data["result"]
                     print("\n✅ SimulationInput processed successfully!")
                     print(f"📋 Context ID: {result['context_id']}")
-                    print(f"📋 Team Size: {result['team_size']}")
-                    print(f"📋 Execution Strategy: {result['execution_strategy']}")
-                    print(f"📋 Recursion Depth: {result['recursion_depth']}")
+                    print(f"📋 Execution Strategy: {result.get('execution_strategy', 'N/A')}")
+                    print(f"📋 Recursion Depth: {result.get('recursion_depth', 'N/A')}")
+                    
+                    # Count artifacts to show team effectiveness
+                    artifact_count = len(result.get('response_artifacts', []))
+                    print(f"📋 Team Artifacts Created: {artifact_count}")
                     
                     # Show execution result
                     if "execution_result" in result:

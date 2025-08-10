@@ -49,15 +49,20 @@ class SimulationOrchestrator:
             from ..tools.recursive_invocation import invoke_agent_by_name, invoke_multiple_agents
 
             # Create bound methods for recursive invocation tools
+            # CRITICAL: max_depth must be 0 to prevent infinite recursion
             async def bound_invoke_agent_by_name(
                 agent_name: str, query: str, context: Optional[str] = None, max_depth: int = 0
             ):
-                return await invoke_agent_by_name(agent_name, query, self, context, max_depth)
+                # Force max_depth to 0 to prevent recursion - sub-agents cannot invoke more agents
+                logger.info(f"Tool invoke_agent_by_name called with max_depth={max_depth}, forcing to 0 for safety")
+                return await invoke_agent_by_name(agent_name, query, self, context, 0)
 
             async def bound_invoke_multiple_agents(
                 agent_names: list, query_template: str, individual_contexts: Optional[list] = None, max_depth: int = 0
             ):
-                return await invoke_multiple_agents(agent_names, query_template, self, individual_contexts, max_depth)
+                # Force max_depth to 0 to prevent recursion - sub-agents cannot invoke more agents  
+                logger.info(f"Tool invoke_multiple_agents called with max_depth={max_depth}, forcing to 0 for safety")
+                return await invoke_multiple_agents(agent_names, query_template, self, individual_contexts, 0)
 
             self.tools.update(
                 {
@@ -109,12 +114,23 @@ class SimulationOrchestrator:
                     logger.info(f"Would use specified agent: {agent_spec.agent.name}")
 
             # Execute the simulation
+            disable_tools = (simulation_input.max_depth <= 0)
+            logger.info(
+                "Executing simulation with depth control",
+                structured_data={
+                    "context_id": simulation_input.context_id,
+                    "max_depth": simulation_input.max_depth,
+                    "disable_tools": disable_tools,
+                    "depth_logic": f"disable_tools = ({simulation_input.max_depth} <= 0) = {disable_tools}",
+                },
+            )
+            
             task = await self._execute_task_with_agent(
                 query=simulation_input.query,
                 agent_card=target_agent_card,
                 context_id=simulation_input.context_id,
                 max_depth=simulation_input.max_depth,
-                disable_tools=(simulation_input.max_depth <= 0),  # Disable tools for leaf agents
+                disable_tools=disable_tools,
             )
 
             # Convert to protobuf SimulationOutput
@@ -153,11 +169,16 @@ class SimulationOrchestrator:
         # Set agent context for tools
         agent_context = {"agent_name": agent_interface.name, "task_id": task_id, "context_id": context_id}
 
-        if disable_tools:
-            logger.info(
-                "Executing sub-agent with tools DISABLED",
-                structured_data={"context_id": context_id, "agent_name": agent_interface.name},
-            )
+        logger.info(
+            f"Task execution starting with tools {'DISABLED' if disable_tools else 'ENABLED'}",
+            structured_data={
+                "context_id": context_id,
+                "agent_name": agent_interface.name,
+                "max_depth": max_depth,
+                "disable_tools": disable_tools,
+                "tools_available": len(self.tools) if not disable_tools else 0,
+            },
+        )
 
         # Execute with agent context
         try:

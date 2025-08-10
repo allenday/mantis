@@ -51,6 +51,19 @@ async def invoke_agent_by_name(
     # Validate agent exists in registry
     await _validate_agent_exists(agent_name)
 
+    # SAFETY: Enforce max_depth limit to prevent infinite recursion
+    if max_depth > 0:
+        logger.warning(
+            "Recursive invocation attempted with max_depth > 0, forcing to 0 for safety",
+            structured_data={
+                "invoking_agent": invoking_agent,
+                "target_agent": agent_name,
+                "requested_max_depth": max_depth,
+                "enforced_max_depth": 0,
+            },
+        )
+        max_depth = 0
+
     logger.info(
         "Invoking agent through recursive simulation",
         structured_data={
