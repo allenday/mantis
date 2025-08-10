@@ -15,6 +15,7 @@ from .templates import (
     PERSONA_ADHERENCE_SUFFIX,
     CURRENT_TASK_HEADER,
     AGENT_COORDINATION_CONSTRAINTS,
+    CHIEF_OF_STAFF_TEAM_FORMATION,
 )
 from ..observability.logger import get_structured_logger
 
@@ -55,6 +56,16 @@ def create_simulation_prompt_with_interface(
 ) -> ContextualPrompt:
     """Create a simulation prompt using AgentInterface (preferred method)."""
 
+    # Detect Chief of Staff agent and add specific team formation guidance
+    suffixes = [AGENT_COORDINATION_CONSTRAINTS, SIMULATION_BASE_SUFFIX, PERSONA_ADHERENCE_SUFFIX]
+    
+    # Check if this is the Chief of Staff agent
+    agent_name_lower = agent_interface.name.lower()
+    if "chief" in agent_name_lower and "staff" in agent_name_lower:
+        # Insert Chief of Staff specific guidance before the general coordination constraints
+        suffixes.insert(0, CHIEF_OF_STAFF_TEAM_FORMATION)
+        logger.info(f"Added Chief of Staff team formation guidance for agent: {agent_interface.name}")
+
     # Create ContextualPrompt with AgentInterface
     return ContextualPrompt(
         agent_name=agent_interface.name,
@@ -62,7 +73,7 @@ def create_simulation_prompt_with_interface(
         priority=0,
         prefixes=[SIMULATION_BASE_PREFIX],
         core_content=f"{CURRENT_TASK_HEADER}\n{query}",
-        suffixes=[AGENT_COORDINATION_CONSTRAINTS, SIMULATION_BASE_SUFFIX, PERSONA_ADHERENCE_SUFFIX],
+        suffixes=suffixes,
         agent_interface=agent_interface,
         task_context={"context_id": context_id, "task_id": task_id},
     )

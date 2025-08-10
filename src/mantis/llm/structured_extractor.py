@@ -343,12 +343,20 @@ class StructuredExtractor:
 
         # Start LLM interaction tracing if observability available
         if OBSERVABILITY_AVAILABLE and obs_logger:
+            # Safely get tools list for observability
+            tools_available = []
+            if tools and isinstance(tools, dict):
+                try:
+                    tools_available = list(tools.keys())
+                except (AttributeError, TypeError):
+                    tools_available = []
+            
             interaction = trace_llm_interaction(
                 model_spec=final_model,
                 provider=provider,
                 system_prompt=prompt,
                 user_prompt=query,
-                tools_available=list(tools.keys()) if tools else [],
+                tools_available=tools_available,
             )
             obs_logger.info(f"Starting tool-enabled LLM text extraction with {final_model}")
         else:
@@ -366,14 +374,15 @@ class StructuredExtractor:
 
             # Tools are already native pydantic-ai functions - use them directly
             tool_functions: List[Any] = []
-            if tools:
+            if tools and isinstance(tools, dict):
                 try:
                     # Tools should already be functions, extract them from the dictionary
                     tools_values = tools.values()
                     if tools_values is not None:
                         tool_functions = list(tools_values)
                         if OBSERVABILITY_AVAILABLE and obs_logger:
-                            obs_logger.info(f"Using {len(tool_functions)} native pydantic-ai tools: {list(tools.keys())}")
+                            tools_keys = list(tools.keys()) if hasattr(tools, 'keys') else []
+                            obs_logger.info(f"Using {len(tool_functions)} native pydantic-ai tools: {tools_keys}")
                     else:
                         if OBSERVABILITY_AVAILABLE and obs_logger:
                             obs_logger.warning("tools.values() returned None, using empty tool list")
@@ -382,13 +391,26 @@ class StructuredExtractor:
                     if OBSERVABILITY_AVAILABLE and obs_logger:
                         obs_logger.warning(f"Error extracting tool functions from tools dict: {e}, using empty tool list")
                     tool_functions = []
+            elif tools is not None:
+                # tools is not None but also not a dict - log warning and use empty list
+                if OBSERVABILITY_AVAILABLE and obs_logger:
+                    obs_logger.warning(f"Invalid tools type: {type(tools)}. Expected dict or None, using empty tool list")
+                tool_functions = []
 
             # Create agent with native tools
-            agent = Agent(
-                model_instance,
-                system_prompt=prompt,
-                tools=tool_functions or None,  # type: ignore[arg-type]
-            )
+            # Pass tools only if we have actual tool functions, otherwise omit the parameter
+            if tool_functions:
+                agent = Agent(
+                    model_instance,
+                    system_prompt=prompt,
+                    tools=tool_functions,  # type: ignore[arg-type]
+                )
+            else:
+                agent = Agent(
+                    model_instance,
+                    system_prompt=prompt,
+                    # No tools parameter - let pydantic-ai handle this case properly
+                )
 
             # Run and get text response
             result = await agent.run(query)
