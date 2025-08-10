@@ -17,7 +17,7 @@ class LeaderModule(BasePromptModule):
 
     def is_applicable(self, context: CompositionContext) -> bool:
         """Only applicable when agent is assigned leader role."""
-        return context.get_variable("role.is_leader", False)
+        return bool(context.get_variable("role.is_leader", False))
 
     async def generate_content(self, context: CompositionContext) -> str:
         """Generate leader-specific content based on depth and context."""

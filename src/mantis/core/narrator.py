@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from .executor import ExecutionStrategy
 from ..proto.mantis.v1.mantis_core_pb2 import ContextualExecution as ProtoExecutionContext
 from ..proto.mantis.v1.mantis_persona_pb2 import MantisAgentCard, RolePreference
-from .team_formation import AbstractTeamFormation, TarotTeamFormation
+from .team_formation import AbstractTeamFormation, TarotTeamFormation  # type: ignore[import-untyped]
 
 
 class AbstractNarrator(ABC):
@@ -28,7 +28,7 @@ class AbstractNarrator(ABC):
         self._executor: Optional["ExecutionStrategy"] = None
         self.execution_strategy = execution_strategy
 
-    def _get_executor(self):
+    def _get_executor(self) -> "ExecutionStrategy":
         """Get executor based on execution strategy."""
         if self._executor is None:
             if self.execution_strategy == mantis_core_pb2.EXECUTION_STRATEGY_DIRECT:
@@ -99,7 +99,7 @@ class AbstractNarrator(ABC):
         Returns:
             Final narrative response from narrator
         """
-        from ..prompt import PromptCompositionEngine, CompositionStrategy
+        from ..prompt import PromptCompositionEngine
         from ..prompt.variables import create_composition_context
         from ..llm.structured_extractor import StructuredExtractor
         from ..config import DEFAULT_MODEL
@@ -142,7 +142,7 @@ class AbstractNarrator(ABC):
             execution_context=execution_context,
         )
 
-        composed_prompt = await composition_engine.compose_prompt(context=context, strategy=CompositionStrategy.BLENDED)
+        composed_prompt = await composition_engine.compose_prompt(context=context, strategy=mantis_core_pb2.COMPOSITION_STRATEGY_BLENDED)
 
         # Execute narrator
         extractor = StructuredExtractor()

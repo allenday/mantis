@@ -26,13 +26,13 @@ class ExecutionContext:
         self._trace_token: Optional[contextvars.Token] = None
         self._metadata_token: Optional[contextvars.Token] = None
 
-    def __enter__(self):
+    def __enter__(self) -> 'ExecutionContext':
         """Enter the execution context."""
         self._trace_token = _current_trace.set(self.trace)
         self._metadata_token = _execution_metadata.set(self.metadata)
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """Exit the execution context."""
         if self._trace_token:
             _current_trace.reset(self._trace_token)

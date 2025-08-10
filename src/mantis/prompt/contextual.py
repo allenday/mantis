@@ -199,7 +199,7 @@ class ContextualPrompt:
 class ContextualPromptBuilder:
     """Builder for creating ContextualPrompt instances with enhanced PRD compliance."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.agent_name: str = ""
         self.context_content: str = ""
         self.priority: int = 0
@@ -256,7 +256,7 @@ class ContextualPromptBuilder:
             self.agent_name = agent_interface.name
         return self
 
-    def with_task_context(self, **context) -> "ContextualPromptBuilder":
+    def with_task_context(self, **context: Any) -> "ContextualPromptBuilder":
         """Add task context variables."""
         self.task_context.update(context)
         return self

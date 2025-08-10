@@ -47,25 +47,25 @@ class AgentInterface:
         # Handle case where agent_card might not have id field
         agent_card = self._mantis_card.agent_card
         if hasattr(agent_card, "id") and agent_card.id:
-            return agent_card.id
+            return str(agent_card.id)
         else:
-            return agent_card.name
+            return str(agent_card.name)
 
     @property
     def name(self) -> str:
         """Get agent name."""
-        return self._mantis_card.agent_card.name
+        return str(self._mantis_card.agent_card.name)
 
     @property
     def description(self) -> str:
         """Get agent description."""
-        return self._mantis_card.agent_card.description
+        return str(self._mantis_card.agent_card.description)
 
     # Rich persona data access
     @property
     def persona_content(self) -> str:
         """Get the full original persona content."""
-        return self._mantis_card.persona_characteristics.original_content or ""
+        return str(self._mantis_card.persona_characteristics.original_content or "")
 
     @property
     def communication_style(self) -> str:
@@ -109,7 +109,7 @@ class AgentInterface:
         if primary_domains:
             return f"Expert in: {', '.join(primary_domains[:3])}"
 
-        return self._mantis_card.agent_card.description
+        return str(self._mantis_card.agent_card.description)
 
     @property
     def persona_summary(self) -> str:
@@ -162,7 +162,8 @@ class AgentInterface:
     # Competency scores
     def get_competency_score(self, competency: str) -> Optional[float]:
         """Get score for a specific competency (0.0-1.0)."""
-        return self._mantis_card.competency_scores.competency_scores.get(competency)
+        score = self._mantis_card.competency_scores.competency_scores.get(competency)
+        return float(score) if score is not None else None
 
     @property
     def leader_score(self) -> float:
@@ -196,7 +197,7 @@ class AgentInterface:
     @property
     def agent_card(self) -> AgentCard:
         """Get the underlying A2A AgentCard (use sparingly)."""
-        return self._mantis_card.agent_card
+        return self._mantis_card.agent_card  # type: ignore[no-any-return]
 
     # Context generation for prompts
     def get_persona_context(self, include_team_info: bool = False) -> str:

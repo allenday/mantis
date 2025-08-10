@@ -18,7 +18,7 @@ class SimulationInputBuilder:
     messages, including validation and default value handling.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._query: Optional[str] = None
         self._context: Optional[str] = None
         self._structured_data: Optional[str] = None

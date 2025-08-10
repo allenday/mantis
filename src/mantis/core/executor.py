@@ -93,7 +93,7 @@ class DirectExecutor(ExecutionStrategy):
         self, simulation_input: mantis_core_pb2.SimulationInput, agent_spec: mantis_core_pb2.AgentSpec, agent_index: int
     ) -> mantis_core_pb2.AgentResponse:
         """Internal implementation of agent execution."""
-        from ..prompt import PromptCompositionEngine, CompositionStrategy
+        from ..prompt import PromptCompositionEngine
         from ..prompt.variables import create_composition_context
         from ..llm.structured_extractor import StructuredExtractor
 
@@ -124,7 +124,7 @@ class DirectExecutor(ExecutionStrategy):
 
             # Use the updated enum value
             composed_prompt = await composition_engine.compose_prompt(
-                context=context, strategy=CompositionStrategy.BLENDED
+                context=context, strategy=mantis_core_pb2.COMPOSITION_STRATEGY_BLENDED
             )
 
             # Log prompt composition details
@@ -132,7 +132,7 @@ class DirectExecutor(ExecutionStrategy):
                 self.obs_logger.info(
                     "Prompt composition completed",
                     structured_data={
-                        "modules_used": [m.get_module_name() for m in composed_prompt.modules_used],
+                        "modules_used": list(composed_prompt.modules_used),
                         "variables_resolved": len(composed_prompt.variables_resolved),
                         "composition_strategy": composed_prompt.strategy,
                         "final_prompt_length": len(composed_prompt.final_prompt),
@@ -189,7 +189,7 @@ class DirectExecutor(ExecutionStrategy):
             try:
                 response.metadata.update(
                     {
-                        "modules_used": [m.get_module_name() for m in composed_prompt.modules_used],
+                        "modules_used": list(composed_prompt.modules_used),
                         "variables_resolved": len(composed_prompt.variables_resolved),
                         "composition_strategy": composed_prompt.strategy,
                     }

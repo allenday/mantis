@@ -3,7 +3,7 @@ Core prompt composition engine that orchestrates module selection and prompt ass
 """
 
 import logging
-from typing import List
+from typing import List, Dict, Any, Union
 
 from ..proto.mantis.v1 import mantis_core_pb2
 from .variables import CompositionContext
@@ -59,7 +59,7 @@ class PromptCompositionEngine:
 
         # Generate content from each module
         module_contents = []
-        variables_resolved = {}
+        variables_resolved: Dict[str, Any] = {}
 
         for module in applicable_modules:
             try:
@@ -86,7 +86,21 @@ class PromptCompositionEngine:
         
         # Convert variables_resolved dict to protobuf Struct
         if variables_resolved:
-            composed_prompt.variables_resolved.update(variables_resolved)
+            # Convert complex Python types to JSON-serializable types for protobuf
+            safe_variables: Dict[str, Union[str, int, float, bool, None, Dict[str, Any]]] = {}
+            for key, value in variables_resolved.items():
+                if isinstance(value, (str, int, float, bool)) or value is None:
+                    safe_variables[key] = value
+                elif isinstance(value, (list, tuple)):
+                    # Convert list/tuple to string representation
+                    safe_variables[key] = str(value)
+                elif isinstance(value, dict):
+                    # Keep dict as-is since protobuf Struct can handle nested dicts
+                    safe_variables[key] = value
+                else:
+                    # Convert other types to string representation
+                    safe_variables[key] = str(value)
+            composed_prompt.variables_resolved.update(safe_variables)
         
         # Add metadata as protobuf Struct
         metadata = {

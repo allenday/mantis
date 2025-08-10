@@ -22,7 +22,7 @@ class PersonaModule(BasePromptModule):
         original_content = context.get_variable("persona.original_content", "")
 
         if original_content:
-            return original_content  # Return as-is, it's already formatted
+            return str(original_content)  # Return as-is, it's already formatted
 
         # Fallback to agent name and basic info
         agent_name = context.get_variable("agent.name", "Unknown Agent")

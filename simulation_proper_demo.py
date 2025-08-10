@@ -109,16 +109,22 @@ async def test_simulation_input_jsonrpc():
     runner = aiohttp.web.AppRunner(app)
     await runner.setup()
     
-    site = aiohttp.web.TCPSite(runner, "localhost", 8081)  # Use different port to avoid conflicts
+    # Find an available port
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(('localhost', 0))
+        port = s.getsockname()[1]
+    
+    site = aiohttp.web.TCPSite(runner, "localhost", port)
     await site.start()
     
-    print("✅ JSON-RPC service started on http://localhost:8081")
+    print(f"✅ JSON-RPC service started on http://localhost:{port}")
     
     try:
         # Test 1: Service Info
         print("\n📋 Test 1: Service Info")
         async with aiohttp.ClientSession() as session:
-            async with session.get("http://localhost:8081/info") as response:
+            async with session.get(f"http://localhost:{port}/info") as response:
                 if response.status == 200:
                     info = await response.json()
                     print(f"✅ Service: {info['service_name']}")
@@ -132,7 +138,7 @@ async def test_simulation_input_jsonrpc():
         # Test 2: Health Check
         print("\n🏥 Test 2: Health Check")
         async with aiohttp.ClientSession() as session:
-            async with session.get("http://localhost:8081/health") as response:
+            async with session.get(f"http://localhost:{port}/health") as response:
                 if response.status == 200:
                     health = await response.json()
                     print(f"✅ Status: {health['status']}")
@@ -176,7 +182,7 @@ Focus on multiple schools of thought including virtue ethics, existentialism, an
         
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                "http://localhost:8081/jsonrpc", 
+                f"http://localhost:{port}/jsonrpc", 
                 json=simulation_request,
                 headers={"Content-Type": "application/json"}
             ) as response:

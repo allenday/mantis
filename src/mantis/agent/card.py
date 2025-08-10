@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from ..proto.a2a_pb2 import AgentCard
 
 
-def generate(input_path: str, model: Optional[str] = None):
+def generate(input_path: str, model: Optional[str] = None) -> "MantisAgentCard":
     """
     Generate MantisAgentCard from markdown file using LLM enhancement.
 
@@ -40,7 +40,7 @@ def generate(input_path: str, model: Optional[str] = None):
     return enhanced_card
 
 
-def _create_base_agent_card(name: str, content: str, path: Path):
+def _create_base_agent_card(name: str, content: str, path: Path) -> "AgentCard":
     """Create base AgentCard using existing logic."""
     from ..proto.a2a_pb2 import AgentCard, AgentSkill, AgentCapabilities, AgentExtension, AgentProvider
     from google.protobuf.struct_pb2 import Struct
@@ -133,7 +133,7 @@ def _create_base_agent_card(name: str, content: str, path: Path):
     return agent_card
 
 
-def _enhance_with_llm(base_card, content: str, persona_name: str, model_spec: Optional[str] = None):
+def _enhance_with_llm(base_card: "AgentCard", content: str, persona_name: str, model_spec: Optional[str] = None) -> "MantisAgentCard":
     """Enhance AgentCard with LLM-extracted persona data."""
     from ..llm.structured_extractor import get_structured_extractor
     from ..proto.mantis.v1.mantis_persona_pb2 import (
@@ -494,7 +494,7 @@ def parse_extension_data(extension_uri: str, extension_params: Dict[str, Any]) -
         return None
 
 
-def get_parsed_extensions(agent_card) -> Dict[str, Any]:
+def get_parsed_extensions(agent_card: "AgentCard") -> Dict[str, Any]:
     """
     Get parsed extension data from an AgentCard.
 
@@ -573,14 +573,14 @@ def load_agent_card_from_json(agent_data: Dict[str, Any]) -> "MantisAgentCard":
     if "persona_characteristics" in agent_data or "competency_scores" in agent_data or "domain_expertise" in agent_data:
         mantis_card = ParseDict(agent_data, MantisAgentCard(), ignore_unknown_fields=True)
         validate_mantis_agent_card(mantis_card)
-        return mantis_card
+        return mantis_card  # type: ignore[no-any-return]
 
     # Otherwise, load as basic AgentCard and convert
     base_card = json_to_protobuf_agent_card(agent_data)
     return ensure_mantis_agent_card(base_card)
 
 
-def ensure_mantis_agent_card(agent_card) -> "MantisAgentCard":
+def ensure_mantis_agent_card(agent_card: "AgentCard") -> "MantisAgentCard":
     """
     Convert an AgentCard to a MantisAgentCard with parsed extension data.
     If already a MantisAgentCard, return as-is.
@@ -644,7 +644,7 @@ def ensure_mantis_agent_card(agent_card) -> "MantisAgentCard":
     return mantis_card
 
 
-def ensure_agent_card(mantis_agent_card):
+def ensure_agent_card(mantis_agent_card: "MantisAgentCard") -> "AgentCard":
     """
     Extract the base AgentCard from a MantisAgentCard.
 
@@ -654,7 +654,7 @@ def ensure_agent_card(mantis_agent_card):
     Returns:
         Base AgentCard object
     """
-    return mantis_agent_card.agent_card
+    return mantis_agent_card.agent_card  # type: ignore[no-any-return]
 
 
 class FieldNamingConvention(Enum):
@@ -684,7 +684,7 @@ def json_to_protobuf_agent_card(
     if "agent_card" in agent_data:
         agent_data = agent_data["agent_card"]
 
-    def convert_keys(obj):
+    def convert_keys(obj: Any) -> Any:
         if isinstance(obj, dict):
             new_obj = {}
             for key, value in obj.items():
@@ -710,7 +710,7 @@ def json_to_protobuf_agent_card(
             return obj
 
     converted_data = convert_keys(agent_data)
-    return ParseDict(converted_data, AgentCard(), ignore_unknown_fields=True)
+    return ParseDict(converted_data, AgentCard(), ignore_unknown_fields=True)  # type: ignore[no-any-return]
 
 
 def protobuf_to_json_agent_card(
@@ -733,7 +733,7 @@ def protobuf_to_json_agent_card(
 
     if output_convention == FieldNamingConvention.CAMEL_CASE:
         # Convert snake_case to camelCase
-        def convert_keys(obj):
+        def convert_keys(obj: Any) -> Any:
             if isinstance(obj, dict):
                 new_obj = {}
                 for key, value in obj.items():
@@ -748,6 +748,6 @@ def protobuf_to_json_agent_card(
             else:
                 return obj
 
-        return convert_keys(data)
+        return convert_keys(data)  # type: ignore[no-any-return]
     else:
-        return data
+        return data  # type: ignore[no-any-return]

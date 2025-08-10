@@ -7,8 +7,8 @@ for recursive agent invocation through the simulation architecture.
 
 import asyncio
 import logging
-import grpc
-from grpc import aio
+import grpc  # type: ignore[import-untyped]
+from grpc import aio  # type: ignore[import-untyped]
 from typing import cast
 
 from ..proto.mantis.v1 import mantis_core_pb2, mantis_core_pb2_grpc

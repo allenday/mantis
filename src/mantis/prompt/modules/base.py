@@ -11,7 +11,7 @@ from ..variables import CompositionContext, substitute_variables
 class BasePromptModule(ABC):
     """Base class for all prompt modules."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._resolved_variables: Dict[str, Any] = {}
 
     @abstractmethod
