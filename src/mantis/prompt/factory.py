@@ -56,15 +56,21 @@ def create_simulation_prompt_with_interface(
 ) -> ContextualPrompt:
     """Create a simulation prompt using AgentInterface (preferred method)."""
 
-    # Detect Chief of Staff agent and add specific team formation guidance
-    suffixes = [AGENT_COORDINATION_CONSTRAINTS, SIMULATION_BASE_SUFFIX, PERSONA_ADHERENCE_SUFFIX]
-    
-    # Check if this is the Chief of Staff agent
+    # FIXME: This is a terrible hardcoded hack - agent roles should be determined by
+    # agent capabilities, competency scores, or explicit role assignments in the protobuf,
+    # not by string matching on agent names. Need proper role detection system.
     agent_name_lower = agent_interface.name.lower()
-    if "chief" in agent_name_lower and "staff" in agent_name_lower:
-        # Insert Chief of Staff specific guidance before the general coordination constraints
-        suffixes.insert(0, CHIEF_OF_STAFF_TEAM_FORMATION)
-        logger.info(f"Added Chief of Staff team formation guidance for agent: {agent_interface.name}")
+    is_coordinator = "chief" in agent_name_lower and "staff" in agent_name_lower
+    
+    # Only apply coordination constraints to coordinator agents
+    if is_coordinator:
+        # Coordinator gets both team formation guidance and coordination constraints
+        suffixes = [CHIEF_OF_STAFF_TEAM_FORMATION, AGENT_COORDINATION_CONSTRAINTS, SIMULATION_BASE_SUFFIX, PERSONA_ADHERENCE_SUFFIX]
+        logger.info(f"Added Chief of Staff team formation guidance and coordination constraints for agent: {agent_interface.name}")
+    else:
+        # Regular team members get standard suffixes without coordination constraints
+        suffixes = [SIMULATION_BASE_SUFFIX, PERSONA_ADHERENCE_SUFFIX]
+        logger.info(f"Created prompt for team member agent (no coordination constraints): {agent_interface.name}")
 
     # Create ContextualPrompt with AgentInterface
     return ContextualPrompt(
