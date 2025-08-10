@@ -345,7 +345,7 @@ class StructuredExtractor:
         if OBSERVABILITY_AVAILABLE and obs_logger:
             # Safely get tools list for observability
             tools_available = []
-            if tools and isinstance(tools, dict):
+            if isinstance(tools, dict):
                 try:
                     tools_available = list(tools.keys())
                 except (AttributeError, TypeError):
@@ -374,7 +374,7 @@ class StructuredExtractor:
 
             # Tools are already native pydantic-ai functions - use them directly
             tool_functions: List[Any] = []
-            if tools and isinstance(tools, dict):
+            if isinstance(tools, dict):
                 try:
                     # Tools should already be functions, extract them from the dictionary
                     tools_values = tools.values()
@@ -414,7 +414,23 @@ class StructuredExtractor:
 
             # Run and get text response
             result = await agent.run(query)
-            response_text = str(result)  # type: ignore
+            
+            # Extract clean response text from the result object
+            # The result object may have a .data or .output attribute for clean text
+            if hasattr(result, 'data') and result.data:
+                response_text = str(result.data)
+            elif hasattr(result, 'output') and result.output:
+                response_text = str(result.output) 
+            else:
+                # Fallback: convert to string and try to extract from wrapper
+                result_str = str(result)
+                if result_str.startswith("AgentRunResult(output='") and result_str.endswith("')"):
+                    # Extract the actual output from the wrapper
+                    start = len("AgentRunResult(output='")
+                    end = -len("')")
+                    response_text = result_str[start:end].replace("\\'", "'").replace("\\n", "\n")
+                else:
+                    response_text = result_str
 
             # Complete LLM interaction tracing
             if interaction and obs_logger:
