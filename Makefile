@@ -70,20 +70,20 @@ clean:
 	find . -type f -name "*.pyo" -delete
 
 # Linting
-lint: install-dev
+lint:
 	$(VENV)/bin/ruff check src/ scripts/
 
 # Type checking
-typecheck: install-dev
+typecheck:
 	$(VENV)/bin/mypy src/ scripts/ --check-untyped-defs --exclude="src/mantis/proto/*_pb2.py|src/mantis/proto/*_pb2_grpc.py"
 
 # Formatting
-format: install-dev
+format:
 	$(VENV)/bin/black src/ scripts/ --exclude="src/mantis/proto/.*_pb2.*\.py$$"
 	$(VENV)/bin/ruff format src/ scripts/
 
 # Run tests
-test: install-dev proto
+test: proto
 	$(VENV)/bin/pytest tests/ -v
 
 # CI pipeline - what GitHub Actions runs
