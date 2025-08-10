@@ -78,6 +78,7 @@ async def invoke_agent_by_name(
     try:
         # Create recursive SimulationInput
         from ..proto.mantis.v1 import mantis_core_pb2
+        from ..tools.agent_registry import get_agent_by_name
 
         simulation_input = mantis_core_pb2.SimulationInput()
         simulation_input.context_id = f"{context_id}-recursive-{agent_name.lower().replace(' ', '-')}"
@@ -92,6 +93,44 @@ Please respond as {agent_name} would, drawing on your expertise and perspective.
 
         simulation_input.execution_strategy = mantis_core_pb2.EXECUTION_STRATEGY_DIRECT
         simulation_input.max_depth = max_depth
+
+        # CRITICAL FIX: Specify which agent to use instead of defaulting to Chief of Staff
+        try:
+            target_agent_card = await get_agent_by_name(agent_name)
+            if target_agent_card:
+                # Create AgentSpec with the specific agent - populate the AgentInterface correctly
+                from ..agent import AgentInterface as AgentInterfaceWrapper
+                agent_wrapper = AgentInterfaceWrapper(target_agent_card)
+                
+                agent_spec = mantis_core_pb2.AgentSpec()
+                # Populate the mantis_core AgentInterface (not a2a AgentInterface!)
+                agent_spec.agent.agent_id = agent_wrapper.agent_id
+                agent_spec.agent.name = agent_wrapper.name
+                agent_spec.agent.description = agent_wrapper.description
+                agent_spec.agent.capabilities_summary = agent_wrapper.capabilities_summary
+                agent_spec.agent.persona_summary = agent_wrapper.persona_summary
+                agent_spec.agent.role_preference = agent_wrapper.role_preference
+                agent_spec.count = 1
+                simulation_input.agents.append(agent_spec)
+                
+                logger.info(
+                    "Added specific agent to simulation input", 
+                    structured_data={
+                        "agent_name": agent_name, 
+                        "agent_id": agent_wrapper.agent_id,
+                        "context_id": simulation_input.context_id
+                    }
+                )
+            else:
+                logger.warning(
+                    "Could not load specific agent, will use default",
+                    structured_data={"agent_name": agent_name}
+                )
+        except Exception as e:
+            logger.warning(
+                "Failed to load specific agent, will use default",
+                structured_data={"agent_name": agent_name, "error": str(e)}
+            )
 
         # Execute recursive simulation
         nested_output = await orchestrator.execute_simulation(simulation_input)
