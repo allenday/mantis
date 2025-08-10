@@ -38,7 +38,7 @@ def simulate(
     dry_run: bool = False,
     model: Optional[str] = None,
     verbose: bool = False,
-):
+) -> int:
     """
     Run a multi-agent simulation with the specified query.
 
@@ -80,7 +80,7 @@ def simulate(
 
         if dry_run:
             _display_simulation_input(simulation_input, verbose)
-            return
+            return 0
 
         # Execute the simulation using the orchestrator
         console.print("[blue]ℹ️  Starting simulation...[/blue]")
@@ -102,6 +102,7 @@ def simulate(
                 return 1
             else:
                 console.print("[green]✅ Simulation completed successfully[/green]")
+                return 0
 
         except Exception as e:
             console.print(f"[red]❌ Simulation execution failed: {e}[/red]")
@@ -119,7 +120,7 @@ def simulate(
         return 1
 
 
-def _display_simulation_output(simulation_output: mantis_core_pb2.SimulationOutput, verbose: bool = False):
+def _display_simulation_output(simulation_output: mantis_core_pb2.SimulationOutput, verbose: bool = False) -> None:
     """Display SimulationOutput in a formatted way."""
     # Display main response
     console.print(
@@ -161,7 +162,7 @@ def _display_simulation_output(simulation_output: mantis_core_pb2.SimulationOutp
         console.print(f"\n[dim]Output Modes: {', '.join(simulation_output.response.output_modes)}[/dim]")
 
 
-def _display_simulation_input(simulation_input: mantis_core_pb2.SimulationInput, verbose: bool = False):
+def _display_simulation_input(simulation_input: mantis_core_pb2.SimulationInput, verbose: bool = False) -> None:
     """Display SimulationInput in a formatted way."""
     console.print(
         Panel(

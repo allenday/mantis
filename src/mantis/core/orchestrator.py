@@ -52,13 +52,13 @@ class SimulationOrchestrator:
             # CRITICAL: max_depth must be 0 to prevent infinite recursion
             async def bound_invoke_agent_by_name(
                 agent_name: str, query: str, context: Optional[str] = None, max_depth: int = 1
-            ):
+            ) -> str:
                 # Use proper depth control - let current_depth increment naturally
                 return await invoke_agent_by_name(agent_name, query, self, context, max_depth)
 
             async def bound_invoke_multiple_agents(
-                agent_names: list, query_template: str, individual_contexts: Optional[list] = None, max_depth: int = 1
-            ):
+                agent_names: list[str], query_template: str, individual_contexts: Optional[list[str]] = None, max_depth: int = 1
+            ) -> Dict[str, str]:
                 # Use proper depth control - let current_depth increment naturally
                 return await invoke_multiple_agents(agent_names, query_template, self, individual_contexts, max_depth)
 
@@ -378,7 +378,7 @@ class SimulationOrchestrator:
         """Get available tools for use by agents."""
         return self.tools.copy()
 
-    def get_tasks_by_context(self, context: str) -> list:
+    def get_tasks_by_context(self, context: str) -> list[a2a_pb2.Task]:
         """Get tasks by context - compatibility method."""
         # For compatibility, return filtered active tasks
         matching_tasks = []

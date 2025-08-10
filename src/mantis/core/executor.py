@@ -43,7 +43,7 @@ class ExecutionStrategy(ABC):
 class DirectExecutor(ExecutionStrategy):
     """Direct execution using local pydantic-ai agents."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._model_cache: Dict[str, Any] = {}
         self._tools: Dict[str, Any] = {}
         self._initialize_tools()
@@ -134,7 +134,7 @@ class DirectExecutor(ExecutionStrategy):
                     structured_data={
                         "modules_used": [m.get_module_name() for m in composed_prompt.modules_used],
                         "variables_resolved": len(composed_prompt.variables_resolved),
-                        "composition_strategy": composed_prompt.strategy.value,
+                        "composition_strategy": composed_prompt.strategy,
                         "final_prompt_length": len(composed_prompt.final_prompt),
                     },
                 )
@@ -191,7 +191,7 @@ class DirectExecutor(ExecutionStrategy):
                     {
                         "modules_used": [m.get_module_name() for m in composed_prompt.modules_used],
                         "variables_resolved": len(composed_prompt.variables_resolved),
-                        "composition_strategy": composed_prompt.strategy.value,
+                        "composition_strategy": composed_prompt.strategy,
                     }
                 )
             except AttributeError:
@@ -216,7 +216,7 @@ class DirectExecutor(ExecutionStrategy):
     def get_strategy_type(self) -> mantis_core_pb2.ExecutionStrategy:
         return mantis_core_pb2.EXECUTION_STRATEGY_DIRECT
 
-    def _initialize_tools(self):
+    def _initialize_tools(self) -> None:
         """Initialize available tools for agent execution using native pydantic-ai tools."""
         try:
             # Import native pydantic-ai tool functions directly
@@ -279,7 +279,7 @@ class DirectExecutor(ExecutionStrategy):
         """Get dictionary of available tools."""
         return self._tools.copy()
 
-    def _create_minimal_agent_card(self):
+    def _create_minimal_agent_card(self) -> Any:
         """Create a minimal agent card for generic execution."""
         from ..proto.mantis.v1.mantis_persona_pb2 import MantisAgentCard
         from ..proto.a2a_pb2 import AgentCard
@@ -296,7 +296,7 @@ class DirectExecutor(ExecutionStrategy):
         mantis_card.agent_card.CopyFrom(agent_card)
         return mantis_card
 
-    def _determine_agent_role(self, mantis_card, execution_context) -> str:
+    def _determine_agent_role(self, mantis_card: Any, execution_context: Any) -> str:
         """Determine the agent's role based on context and capabilities."""
         # For now, use simple heuristics
         # In the future, this could use the role assignment engine

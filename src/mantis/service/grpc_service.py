@@ -9,6 +9,7 @@ import asyncio
 import logging
 import grpc
 from grpc import aio
+from typing import cast
 
 from ..proto.mantis.v1 import mantis_core_pb2, mantis_core_pb2_grpc
 from ..core.orchestrator import SimulationOrchestrator
@@ -24,7 +25,7 @@ class MantisServiceServicer(mantis_core_pb2_grpc.MantisServiceServicer):
     enabling the Chief of Staff to coordinate team formation and execution.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the service with orchestrator."""
         self.orchestrator = SimulationOrchestrator()
         logger.info("MantisServiceServicer initialized")
@@ -146,7 +147,7 @@ class MantisServiceServicer(mantis_core_pb2_grpc.MantisServiceServicer):
                 result = await self.orchestrator.execute_team_with_formation(
                     request.simulation_input, request.team_size, request.formation_strategy
                 )
-                return result
+                return cast(mantis_core_pb2.TeamExecutionResult, result)
             else:
                 # Fallback to basic team execution
                 logger.warning("execute_team_with_formation not available, using basic execution")
@@ -197,7 +198,7 @@ class MantisServiceServicer(mantis_core_pb2_grpc.MantisServiceServicer):
             return error_response
 
 
-async def serve_grpc(port: int = 50051, host: str = "localhost"):
+async def serve_grpc(port: int = 50051, host: str = "localhost") -> None:
     """
     Start the gRPC server with MantisServiceServicer.
 

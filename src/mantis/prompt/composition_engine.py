@@ -28,11 +28,11 @@ class PromptCompositionEngine:
     adaptations to generate coherent, authentic prompts for agent execution.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.modules: List[BasePromptModule] = []
         self._register_core_modules()
 
-    def _register_core_modules(self):
+    def _register_core_modules(self) -> None:
         """Register the core prompt modules."""
         self.modules = [PersonaModule(), RoleModule(), LeaderModule(), ContextModule(), CapabilityModule()]
         logger.info(f"Registered {len(self.modules)} core prompt modules")

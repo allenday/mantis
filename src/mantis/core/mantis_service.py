@@ -40,7 +40,7 @@ class MantisService:
     Follows coding guidelines: fail fast, fail clearly, fail observably.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         try:
             self.orchestrator = SimulationOrchestrator()
             logger.info(
