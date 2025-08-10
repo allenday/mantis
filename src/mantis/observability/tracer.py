@@ -7,7 +7,7 @@ of function calls, tool invocations, and LLM interactions.
 
 import functools
 import asyncio
-from typing import Callable, Any, Dict, Optional, TypeVar, cast, Union
+from typing import Callable, Any, Dict, Optional, TypeVar, cast
 
 from .models import ToolInvocation, LLMInteraction, ExecutionStatus, InvocationType
 from .context import ExecutionContext, create_child_trace, get_current_trace_id
