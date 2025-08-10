@@ -372,3 +372,132 @@ message NarratorRequest {
   // Additional configuration for narrative synthesis
   google.protobuf.Struct narrator_config = 5;
 }
+
+// NEWLY ADDED: Missing protobuf messages identified in audit
+
+// Prompt composition strategy enum
+enum CompositionStrategy {
+  COMPOSITION_STRATEGY_UNSPECIFIED = 0;
+  COMPOSITION_STRATEGY_LAYERED = 1;     // Clear sections with separators (debugging)
+  COMPOSITION_STRATEGY_BLENDED = 2;     // Seamless integration (production)
+  COMPOSITION_STRATEGY_CONDITIONAL = 3; // Rule-based combinations
+}
+
+// Result of prompt composition containing final prompt and metadata
+message ComposedPrompt {
+  // The final composed prompt text
+  string final_prompt = 1;
+  
+  // List of module names that were used
+  repeated string modules_used = 2;
+  
+  // Variables that were resolved during composition
+  google.protobuf.Struct variables_resolved = 3;
+  
+  // Strategy used for composition
+  CompositionStrategy strategy = 4;
+  
+  // Additional metadata about the composition process
+  google.protobuf.Struct metadata = 5;
+}
+
+// Request for prompt composition
+message PromptCompositionRequest {
+  // Agent card for persona-based composition
+  mantis.persona.v1.MantisAgentCard mantis_card = 1;
+  
+  // Simulation input providing query context
+  SimulationInput simulation_input = 2;
+  
+  // Agent specification for role preferences
+  AgentSpec agent_spec = 3;
+  
+  // Current execution context
+  google.protobuf.Struct execution_context = 4;
+  
+  // Composition strategy to use
+  CompositionStrategy strategy = 5;
+  
+  // Additional variables for template resolution
+  google.protobuf.Struct variables = 6;
+}
+
+// Tool invocation record for observability
+message ToolInvocation {
+  // Unique identifier for this tool invocation
+  string invocation_id = 1;
+  
+  // Name of the tool being invoked
+  string tool_name = 2;
+  
+  // Input parameters as structured data
+  google.protobuf.Struct parameters = 3;
+  
+  // Timestamp of invocation
+  google.protobuf.Timestamp timestamp = 4;
+  
+  // Context information about the agent making the call
+  string agent_context = 5;
+  
+  // Execution strategy being used
+  ExecutionStrategy execution_strategy = 6;
+}
+
+// Tool execution result for observability
+message ToolResult {
+  // Invocation ID this result corresponds to
+  string invocation_id = 1;
+  
+  // Execution status
+  ExecutionStatus status = 2;
+  
+  // Result data if successful
+  google.protobuf.Struct result_data = 3;
+  
+  // Error information if failed
+  optional ErrorInfo error_info = 4;
+  
+  // Execution duration in milliseconds
+  int64 duration_ms = 5;
+  
+  // Timestamp of completion
+  google.protobuf.Timestamp timestamp = 6;
+}
+
+// Observability event for monitoring and debugging
+message ObservabilityEvent {
+  // Unique event identifier
+  string event_id = 1;
+  
+  // Event type (e.g., "agent_invocation", "tool_call", "error")
+  string event_type = 2;
+  
+  // Event severity level
+  enum Severity {
+    SEVERITY_UNSPECIFIED = 0;
+    SEVERITY_DEBUG = 1;
+    SEVERITY_INFO = 2;
+    SEVERITY_WARNING = 3;
+    SEVERITY_ERROR = 4;
+    SEVERITY_CRITICAL = 5;
+  }
+  Severity severity = 3;
+  
+  // Event timestamp
+  google.protobuf.Timestamp timestamp = 4;
+  
+  // Context information
+  google.protobuf.Struct context = 5;
+  
+  // Event message
+  string message = 6;
+  
+  // Associated agent or component
+  optional string agent_id = 7;
+  
+  // Associated simulation context
+  optional string context_id = 8;
+  
+  // Additional structured data
+  google.protobuf.Struct additional_data = 9;
+}
