@@ -11,12 +11,14 @@ logger = logging.getLogger(__name__)
 
 class CompositionContext(BaseModel):
     """Context information needed for prompt composition."""
+    # FIXME: TYPE-SAFETY: Replace Any types with proper protobuf type hints
+    # Should import from mantis.proto.mantis.v1 using TYPE_CHECKING pattern
 
-    mantis_card: Any  # MantisAgentCard
-    simulation_input: Any  # SimulationInput
-    agent_spec: Any  # AgentSpec
-    execution_context: Union[Dict[str, Any], Any] = Field(default_factory=dict)  # Can be dict or proto ExecutionContext
-    variables: Dict[str, Any] = Field(default_factory=dict)
+    mantis_card: Any  # FIXME: Should be MantisAgentCard protobuf type
+    simulation_input: Any  # FIXME: Should be SimulationInput protobuf type
+    agent_spec: Any  # FIXME: Should be AgentSpec protobuf type
+    execution_context: Union[Dict[str, Any], Any] = Field(default_factory=dict)  # FIXME: Use protobuf ExecutionContext
+    variables: Dict[str, Any] = Field(default_factory=dict)  # FIXME: Use protobuf Struct
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -24,7 +26,7 @@ class CompositionContext(BaseModel):
         """Get a variable value with fallback to default."""
         return self.variables.get(key, default)
 
-    def set_variable(self, key: str, value: Any):
+    def set_variable(self, key: str, value: Any) -> None:  # FIXME: TYPE-SAFETY: Missing return type annotation
         """Set a variable value."""
         self.variables[key] = value
 

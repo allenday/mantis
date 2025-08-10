@@ -256,6 +256,8 @@ class BaseTeam(AbstractTeam):
             return ensure_mantis_agent_card(temp_card)
 
         except Exception:
+            # FIXME: SILENT-FAILURE-SECURITY: Auth failures return None instead of failing fast
+            # Could lead to privilege escalation if None is treated as valid authentication
             return None
 
     def _create_team_coordination_context(
