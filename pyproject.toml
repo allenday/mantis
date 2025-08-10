@@ -66,11 +66,11 @@ target-version = ["py311"]
 
 [tool.mypy]
 python_version = "3.11"
-warn_return_any = false
+warn_return_any = true
 warn_unused_configs = true  
-disallow_untyped_defs = false
-ignore_missing_imports = true
-no_implicit_optional = false
+disallow_untyped_defs = true
+ignore_missing_imports = false
+no_implicit_optional = true
 plugins = ["pydantic.mypy"]
 exclude = [
     "src/mantis/proto/",
@@ -79,6 +79,20 @@ exclude = [
 [[tool.mypy.overrides]]
 module = "mcp.*"
 ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = [
+    "duckduckgo_search.*",
+    "dotenv.*",
+    "rich.*",
+    "uvicorn.*",
+    "fasta2a.*",
+    "a2a_registry.*",
+    "pydantic_ai.*",
+    "google.protobuf.*",
+    "protobuf_to_pydantic.*"
+]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 markers = [
