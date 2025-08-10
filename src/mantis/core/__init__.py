@@ -1,8 +1,17 @@
 """
-Core Mantis functionality for building and processing requests.
+Core Mantis functionality - ContextualPrompt template assembly and orchestration.
 """
 
-from .request_builder import UserRequestBuilder
-from .orchestrator import SimulationOrchestrator, DirectExecutor, A2AExecutor
+from ..prompt import ContextualPromptBuilder, ContextualPrompt, create_simulation_prompt
+from .orchestrator import SimulationOrchestrator
+from .mantis_service import MantisService
+from .simulation_input_builder import SimulationInputBuilder
 
-__all__ = ["UserRequestBuilder", "SimulationOrchestrator", "DirectExecutor", "A2AExecutor"]
+__all__ = [
+    "ContextualPromptBuilder",
+    "ContextualPrompt",
+    "create_simulation_prompt",
+    "SimulationOrchestrator",
+    "SimulationInputBuilder",
+    "MantisService",
+]

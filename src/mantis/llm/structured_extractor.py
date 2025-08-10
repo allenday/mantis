@@ -151,7 +151,7 @@ class StructuredExtractor:
             raise StructuredExtractionError(f"Unsupported provider: {provider}")
 
     async def extract_async(
-        self, content: str, result_type: Type[T], system_prompt: str, user_prompt: str, **agent_kwargs
+        self, content: str, result_type: Type[T], system_prompt: str, user_prompt: str, **agent_kwargs: Any
     ) -> T:
         """
         Extract structured data asynchronously.
@@ -184,7 +184,7 @@ class StructuredExtractor:
             raise StructuredExtractionError(f"LLM extraction failed: {e}")
 
     def extract_sync(
-        self, content: str, result_type: Type[T], system_prompt: str, user_prompt: str, **agent_kwargs
+        self, content: str, result_type: Type[T], system_prompt: str, user_prompt: str, **agent_kwargs: Any
     ) -> T:
         """
         Extract structured data synchronously.
@@ -226,8 +226,8 @@ class StructuredExtractor:
             raise StructuredExtractionError(f"Synchronous extraction failed: {e}")
 
     def extract_protobuf_sync(
-        self, content: str, protobuf_type: Type, system_prompt: str, user_prompt: str, **agent_kwargs
-    ):
+        self, content: str, protobuf_type: Type[Any], system_prompt: str, user_prompt: str, **agent_kwargs: Any
+    ) -> Any:
         """
         Extract data into protobuf message using on-the-fly pydantic conversion.
 
@@ -343,12 +343,20 @@ class StructuredExtractor:
 
         # Start LLM interaction tracing if observability available
         if OBSERVABILITY_AVAILABLE and obs_logger:
+            # Safely get tools list for observability
+            tools_available = []
+            if isinstance(tools, dict):
+                try:
+                    tools_available = list(tools.keys())
+                except (AttributeError, TypeError):
+                    tools_available = []
+
             interaction = trace_llm_interaction(
                 model_spec=final_model,
                 provider=provider,
                 system_prompt=prompt,
                 user_prompt=query,
-                tools_available=list(tools.keys()) if tools else [],
+                tools_available=tools_available,
             )
             obs_logger.info(f"Starting tool-enabled LLM text extraction with {final_model}")
         else:
@@ -366,22 +374,67 @@ class StructuredExtractor:
 
             # Tools are already native pydantic-ai functions - use them directly
             tool_functions: List[Any] = []
-            if tools:
-                # Tools should already be functions, extract them from the dictionary
-                tool_functions = list(tools.values())
+            if isinstance(tools, dict):
+                try:
+                    # Tools should already be functions, extract them from the dictionary
+                    tools_values = tools.values()
+                    if tools_values is not None:
+                        tool_functions = list(tools_values)
+                        if OBSERVABILITY_AVAILABLE and obs_logger:
+                            tools_keys = list(tools.keys()) if hasattr(tools, "keys") else []
+                            obs_logger.info(f"Using {len(tool_functions)} native pydantic-ai tools: {tools_keys}")
+                    else:
+                        if OBSERVABILITY_AVAILABLE and obs_logger:
+                            obs_logger.warning("tools.values() returned None, using empty tool list")
+                        tool_functions = []
+                except (TypeError, AttributeError) as e:
+                    if OBSERVABILITY_AVAILABLE and obs_logger:
+                        obs_logger.warning(
+                            f"Error extracting tool functions from tools dict: {e}, using empty tool list"
+                        )
+                    tool_functions = []
+            elif tools is not None:
+                # tools is not None but also not a dict - log warning and use empty list
                 if OBSERVABILITY_AVAILABLE and obs_logger:
-                    obs_logger.info(f"Using {len(tool_functions)} native pydantic-ai tools: {list(tools.keys())}")
+                    obs_logger.warning(
+                        f"Invalid tools type: {type(tools)}. Expected dict or None, using empty tool list"
+                    )
+                tool_functions = []
 
             # Create agent with native tools
-            agent = Agent(
-                model_instance,
-                system_prompt=prompt,
-                tools=tool_functions or None,  # type: ignore[arg-type]
-            )
+            # Pass tools only if we have actual tool functions, otherwise omit the parameter
+            if tool_functions:
+                agent = Agent(
+                    model_instance,
+                    system_prompt=prompt,
+                    tools=tool_functions,  # type: ignore[arg-type]
+                )
+            else:
+                agent = Agent(
+                    model_instance,
+                    system_prompt=prompt,
+                    # No tools parameter - let pydantic-ai handle this case properly
+                )
 
             # Run and get text response
             result = await agent.run(query)
-            response_text = str(result)  # type: ignore
+
+            # Extract clean response text from the result object
+            # The result object may have a .data or .output attribute for clean text
+            if hasattr(result, "data") and result.data:
+                response_text = str(result.data)
+            elif hasattr(result, "output") and result.output:
+                response_text = str(result.output)
+            else:
+                # Fallback: convert to string and try to extract from wrapper
+                result_str = str(result)
+                if result_str.startswith("AgentRunResult(output='") and result_str.endswith("')"):
+                    # Extract the actual output from the wrapper
+                    start = len("AgentRunResult(output='")
+                    end = -len("')")
+                    response_text = result_str[start:end].replace("\\'", "'").replace("\\n", "\n")
+                else:
+                    response_text = result_str
 
             # Complete LLM interaction tracing
             if interaction and obs_logger:
@@ -408,14 +461,14 @@ class StructuredExtractor:
 
     # Legacy conversion methods removed - we now use native pydantic-ai tools directly
 
-    def _protobuf_to_pydantic(self, protobuf_type: Type) -> Type:
+    def _protobuf_to_pydantic(self, protobuf_type: Type[Any]) -> Type[Any]:
         """Convert protobuf message class to equivalent pydantic model."""
         try:
             # Try using protobuf-to-pydantic if available
             try:
                 from protobuf_to_pydantic import msg_to_pydantic_dataclass
 
-                return msg_to_pydantic_dataclass(protobuf_type)
+                return msg_to_pydantic_dataclass(protobuf_type)  # type: ignore[no-any-return]
             except ImportError:
                 # Fallback: create pydantic model manually based on protobuf descriptor
                 return self._create_pydantic_from_protobuf(protobuf_type)
@@ -423,7 +476,7 @@ class StructuredExtractor:
         except Exception as e:
             raise StructuredExtractionError(f"Failed to convert protobuf to pydantic: {e}")
 
-    def _create_pydantic_from_protobuf(self, protobuf_type: Type) -> Type:
+    def _create_pydantic_from_protobuf(self, protobuf_type: Type[Any]) -> Type[Any]:
         """Create pydantic model from protobuf descriptor (fallback method)."""
         from pydantic import BaseModel, Field
         from typing import Optional
@@ -475,7 +528,7 @@ class StructuredExtractor:
 
         return model_class
 
-    def _get_python_type_for_protobuf_field(self, field):
+    def _get_python_type_for_protobuf_field(self, field: Any) -> Any:
         """Get Python type annotation for protobuf field."""
         from typing import List, Dict, Optional, Any
 
@@ -513,7 +566,7 @@ class StructuredExtractor:
         # For scalar fields, return specific type
         return self._get_scalar_type(field)
 
-    def _get_scalar_type(self, field):
+    def _get_scalar_type(self, field: Any) -> Any:
         """Get specific Python type for protobuf scalar field."""
         # Map protobuf field types to Python types
         if field.type == field.TYPE_STRING:
@@ -534,7 +587,7 @@ class StructuredExtractor:
 
             return Any
 
-    def _pydantic_to_protobuf(self, pydantic_obj, protobuf_type: Type):
+    def _pydantic_to_protobuf(self, pydantic_obj: Any, protobuf_type: Type[Any]) -> Any:
         """Convert pydantic model instance to protobuf message."""
         protobuf_obj = protobuf_type()
 
@@ -585,23 +638,32 @@ class StructuredExtractor:
                     else:
                         try:
                             setattr(protobuf_obj, field_name, value)
-                        except (TypeError, ValueError):
-                            pass  # Skip invalid assignments
+                        except (TypeError, ValueError) as e:
+                            logger.warning(f"Failed to set protobuf field {field_name}={value}: {e}")
+                            raise StructuredExtractionError(
+                                f"Invalid protobuf field assignment: {field_name}={value}: {e}"
+                            )
 
-                except Exception:
-                    pass  # Skip fields that can't be processed
+                except Exception as e:
+                    logger.error(f"Critical error processing protobuf field {field_name}: {e}", exc_info=True)
+                    if obs_logger:
+                        obs_logger.error(f"Protobuf field processing error: {field_name}={value}: {e}")
+                    raise StructuredExtractionError(f"Critical protobuf processing error for field {field_name}: {e}")
 
         return protobuf_obj
 
-    def _pydantic_dict_to_protobuf(self, data_dict: dict, protobuf_type: Type):
+    def _pydantic_dict_to_protobuf(self, data_dict: dict, protobuf_type: Type[Any]) -> Any:
         """Convert a dictionary to a protobuf message (helper for nested messages)."""
         protobuf_obj = protobuf_type()
         for field_name, value in data_dict.items():
             if hasattr(protobuf_obj, field_name) and value is not None:
                 try:
                     setattr(protobuf_obj, field_name, value)
-                except (TypeError, ValueError):
-                    pass  # Skip invalid assignments
+                except (TypeError, ValueError) as e:
+                    logger.warning(f"Failed to set nested protobuf field {field_name}={value}: {e}")
+                    raise StructuredExtractionError(
+                        f"Invalid nested protobuf field assignment: {field_name}={value}: {e}"
+                    )
         return protobuf_obj
 
 
@@ -637,7 +699,7 @@ def extract_structured_data_sync(
     system_prompt: str,
     user_prompt: str,
     model_spec: Optional[str] = None,
-    **agent_kwargs,
+    **agent_kwargs: Any,
 ) -> T:
     """
     Convenience function for one-off structured data extraction.
@@ -659,12 +721,12 @@ def extract_structured_data_sync(
 
 def extract_protobuf_data_sync(
     content: str,
-    protobuf_type: Type,
+    protobuf_type: Type[Any],
     system_prompt: str,
     user_prompt: str,
     model_spec: Optional[str] = None,
-    **agent_kwargs,
-):
+    **agent_kwargs: Any,
+) -> Any:
     """
     Convenience function for one-off protobuf data extraction.
 

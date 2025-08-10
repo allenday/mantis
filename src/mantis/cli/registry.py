@@ -4,7 +4,7 @@ Registry command for the Mantis CLI - inspect and search agent registry.
 """
 
 import json
-from typing import Optional
+from typing import Optional, Any, List
 
 import rich_click as click
 from rich.console import Console
@@ -15,7 +15,7 @@ from .core import cli, use_global_options
 console = Console()
 
 
-def display_registry_table(agents_data, verbose: bool = False, show_scores: bool = False) -> None:
+def display_registry_table(agents_data: List[Any], verbose: bool = False, show_scores: bool = False) -> None:
     """Display a rich table of agents from the registry."""
     table = Table(title="🌐 Agent Registry", show_header=True, header_style="bold blue")
 
@@ -71,7 +71,7 @@ def display_registry_table(agents_data, verbose: bool = False, show_scores: bool
 
 @cli.group()
 @use_global_options(["verbose"])
-def registry(verbose: bool):
+def registry(verbose: bool) -> None:
     """
     Inspect and search the agent registry.
     """

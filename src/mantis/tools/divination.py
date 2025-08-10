@@ -5,29 +5,15 @@ Provides both raw randomness and structured divination methods.
 
 import random
 import logging
-from typing import List, Optional
 from enum import Enum
-
-# Observability imports
-try:
-    from ..observability import get_structured_logger
-
-    OBSERVABILITY_AVAILABLE = True
-except ImportError:
-    OBSERVABILITY_AVAILABLE = False
+from .base import log_tool_invocation, log_tool_result
 
 logger = logging.getLogger(__name__)
-
-# Observability logger
-if OBSERVABILITY_AVAILABLE:
-    obs_logger = get_structured_logger("divination")
-else:
-    obs_logger = None  # type: ignore
 
 
 class TarotCard(Enum):
     """Major Arcana tarot cards with meanings."""
-    
+
     THE_FOOL = (0, "The Fool", "New beginnings, innocence, spontaneity, free spirit")
     THE_MAGICIAN = (1, "The Magician", "Manifestation, resourcefulness, power, inspired action")
     THE_HIGH_PRIESTESS = (2, "The High Priestess", "Intuition, sacred knowledge, divine feminine, subconscious")
@@ -59,7 +45,7 @@ class TarotCard(Enum):
 
 class IChing(Enum):
     """I Ching trigrams with meanings."""
-    
+
     HEAVEN = ("☰", "Heaven", "Creative force, leadership, strength, perseverance")
     EARTH = ("☷", "Earth", "Receptive, nurturing, yielding, supportive")
     WATER = ("☵", "Water", "Danger, depth, flowing, adaptability")
@@ -85,24 +71,20 @@ async def get_random_number(min_value: int = 1, max_value: int = 100) -> str:
     Returns:
         Random number as a string for LLM interpretation
     """
-    if OBSERVABILITY_AVAILABLE and obs_logger:
-        obs_logger.info(f"🎯 TOOL_INVOKED: get_random_number({min_value}, {max_value})")
+    log_tool_invocation("divination", "get_random_number", {"min_value": min_value, "max_value": max_value})
 
     if min_value > max_value:
         return f"Error: min_value ({min_value}) cannot be greater than max_value ({max_value})"
 
     try:
         result = random.randint(min_value, max_value)
-        
-        if OBSERVABILITY_AVAILABLE and obs_logger:
-            obs_logger.info(f"Generated random number: {result}")
-        
+
+        log_tool_result("divination", "get_random_number", {"generated_number": result})
+
         return f"Random number between {min_value} and {max_value}: {result}"
-    
+
     except Exception as e:
         error_msg = f"Error generating random number: {str(e)}"
-        if OBSERVABILITY_AVAILABLE and obs_logger:
-            obs_logger.error(f"Random number generation failed: {e}")
         return error_msg
 
 
@@ -112,25 +94,21 @@ async def draw_tarot_card() -> str:
     Returns:
         Formatted tarot card with number, name, and meaning
     """
-    if OBSERVABILITY_AVAILABLE and obs_logger:
-        obs_logger.info("🎯 TOOL_INVOKED: draw_tarot_card")
+    log_tool_invocation("divination", "draw_tarot_card")
 
     try:
         card = random.choice(list(TarotCard))
-        
+
         result = f"🔮 **{card.card_name}** (Card {card.number})\n"
         result += f"**Meaning:** {card.meaning}\n"
         result += f"**Guidance:** This card suggests themes of {card.meaning.lower().split(',')[0].strip()}."
-        
-        if OBSERVABILITY_AVAILABLE and obs_logger:
-            obs_logger.info(f"Drew tarot card: {card.card_name}")
-        
+
+        log_tool_result("divination", "draw_tarot_card", {"card_name": card.card_name, "card_number": card.number})
+
         return result
-    
+
     except Exception as e:
         error_msg = f"Error drawing tarot card: {str(e)}"
-        if OBSERVABILITY_AVAILABLE and obs_logger:
-            obs_logger.error(f"Tarot card draw failed: {e}")
         return error_msg
 
 
@@ -140,25 +118,23 @@ async def cast_i_ching_trigram() -> str:
     Returns:
         Formatted I Ching trigram with symbol, name, and meaning
     """
-    if OBSERVABILITY_AVAILABLE and obs_logger:
-        obs_logger.info("🎯 TOOL_INVOKED: cast_i_ching_trigram")
+    log_tool_invocation("divination", "cast_i_ching_trigram")
 
     try:
         trigram = random.choice(list(IChing))
-        
+
         result = f"☯️ **{trigram.trigram_name}** {trigram.symbol}\n"
         result += f"**Meaning:** {trigram.meaning}\n"
         result += f"**Insight:** The {trigram.trigram_name} trigram indicates {trigram.meaning.lower().split(',')[0].strip()}."
-        
-        if OBSERVABILITY_AVAILABLE and obs_logger:
-            obs_logger.info(f"Cast I Ching trigram: {trigram.trigram_name}")
-        
+
+        log_tool_result(
+            "divination", "cast_i_ching_trigram", {"trigram_name": trigram.trigram_name, "symbol": trigram.symbol}
+        )
+
         return result
-    
+
     except Exception as e:
         error_msg = f"Error casting I Ching trigram: {str(e)}"
-        if OBSERVABILITY_AVAILABLE and obs_logger:
-            obs_logger.error(f"I Ching casting failed: {e}")
         return error_msg
 
 
@@ -171,8 +147,7 @@ async def draw_multiple_tarot_cards(count: int = 3) -> str:
     Returns:
         Formatted multiple card reading
     """
-    if OBSERVABILITY_AVAILABLE and obs_logger:
-        obs_logger.info(f"🎯 TOOL_INVOKED: draw_multiple_tarot_cards({count})")
+    log_tool_invocation("divination", "draw_multiple_tarot_cards", {"count": count})
 
     if count < 1 or count > 10:
         return "Error: Card count must be between 1 and 10"
@@ -180,26 +155,37 @@ async def draw_multiple_tarot_cards(count: int = 3) -> str:
     try:
         # Draw unique cards (no repeats)
         cards = random.sample(list(TarotCard), min(count, len(TarotCard)))
-        
+
         result = f"🔮 **{count}-Card Tarot Reading**\n\n"
-        
-        positions = ["Past", "Present", "Future", "Challenge", "Outcome", 
-                    "Subconscious", "Environment", "Hopes/Fears", "Final Outcome", "Hidden Influence"]
-        
+
+        positions = [
+            "Past",
+            "Present",
+            "Future",
+            "Challenge",
+            "Outcome",
+            "Subconscious",
+            "Environment",
+            "Hopes/Fears",
+            "Final Outcome",
+            "Hidden Influence",
+        ]
+
+        card_names = []
         for i, card in enumerate(cards):
-            position = positions[i] if i < len(positions) else f"Card {i+1}"
+            position = positions[i] if i < len(positions) else f"Card {i + 1}"
             result += f"**{position}: {card.card_name}** (Card {card.number})\n"
             result += f"   {card.meaning}\n\n"
-        
-        if OBSERVABILITY_AVAILABLE and obs_logger:
-            obs_logger.info(f"Drew {count} tarot cards for reading")
-        
+            card_names.append(card.card_name)
+
+        log_tool_result(
+            "divination", "draw_multiple_tarot_cards", {"cards_drawn": card_names, "actual_count": len(cards)}
+        )
+
         return result
-    
+
     except Exception as e:
         error_msg = f"Error drawing multiple tarot cards: {str(e)}"
-        if OBSERVABILITY_AVAILABLE and obs_logger:
-            obs_logger.error(f"Multiple tarot card draw failed: {e}")
         return error_msg
 
 
@@ -209,23 +195,19 @@ async def flip_coin() -> str:
     Returns:
         Result of coin flip with simple interpretation
     """
-    if OBSERVABILITY_AVAILABLE and obs_logger:
-        obs_logger.info("🎯 TOOL_INVOKED: flip_coin")
+    log_tool_invocation("divination", "flip_coin")
 
     try:
         result = random.choice(["Heads", "Tails"])
         interpretation = "proceed with confidence" if result == "Heads" else "consider alternatives"
-        
+
         response = f"🪙 **Coin Flip Result: {result}**\n"
         response += f"**Guidance:** The coin suggests to {interpretation}."
-        
-        if OBSERVABILITY_AVAILABLE and obs_logger:
-            obs_logger.info(f"Coin flip result: {result}")
-        
+
+        log_tool_result("divination", "flip_coin", {"result": result, "interpretation": interpretation})
+
         return response
-    
+
     except Exception as e:
         error_msg = f"Error flipping coin: {str(e)}"
-        if OBSERVABILITY_AVAILABLE and obs_logger:
-            obs_logger.error(f"Coin flip failed: {e}")
         return error_msg

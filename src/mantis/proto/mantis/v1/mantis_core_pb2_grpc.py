@@ -3,6 +3,7 @@
 import grpc
 import warnings
 
+from mantis.v1 import mantis_core_pb2 as mantis_dot_v1_dot_mantis__core__pb2
 
 GRPC_GENERATED_VERSION = '1.71.2'
 GRPC_VERSION = grpc.__version__
@@ -22,3 +23,211 @@ if _version_not_supported:
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
     )
+
+
+class MantisServiceStub(object):
+    """Main Mantis orchestration service for multi-agent coordination
+    """
+
+    def __init__(self, channel):
+        """Constructor.
+
+        Args:
+            channel: A grpc.Channel.
+        """
+        self.ProcessSimulationInput = channel.unary_unary(
+                '/mantis.core.MantisService/ProcessSimulationInput',
+                request_serializer=mantis_dot_v1_dot_mantis__core__pb2.SimulationInput.SerializeToString,
+                response_deserializer=mantis_dot_v1_dot_mantis__core__pb2.SimulationOutput.FromString,
+                _registered_method=True)
+        self.ProcessUserRequest = channel.unary_unary(
+                '/mantis.core.MantisService/ProcessUserRequest',
+                request_serializer=mantis_dot_v1_dot_mantis__core__pb2.UserRequest.SerializeToString,
+                response_deserializer=mantis_dot_v1_dot_mantis__core__pb2.SimulationOutput.FromString,
+                _registered_method=True)
+        self.ProcessTeamRequest = channel.unary_unary(
+                '/mantis.core.MantisService/ProcessTeamRequest',
+                request_serializer=mantis_dot_v1_dot_mantis__core__pb2.TeamExecutionRequest.SerializeToString,
+                response_deserializer=mantis_dot_v1_dot_mantis__core__pb2.TeamExecutionResult.FromString,
+                _registered_method=True)
+        self.ProcessNarratorRequest = channel.unary_unary(
+                '/mantis.core.MantisService/ProcessNarratorRequest',
+                request_serializer=mantis_dot_v1_dot_mantis__core__pb2.NarratorRequest.SerializeToString,
+                response_deserializer=mantis_dot_v1_dot_mantis__core__pb2.AgentResponse.FromString,
+                _registered_method=True)
+
+
+class MantisServiceServicer(object):
+    """Main Mantis orchestration service for multi-agent coordination
+    """
+
+    def ProcessSimulationInput(self, request, context):
+        """PRIMARY METHOD: Process simulation input with context threading for recursive agent invocation
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ProcessUserRequest(self, request, context):
+        """DEPRECATED: Process a single user request with direct agent execution
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ProcessTeamRequest(self, request, context):
+        """Process a team request with multi-agent coordination
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ProcessNarratorRequest(self, request, context):
+        """Process a narrator request for synthesizing team responses
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+
+def add_MantisServiceServicer_to_server(servicer, server):
+    rpc_method_handlers = {
+            'ProcessSimulationInput': grpc.unary_unary_rpc_method_handler(
+                    servicer.ProcessSimulationInput,
+                    request_deserializer=mantis_dot_v1_dot_mantis__core__pb2.SimulationInput.FromString,
+                    response_serializer=mantis_dot_v1_dot_mantis__core__pb2.SimulationOutput.SerializeToString,
+            ),
+            'ProcessUserRequest': grpc.unary_unary_rpc_method_handler(
+                    servicer.ProcessUserRequest,
+                    request_deserializer=mantis_dot_v1_dot_mantis__core__pb2.UserRequest.FromString,
+                    response_serializer=mantis_dot_v1_dot_mantis__core__pb2.SimulationOutput.SerializeToString,
+            ),
+            'ProcessTeamRequest': grpc.unary_unary_rpc_method_handler(
+                    servicer.ProcessTeamRequest,
+                    request_deserializer=mantis_dot_v1_dot_mantis__core__pb2.TeamExecutionRequest.FromString,
+                    response_serializer=mantis_dot_v1_dot_mantis__core__pb2.TeamExecutionResult.SerializeToString,
+            ),
+            'ProcessNarratorRequest': grpc.unary_unary_rpc_method_handler(
+                    servicer.ProcessNarratorRequest,
+                    request_deserializer=mantis_dot_v1_dot_mantis__core__pb2.NarratorRequest.FromString,
+                    response_serializer=mantis_dot_v1_dot_mantis__core__pb2.AgentResponse.SerializeToString,
+            ),
+    }
+    generic_handler = grpc.method_handlers_generic_handler(
+            'mantis.core.MantisService', rpc_method_handlers)
+    server.add_generic_rpc_handlers((generic_handler,))
+    server.add_registered_method_handlers('mantis.core.MantisService', rpc_method_handlers)
+
+
+ # This class is part of an EXPERIMENTAL API.
+class MantisService(object):
+    """Main Mantis orchestration service for multi-agent coordination
+    """
+
+    @staticmethod
+    def ProcessSimulationInput(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/mantis.core.MantisService/ProcessSimulationInput',
+            mantis_dot_v1_dot_mantis__core__pb2.SimulationInput.SerializeToString,
+            mantis_dot_v1_dot_mantis__core__pb2.SimulationOutput.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ProcessUserRequest(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/mantis.core.MantisService/ProcessUserRequest',
+            mantis_dot_v1_dot_mantis__core__pb2.UserRequest.SerializeToString,
+            mantis_dot_v1_dot_mantis__core__pb2.SimulationOutput.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ProcessTeamRequest(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/mantis.core.MantisService/ProcessTeamRequest',
+            mantis_dot_v1_dot_mantis__core__pb2.TeamExecutionRequest.SerializeToString,
+            mantis_dot_v1_dot_mantis__core__pb2.TeamExecutionResult.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ProcessNarratorRequest(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/mantis.core.MantisService/ProcessNarratorRequest',
+            mantis_dot_v1_dot_mantis__core__pb2.NarratorRequest.SerializeToString,
+            mantis_dot_v1_dot_mantis__core__pb2.AgentResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)

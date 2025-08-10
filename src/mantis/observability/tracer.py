@@ -34,7 +34,7 @@ def trace_execution(
 
     def decorator(func: F) -> F:
         @functools.wraps(func)
-        async def async_wrapper(*args, **kwargs):
+        async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
             # Create child trace from current context
             trace = create_child_trace(operation, component)
 
@@ -65,7 +65,7 @@ def trace_execution(
                 raise
 
         @functools.wraps(func)
-        def sync_wrapper(*args, **kwargs):
+        def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
             # Create child trace from current context
             trace = create_child_trace(operation, component)
 
@@ -146,7 +146,7 @@ def complete_tool_invocation(
 
 
 def trace_llm_interaction(
-    model_spec: str, provider: str, system_prompt: str, user_prompt: str, **metadata
+    model_spec: str, provider: str, system_prompt: str, user_prompt: str, **metadata: Any
 ) -> LLMInteraction:
     """
     Create and start tracking an LLM interaction.
@@ -202,7 +202,7 @@ class ToolInvocationContext:
     def __enter__(self) -> ToolInvocation:
         return self.invocation
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type: Optional[type], exc_val: Optional[BaseException], exc_tb: Optional[Any]) -> None:
         if exc_type is not None:
             complete_tool_invocation(self.invocation, error=f"{exc_type.__name__}: {exc_val}")
         else:
@@ -212,12 +212,12 @@ class ToolInvocationContext:
 class LLMInteractionContext:
     """Context manager for LLM interaction tracing."""
 
-    def __init__(self, model_spec: str, provider: str, system_prompt: str, user_prompt: str, **metadata):
+    def __init__(self, model_spec: str, provider: str, system_prompt: str, user_prompt: str, **metadata: Any) -> None:
         self.interaction = trace_llm_interaction(model_spec, provider, system_prompt, user_prompt, **metadata)
 
     def __enter__(self) -> LLMInteraction:
         return self.interaction
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type: Optional[type], exc_val: Optional[BaseException], exc_tb: Optional[Any]) -> None:
         if exc_type is not None:
             complete_llm_interaction(self.interaction, "", error=f"{exc_type.__name__}: {exc_val}")

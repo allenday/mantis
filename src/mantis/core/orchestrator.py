@@ -1,505 +1,392 @@
 """
-Core simulation orchestrator for executing multi-agent scenarios.
+Clean Orchestrator Implementation
+
+Single orchestrator class using proper protobuf SimulationOutput with recursive structure.
+Eliminates zombie SimpleOrchestrator and wrapper classes.
 """
 
-import time
-from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, List
-
-from ..proto.mantis.v1 import mantis_core_pb2
-from ..proto.mantis.v1.prompt_composition_pb2 import ExecutionContext as ProtoExecutionContext, SimulationContext
+from typing import Optional, Dict, Any
+import uuid
+import contextvars
+from ..prompt import create_simulation_prompt_with_interface
+from ..agent import AgentInterface
+from ..proto.mantis.v1 import mantis_persona_pb2, mantis_core_pb2
+from ..proto import a2a_pb2
 from ..config import DEFAULT_MODEL
+from ..observability.logger import get_structured_logger
 
-# Observability imports
-try:
-    from ..observability import ExecutionTrace, ExecutionContext, ExecutionStatus, get_structured_logger
+logger = get_structured_logger(__name__)
 
-    OBSERVABILITY_AVAILABLE = True
-except ImportError:
-    OBSERVABILITY_AVAILABLE = False
-
-
-class ExecutionStrategy(ABC):
-    """Abstract base class for execution strategies."""
-
-    @abstractmethod
-    async def execute_agent(
-        self, simulation_input: mantis_core_pb2.SimulationInput, agent_spec: mantis_core_pb2.AgentSpec, agent_index: int
-    ) -> mantis_core_pb2.AgentResponse:
-        """Execute a single agent and return its response."""
-        pass
-
-    @abstractmethod
-    def get_strategy_type(self) -> mantis_core_pb2.ExecutionStrategy:
-        """Return the strategy type enum value."""
-        pass
-
-
-class DirectExecutor(ExecutionStrategy):
-    """Direct execution using local pydantic-ai agents."""
-
-    def __init__(self):
-        self._model_cache: Dict[str, Any] = {}
-        self._tools: Dict[str, Any] = {}
-        self._initialize_tools()
-
-        # Observability logger
-        if OBSERVABILITY_AVAILABLE:
-            self.obs_logger = get_structured_logger("direct_executor")
-        else:
-            self.obs_logger = None  # type: ignore
-
-    async def execute_agent(
-        self, simulation_input: mantis_core_pb2.SimulationInput, agent_spec: mantis_core_pb2.AgentSpec, agent_index: int
-    ) -> mantis_core_pb2.AgentResponse:
-        """Execute agent directly using pydantic-ai with modular prompt composition."""
-
-        # Create execution trace
-        if OBSERVABILITY_AVAILABLE and self.obs_logger:
-            trace = ExecutionTrace(
-                operation="execute_agent",
-                component="DirectExecutor",
-                metadata={
-                    "agent_index": agent_index,
-                    "query": (
-                        simulation_input.query[:200] + "..."
-                        if len(simulation_input.query) > 200
-                        else simulation_input.query
-                    ),
-                    "max_depth": simulation_input.max_depth,
-                },
-            )
-
-            with ExecutionContext(trace):
-                self.obs_logger.info(f"Starting agent execution (index: {agent_index})")
-                try:
-                    result = await self._execute_agent_impl(simulation_input, agent_spec, agent_index)
-                    trace.mark_complete(ExecutionStatus.SUCCESS)
-                    self.obs_logger.info(f"Completed agent execution (index: {agent_index})")
-                    return result
-                except Exception as e:
-                    trace.mark_complete(ExecutionStatus.FAILED, str(e))
-                    self.obs_logger.error(f"Failed agent execution (index: {agent_index}): {e}", exc_info=True)
-                    raise
-        else:
-            return await self._execute_agent_impl(simulation_input, agent_spec, agent_index)
-
-    async def _execute_agent_impl(
-        self, simulation_input: mantis_core_pb2.SimulationInput, agent_spec: mantis_core_pb2.AgentSpec, agent_index: int
-    ) -> mantis_core_pb2.AgentResponse:
-        """Internal implementation of agent execution."""
-        from ..prompts import PromptCompositionEngine, CompositionStrategy
-        from ..prompts.variables import create_composition_context
-        from ..llm.structured_extractor import StructuredExtractor
-
-        try:
-            # Try to use default base agent, fallback to minimal
-            from ..config import get_default_base_agent
-
-            mantis_card = get_default_base_agent()
-            if not mantis_card:
-                mantis_card = self._create_minimal_agent_card()
-
-            # Determine execution context and role using proto
-            execution_context = ProtoExecutionContext()
-            execution_context.current_depth = 0  # Always start at depth 0 for now
-            execution_context.max_depth = simulation_input.max_depth
-            execution_context.team_size = 1
-            execution_context.assigned_role = self._determine_agent_role(mantis_card, execution_context)
-            execution_context.agent_index = agent_index
-
-            # Compose prompt using modular system
-            composition_engine = PromptCompositionEngine()
-            context = create_composition_context(
-                mantis_card=mantis_card,
-                simulation_input=simulation_input,
-                agent_spec=agent_spec,
-                execution_context=execution_context,
-            )
-
-            composed_prompt = await composition_engine.compose_prompt(
-                context=context, strategy=CompositionStrategy.BLENDED
-            )
-
-            # Log prompt composition details
-            if OBSERVABILITY_AVAILABLE and self.obs_logger:
-                self.obs_logger.info(
-                    "Prompt composition completed",
-                    structured_data={
-                        "modules_used": [m.get_module_name() for m in composed_prompt.modules_used],
-                        "variables_resolved": len(composed_prompt.variables_resolved),
-                        "composition_strategy": composed_prompt.strategy.value,
-                        "final_prompt_length": len(composed_prompt.final_prompt),
-                    },
-                )
-
-            # Execute using structured extractor with tools (LLM integration)
-            extractor = StructuredExtractor()
-
-            # Use the composed prompt as the system prompt
-            model = (
-                simulation_input.model_spec.model
-                if simulation_input.model_spec and simulation_input.model_spec.model
-                else DEFAULT_MODEL
-            )
-
-            # Log model and tools being used
-            if OBSERVABILITY_AVAILABLE and self.obs_logger:
-                self.obs_logger.info(
-                    "Starting LLM execution with tools",
-                    structured_data={
-                        "model": model,
-                        "available_tools": list(self._tools.keys()),
-                        "prompt_length": len(composed_prompt.final_prompt),
-                        "query_length": len(simulation_input.query),
-                    },
-                )
-
-            # Pass tools to the extractor for tool-enabled execution
-            result = await extractor.extract_text_response_with_tools(
-                prompt=composed_prompt.final_prompt, query=simulation_input.query, model=model, tools=self._tools
-            )
-
-            # Create response
-            response = mantis_core_pb2.AgentResponse()
-            response.text_response = result
-            response.output_modes.append("text/markdown")
-
-            # Add metadata about prompt composition (if metadata field exists)
-            try:
-                response.metadata.update(
-                    {
-                        "modules_used": [m.get_module_name() for m in composed_prompt.modules_used],
-                        "variables_resolved": len(composed_prompt.variables_resolved),
-                        "composition_strategy": composed_prompt.strategy.value,
-                    }
-                )
-            except AttributeError:
-                # Metadata field doesn't exist in this protobuf version
-                pass
-
-            # Log successful completion
-            if OBSERVABILITY_AVAILABLE and self.obs_logger:
-                self.obs_logger.info(
-                    "Agent execution completed successfully",
-                    structured_data={"response_length": len(result), "agent_index": agent_index},
-                )
-
-            return response
-
-        except Exception as e:
-            # Fail fast and clearly - no fallback
-            if OBSERVABILITY_AVAILABLE and self.obs_logger:
-                self.obs_logger.error(f"DirectExecutor failed: {str(e)}", exc_info=True)
-            raise Exception(f"DirectExecutor failed: {str(e)}") from e
-
-    def get_strategy_type(self) -> mantis_core_pb2.ExecutionStrategy:
-        return mantis_core_pb2.EXECUTION_STRATEGY_DIRECT
-
-    def _initialize_tools(self):
-        """Initialize available tools for agent execution using native pydantic-ai tools."""
-        try:
-            # Import native pydantic-ai tool functions directly
-            from ..tools.agent_registry import registry_search_agents, registry_get_agent_details
-            from ..tools.web_fetch import web_fetch_url
-            from ..tools.web_search import web_search
-            from ..tools.git_operations import git_analyze_repository
-            from ..tools.gitlab_integration import (
-                gitlab_list_projects,
-                gitlab_list_issues,
-                gitlab_create_issue,
-                gitlab_get_issue,
-            )
-            from ..tools.jira_integration import jira_list_projects, jira_list_issues, jira_create_issue, jira_get_issue
-            from ..tools.divination import get_random_number, draw_tarot_card, cast_i_ching_trigram, draw_multiple_tarot_cards, flip_coin
-
-            # Add tools directly to our tools dictionary
-            self._tools.update(
-                {
-                    "registry_search_agents": registry_search_agents,
-                    "registry_get_agent_details": registry_get_agent_details,
-                    "web_fetch_url": web_fetch_url,
-                    "web_search": web_search,
-                    "git_analyze_repository": git_analyze_repository,
-                    "gitlab_list_projects": gitlab_list_projects,
-                    "gitlab_list_issues": gitlab_list_issues,
-                    "gitlab_create_issue": gitlab_create_issue,
-                    "gitlab_get_issue": gitlab_get_issue,
-                    "jira_list_projects": jira_list_projects,
-                    "jira_list_issues": jira_list_issues,
-                    "jira_create_issue": jira_create_issue,
-                    "jira_get_issue": jira_get_issue,
-                    "get_random_number": get_random_number,
-                    "draw_tarot_card": draw_tarot_card,
-                    "cast_i_ching_trigram": cast_i_ching_trigram,
-                    "draw_multiple_tarot_cards": draw_multiple_tarot_cards,
-                    "flip_coin": flip_coin,
-                }
-            )
-
-            # Log what tools we loaded
-            if OBSERVABILITY_AVAILABLE and hasattr(self, "obs_logger") and self.obs_logger:
-                self.obs_logger.info(
-                    f"Initialized {len(self._tools)} native pydantic-ai tools: {list(self._tools.keys())}"
-                )
-
-        except ImportError as e:
-            # Tools not available, continue without them
-            if OBSERVABILITY_AVAILABLE and hasattr(self, "obs_logger") and self.obs_logger:
-                self.obs_logger.warning(f"Failed to load pydantic tools: {e}")
-            pass
-
-    def get_available_tools(self) -> Dict[str, Any]:
-        """Get dictionary of available tools."""
-        return self._tools.copy()
-
-    def _create_minimal_agent_card(self):
-        """Create a minimal agent card for generic execution."""
-        from ..proto.mantis.v1.mantis_persona_pb2 import MantisAgentCard
-        from ..proto.a2a_pb2 import AgentCard
-
-        # Create minimal MantisAgentCard
-        mantis_card = MantisAgentCard()
-
-        # Create basic agent card
-        agent_card = AgentCard()
-        agent_card.name = "Generic Agent"
-        agent_card.description = "A general-purpose agent for task execution"
-        agent_card.version = "1.0.0"
-
-        mantis_card.agent_card.CopyFrom(agent_card)
-        return mantis_card
-
-    def _determine_agent_role(self, mantis_card, execution_context) -> str:
-        """Determine the agent's role based on context and capabilities."""
-        # For now, use simple heuristics
-        # In the future, this could use the role assignment engine
-
-        current_depth = execution_context.current_depth
-        max_depth = execution_context.max_depth
-
-        # Simple role assignment logic
-        if current_depth == 0:
-            return "leader"  # Top level is strategic leader
-        elif current_depth >= max_depth - 1:
-            return "follower"  # Near max depth focuses on execution
-        else:
-            # Check if agent has good leadership scores
-            if mantis_card.competency_scores and mantis_card.competency_scores.role_adaptation:
-                leader_score = mantis_card.competency_scores.role_adaptation.leader_score
-                narrator_score = mantis_card.competency_scores.role_adaptation.narrator_score
-
-                if leader_score > narrator_score and leader_score > 0.7:
-                    return "leader"
-                elif narrator_score > 0.7:
-                    return "narrator"
-
-            return "follower"  # Default to execution role
-
-
-class A2AExecutor(ExecutionStrategy):
-    """A2A execution using remote agents via FastA2A protocol."""
-
-    def __init__(self, registry_url: Optional[str] = None):
-        self.registry_url = registry_url
-
-    async def execute_agent(
-        self, simulation_input: mantis_core_pb2.SimulationInput, agent_spec: mantis_core_pb2.AgentSpec, agent_index: int
-    ) -> mantis_core_pb2.AgentResponse:
-        """Execute agent via A2A protocol."""
-        # TODO: Implement FastA2A integration (Issue #25-27)
-        # For now, return a placeholder response
-
-        response = mantis_core_pb2.AgentResponse()
-        response.text_response = f"[A2AExecutor] Would execute via A2A: {simulation_input.query}"
-        response.output_modes.append("text/markdown")
-
-        return response
-
-    def get_strategy_type(self) -> mantis_core_pb2.ExecutionStrategy:
-        return mantis_core_pb2.EXECUTION_STRATEGY_A2A
-
-
-# Removed dataclass ExecutionContext - using proto SimulationContext instead
+# Context variable to pass agent information to tools
+current_agent_context: contextvars.ContextVar[Dict[str, str]] = contextvars.ContextVar(
+    "current_agent_context", default={}
+)
 
 
 class SimulationOrchestrator:
     """
-    Core orchestrator for multi-agent simulations.
+    Clean orchestrator implementation using protobuf SimulationOutput for recursive structure.
 
-    Handles the complete lifecycle from UserRequest to SimulationOutput,
-    coordinating between different execution strategies and managing
-    recursive agent interactions.
+    Handles both direct execution and nested recursive agent invocation with proper
+    artifact aggregation through the protobuf SimulationOutput.results field.
     """
 
-    def __init__(self):
-        self._strategies: Dict[mantis_core_pb2.ExecutionStrategy, ExecutionStrategy] = {
-            mantis_core_pb2.EXECUTION_STRATEGY_DIRECT: DirectExecutor(),
-            mantis_core_pb2.EXECUTION_STRATEGY_A2A: A2AExecutor(),
-        }
+    def __init__(self) -> None:
+        self.tools: Dict[str, Any] = {}
+        self.active_tasks: Dict[str, a2a_pb2.Task] = {}
+        self._initialize_tools()
+        logger.info("SimulationOrchestrator initialized", structured_data={"tools_count": len(self.tools)})
 
-    def user_request_to_simulation_input(
-        self, user_request: mantis_core_pb2.UserRequest
-    ) -> mantis_core_pb2.SimulationInput:
-        """Convert UserRequest to SimulationInput with execution strategy."""
-        simulation_input = mantis_core_pb2.SimulationInput()
-
-        # Copy all fields from UserRequest
-        simulation_input.query = user_request.query
-
-        if user_request.HasField("context"):
-            simulation_input.context = user_request.context
-
-        if user_request.HasField("structured_data"):
-            simulation_input.structured_data = user_request.structured_data
-
-        if user_request.HasField("model_spec"):
-            simulation_input.model_spec.CopyFrom(user_request.model_spec)
-
-        if user_request.HasField("max_depth"):
-            simulation_input.max_depth = user_request.max_depth
-        else:
-            # Use default max_depth from config
-            from ..config import DEFAULT_MAX_DEPTH
-
-            simulation_input.max_depth = DEFAULT_MAX_DEPTH
-
-        # Copy agent specifications
-        for agent_spec in user_request.agents:
-            simulation_input.agents.append(agent_spec)
-
-        # Set execution strategy (default to A2A for multi-agent scenarios)
-        if len(user_request.agents) > 1 or any(
-            agent.HasField("recursion_policy")
-            and agent.recursion_policy in [mantis_core_pb2.RECURSION_POLICY_MAY, mantis_core_pb2.RECURSION_POLICY_MUST]
-            for agent in user_request.agents
-        ):
-            simulation_input.execution_strategy = mantis_core_pb2.EXECUTION_STRATEGY_A2A
-        else:
-            simulation_input.execution_strategy = mantis_core_pb2.EXECUTION_STRATEGY_DIRECT
-
-        return simulation_input
-
-    async def execute_simulation(self, user_request: mantis_core_pb2.UserRequest) -> mantis_core_pb2.SimulationOutput:
-        """
-        Execute a complete simulation from UserRequest to SimulationOutput.
-
-        Args:
-            user_request: The user's simulation request
-
-        Returns:
-            SimulationOutput with results, timing, and status
-        """
-        start_time = time.time()
-
+    def _initialize_tools(self) -> None:
+        """Initialize tools without global state dependencies."""
         try:
-            # Convert to SimulationInput
-            simulation_input = self.user_request_to_simulation_input(user_request)
+            from ..tools.web_fetch import web_fetch_url
+            from ..tools.web_search import web_search
+            from ..tools.divination import get_random_number, draw_tarot_card
+            from ..tools.team_formation import get_random_agents_from_registry
 
-            # Create execution context using proto
-            context = SimulationContext()
-            context.start_time = start_time
-            context.strategy = simulation_input.execution_strategy
-            context.simulation_input.CopyFrom(simulation_input)
-            context.current_depth = 0
+            # Import the clean recursive invocation tools that take orchestrator as parameter
+            from ..tools.recursive_invocation import invoke_agent_by_name, invoke_multiple_agents
 
-            # Execute simulation
-            simulation_output = await self._execute_simulation_internal(context)
+            # Create bound methods for recursive invocation tools
+            # CRITICAL: max_depth must be 0 to prevent infinite recursion
+            async def bound_invoke_agent_by_name(
+                agent_name: str, query: str, context: Optional[str] = None, max_depth: int = 1
+            ) -> str:
+                # Use proper depth control - let current_depth increment naturally
+                return await invoke_agent_by_name(agent_name, query, self, context, max_depth)
 
-            # Set execution metadata
-            simulation_output.total_time = time.time() - start_time
-            simulation_output.execution_strategies.append(simulation_input.execution_strategy)
-            simulation_output.team_size = len(simulation_input.agents)
-            simulation_output.recursion_depth = 0
+            async def bound_invoke_multiple_agents(
+                agent_names: list[str],
+                query_template: str,
+                individual_contexts: Optional[list[str]] = None,
+                max_depth: int = 1,
+            ) -> Dict[str, str]:
+                # Use proper depth control - let current_depth increment naturally
+                return await invoke_multiple_agents(agent_names, query_template, self, individual_contexts, max_depth)
 
-            # Set success status
-            execution_result = mantis_core_pb2.ExecutionResult()
-            execution_result.status = mantis_core_pb2.EXECUTION_STATUS_SUCCESS
-            simulation_output.execution_result.CopyFrom(execution_result)
+            self.tools.update(
+                {
+                    "web_fetch_url": web_fetch_url,
+                    "web_search": web_search,
+                    "get_random_number": get_random_number,
+                    "draw_tarot_card": draw_tarot_card,
+                    "get_random_agents_from_registry": get_random_agents_from_registry,
+                    "invoke_agent_by_name": bound_invoke_agent_by_name,
+                    "invoke_multiple_agents": bound_invoke_multiple_agents,
+                }
+            )
 
-            return simulation_output
+            logger.debug("Tools initialized", structured_data={"tools": list(self.tools.keys())})
 
         except Exception as e:
+            logger.error("Failed to initialize tools", structured_data={"error": str(e)})
+            raise
+
+    async def execute_simulation(
+        self, simulation_input: mantis_core_pb2.SimulationInput
+    ) -> mantis_core_pb2.SimulationOutput:
+        """
+        Execute SimulationInput and return protobuf SimulationOutput with recursive results.
+
+        Args:
+            simulation_input: Protobuf SimulationInput with query and agent specs
+
+        Returns:
+            Protobuf SimulationOutput with nested results from recursive agent calls
+        """
+        logger.info(
+            "Starting simulation execution",
+            structured_data={
+                "context_id": simulation_input.context_id,
+                "query_length": len(simulation_input.query),
+                "agent_specs": len(simulation_input.agents),
+            },
+        )
+
+        try:
+            # CRITICAL FIX: Use specified agent if provided, otherwise use Chief of Staff
+            target_agent_card = None
+            if simulation_input.agents and len(simulation_input.agents) > 0:
+                agent_spec = simulation_input.agents[0]
+                if agent_spec.HasField("agent") and agent_spec.agent:
+                    # Load specific agent by name from registry using the agent info in the spec
+                    from ..tools.agent_registry import get_agent_by_name
+
+                    try:
+                        # Get the full MantisAgentCard from registry using the agent name
+                        target_agent_card = await get_agent_by_name(agent_spec.agent.name)
+
+                        logger.info(
+                            f"Using specified agent from registry: {agent_spec.agent.name}",
+                            structured_data={
+                                "agent_name": agent_spec.agent.name,
+                                "agent_id": agent_spec.agent.agent_id,
+                                "context_id": simulation_input.context_id,
+                            },
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to load specified agent '{agent_spec.agent.name}' from registry: {e}, falling back to Chief of Staff",
+                            structured_data={"context_id": simulation_input.context_id},
+                        )
+                        target_agent_card = None
+
+            # Fallback to Chief of Staff for coordination if no specific agent provided
+            if not target_agent_card:
+                target_agent_card = await self._get_chief_of_staff_agent()
+                logger.info(
+                    "Using Chief of Staff agent (no specific agent provided or fallback)",
+                    structured_data={"context_id": simulation_input.context_id},
+                )
+
+            # Execute the simulation
+            disable_tools = simulation_input.max_depth <= 0
+            logger.info(
+                "Executing simulation with depth control",
+                structured_data={
+                    "context_id": simulation_input.context_id,
+                    "max_depth": simulation_input.max_depth,
+                    "disable_tools": disable_tools,
+                    "depth_logic": f"disable_tools = ({simulation_input.max_depth} <= 0) = {disable_tools}",
+                },
+            )
+
+            task = await self._execute_task_with_agent(
+                query=simulation_input.query,
+                agent_card=target_agent_card,
+                context_id=simulation_input.context_id,
+                max_depth=simulation_input.max_depth,
+                disable_tools=disable_tools,
+            )
+
+            # Convert to protobuf SimulationOutput
+            return await self._create_simulation_output(task, simulation_input)
+
+        except Exception as e:
+            logger.error(
+                "Simulation execution failed",
+                structured_data={"context_id": simulation_input.context_id, "error": str(e)},
+            )
             # Create error response
-            simulation_output = mantis_core_pb2.SimulationOutput()
-            simulation_output.total_time = time.time() - start_time
-            simulation_output.team_size = len(user_request.agents) if user_request.agents else 0
+            return self._create_error_simulation_output(simulation_input, str(e))
 
-            # Create error info
-            error_info = mantis_core_pb2.ErrorInfo()
-            error_info.error_type = mantis_core_pb2.ERROR_TYPE_MODEL  # Default error type
-            error_info.error_message = str(e)
+    async def _execute_task_with_agent(
+        self,
+        query: str,
+        agent_card: mantis_persona_pb2.MantisAgentCard,
+        context_id: str,
+        max_depth: int = 3,
+        disable_tools: bool = False,
+    ) -> a2a_pb2.Task:
+        """Execute a task with the specified agent."""
 
-            # Set error status
-            execution_result = mantis_core_pb2.ExecutionResult()
-            execution_result.status = mantis_core_pb2.EXECUTION_STATUS_FAILED
-            execution_result.error_info.CopyFrom(error_info)
-            simulation_output.execution_result.CopyFrom(execution_result)
+        task_id = f"sim-{context_id}"
+        agent_interface = AgentInterface(agent_card)
 
-            # Create error response
-            error_response = mantis_core_pb2.AgentResponse()
-            error_response.text_response = f"Simulation failed: {str(e)}"
-            error_response.output_modes.append("text/plain")
-            simulation_output.response.CopyFrom(error_response)
+        # Create and track task
+        task = a2a_pb2.Task()
+        task.id = task_id
+        task.context_id = context_id
+        task.status.state = a2a_pb2.TASK_STATE_WORKING
+        task.status.timestamp.GetCurrentTime()
 
-            return simulation_output
+        self.active_tasks[task_id] = task
 
-    async def _execute_simulation_internal(self, context: SimulationContext) -> mantis_core_pb2.SimulationOutput:
-        """Internal simulation execution logic."""
-        simulation_input = context.simulation_input
-        strategy = self._strategies[context.strategy]
+        # Set agent context for tools
+        agent_context = {"agent_name": agent_interface.name, "task_id": task_id, "context_id": context_id}
 
-        # For now, execute all agents independently (no recursion yet)
-        agent_responses: List[mantis_core_pb2.AgentResponse] = []
+        logger.info(
+            f"Task execution starting with tools {'DISABLED' if disable_tools else 'ENABLED'}",
+            structured_data={
+                "context_id": context_id,
+                "agent_name": agent_interface.name,
+                "max_depth": max_depth,
+                "disable_tools": disable_tools,
+                "tools_available": len(self.tools) if not disable_tools else 0,
+            },
+        )
 
-        for i, agent_spec in enumerate(simulation_input.agents):
+        # Execute with agent context
+        try:
+            from ..llm.structured_extractor import get_structured_extractor
+
+            # Create prompt
+            prompt = create_simulation_prompt_with_interface(
+                query=query, agent_interface=agent_interface, context_id=context_id, task_id=task_id
+            )
+
+            # Create structured extractor
+            extractor = get_structured_extractor(model_spec=DEFAULT_MODEL)
+
+            # Prepare tools for LLM (only if not disabled)
+            tools_for_llm = {} if disable_tools else self.tools
+
+            # Run in agent context
+            token = current_agent_context.set(agent_context)
             try:
-                response = await strategy.execute_agent(simulation_input, agent_spec, i)
-                agent_responses.append(response)
-            except Exception as e:
-                # Re-raise the exception with full traceback for debugging
-                import traceback
+                response_text = await extractor.extract_text_response_with_tools(
+                    prompt=prompt.assemble(), query=query, model=DEFAULT_MODEL, tools=tools_for_llm
+                )
+            finally:
+                current_agent_context.reset(token)
 
-                traceback.print_exc()
-                raise Exception(f"Agent {i} execution failed: {str(e)}") from e
+            # Create response message and artifact
+            response_msg = a2a_pb2.Message()
+            response_msg.message_id = f"resp-{uuid.uuid4().hex[:12]}"
+            response_msg.context_id = context_id
+            response_msg.task_id = task_id
+            response_msg.role = a2a_pb2.ROLE_AGENT
 
-        # Create simulation output
-        simulation_output = mantis_core_pb2.SimulationOutput()
+            # Add response content
+            text_part = a2a_pb2.Part()
+            text_part.text = response_text
+            response_msg.content.append(text_part)
 
-        # For single agent, use its response directly
-        if len(agent_responses) == 1:
-            simulation_output.response.CopyFrom(agent_responses[0])
+            # Create artifact
+            artifact = a2a_pb2.Artifact()
+            artifact.artifact_id = f"artifact-{uuid.uuid4().hex[:12]}"
+            artifact.name = f"{agent_interface.name}_response"
+            artifact.description = f"Response from {agent_interface.name}"
+            artifact.parts.append(text_part)
+
+            # Add to task
+            task.history.append(response_msg)
+            task.artifacts.append(artifact)
+            task.status.state = a2a_pb2.TASK_STATE_COMPLETED
+
+            logger.info(
+                "Task completed successfully",
+                structured_data={
+                    "task_id": task_id,
+                    "agent_name": agent_interface.name,
+                    "artifacts_count": len(task.artifacts),
+                },
+            )
+
+            return task
+
+        except Exception as e:
+            task.status.state = a2a_pb2.TASK_STATE_FAILED
+            logger.error("Task execution failed", structured_data={"task_id": task_id, "error": str(e)})
+            raise
+
+    async def _create_simulation_output(
+        self, task: a2a_pb2.Task, simulation_input: mantis_core_pb2.SimulationInput
+    ) -> mantis_core_pb2.SimulationOutput:
+        """Create protobuf SimulationOutput from completed task."""
+
+        output = mantis_core_pb2.SimulationOutput()
+        output.context_id = task.context_id
+        output.final_state = task.status.state
+        output.simulation_task.CopyFrom(task)
+
+        # Add response message
+        if task.history:
+            output.response_message.CopyFrom(task.history[-1])
+
+        # Add artifacts
+        for artifact in task.artifacts:
+            output.response_artifacts.append(artifact)
+
+        # Set execution details
+        output.recursion_depth = simulation_input.max_depth
+        output.execution_strategy = simulation_input.execution_strategy
+
+        # Note: Nested results will be added by recursive invocation tools
+        # through the add_nested_result method
+
+        return output
+
+    def add_nested_result(self, parent_task_id: str, nested_output: mantis_core_pb2.SimulationOutput) -> None:
+        """Add nested SimulationOutput to parent task's artifacts and track for final output."""
+        # This will be called by recursive invocation tools to aggregate nested results
+        # For now, artifacts are added directly to parent task - proper nesting comes next
+        pass
+
+    def _create_error_simulation_output(
+        self, simulation_input: mantis_core_pb2.SimulationInput, error_message: str
+    ) -> mantis_core_pb2.SimulationOutput:
+        """Create error SimulationOutput."""
+
+        output = mantis_core_pb2.SimulationOutput()
+        output.context_id = simulation_input.context_id
+        output.final_state = a2a_pb2.TASK_STATE_FAILED
+
+        # Create error artifact
+        error_artifact = a2a_pb2.Artifact()
+        error_artifact.artifact_id = f"error-{uuid.uuid4().hex[:12]}"
+        error_artifact.name = "simulation_error"
+        error_artifact.description = "Simulation execution error"
+
+        error_part = a2a_pb2.Part()
+        error_part.text = f"Simulation failed: {error_message}"
+        error_artifact.parts.append(error_part)
+
+        output.response_artifacts.append(error_artifact)
+
+        return output
+
+    async def _get_chief_of_staff_agent(self) -> mantis_persona_pb2.MantisAgentCard:
+        """Get Chief of Staff agent card from registry with local fallback."""
+        from ..tools.agent_registry import list_all_agents
+        from ..config import get_default_base_agent
+
+        logger.info("Loading Chief of Staff agent from registry")
+
+        try:
+            # Try to get all agents from registry
+            all_agents = await list_all_agents()
+
+            if not all_agents or len(all_agents) == 0:
+                logger.warning("No agents found in registry, trying local fallback")
+                raise ValueError("Registry unavailable or empty")
+
+        except Exception as registry_error:
+            logger.warning(f"Registry access failed: {registry_error}, using local fallback")
+
+            # Fall back to local Chief of Staff agent
+            local_agent = get_default_base_agent()
+            if local_agent:
+                logger.info("Using local Chief of Staff agent as fallback")
+                return local_agent
+            else:
+                raise ValueError("No agents available - registry failed and no local fallback found")
+
+        # Look for the actual Chief of Staff agent first
+        chief_of_staff = None
+        for agent in all_agents:
+            agent_name = agent.agent_card.name.lower()
+            if "chief" in agent_name and "staff" in agent_name:
+                chief_of_staff = agent
+                break
+
+        if chief_of_staff:
+            selected_agent = chief_of_staff
+            logger.info("Found and selected Chief of Staff agent from registry")
         else:
-            # For multiple agents, aggregate responses
-            aggregated_response = self._aggregate_responses(agent_responses)
-            simulation_output.response.CopyFrom(aggregated_response)
+            # Fallback to first agent if Chief of Staff not found
+            selected_agent = all_agents[0]
+            logger.warning("Chief of Staff not found in registry, using fallback agent")
 
-        return simulation_output
+        logger.info(f"Selected agent: {selected_agent.agent_card.name}")
 
-    def _aggregate_responses(self, responses: List[mantis_core_pb2.AgentResponse]) -> mantis_core_pb2.AgentResponse:
-        """Aggregate multiple agent responses into a single response."""
-        aggregated = mantis_core_pb2.AgentResponse()
+        # Return the MantisAgentCard directly - fail fast if validation fails
+        return selected_agent
 
-        # Combine text responses
-        text_parts = []
-        for i, response in enumerate(responses):
-            text_parts.append(f"**Agent {i + 1}:**\n{response.text_response}")
+    def get_task_by_id(self, task_id: str) -> Optional[a2a_pb2.Task]:
+        """Get active task by ID."""
+        return self.active_tasks.get(task_id)
 
-        aggregated.text_response = "\n\n".join(text_parts)
-        aggregated.output_modes.append("text/markdown")
+    def get_available_tools(self) -> Dict[str, Any]:
+        """Get available tools for use by agents."""
+        return self.tools.copy()
 
-        # TODO: More sophisticated aggregation logic for:
-        # - Extension merging
-        # - Skill combination
-        # - Confidence scoring
-        # This will be enhanced in later issues
-
-        return aggregated
-
-    def get_available_strategies(self) -> List[mantis_core_pb2.ExecutionStrategy]:
-        """Get list of available execution strategies."""
-        return list(self._strategies.keys())
-
-    def set_strategy(self, strategy_type: mantis_core_pb2.ExecutionStrategy, strategy: ExecutionStrategy):
-        """Register or override an execution strategy."""
-        self._strategies[strategy_type] = strategy
+    def get_tasks_by_context(self, context: str) -> list[a2a_pb2.Task]:
+        """Get tasks by context - compatibility method."""
+        # For compatibility, return filtered active tasks
+        matching_tasks = []
+        for task in self.active_tasks.values():
+            if hasattr(task, "context") and context in task.context:
+                matching_tasks.append(task)
+        return matching_tasks

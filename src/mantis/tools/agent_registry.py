@@ -5,6 +5,7 @@ Simplified to only support pydantic-ai integration.
 
 import logging
 import aiohttp
+from typing import List
 
 # Observability imports
 try:
@@ -13,6 +14,10 @@ try:
     OBSERVABILITY_AVAILABLE = True
 except ImportError:
     OBSERVABILITY_AVAILABLE = False
+
+from ..config import DEFAULT_REGISTRY
+from ..proto.mantis.v1.mantis_persona_pb2 import MantisAgentCard
+from ..agent.card import load_agent_card_from_json
 
 logger = logging.getLogger(__name__)
 
@@ -117,3 +122,126 @@ async def registry_get_agent_details(agent_url: str) -> str:
         if OBSERVABILITY_AVAILABLE and obs_logger:
             obs_logger.error(f"Get agent details failed: {e}")
         return error_msg
+
+
+async def list_all_agents(page_size: int = 200, include_inactive: bool = False) -> List[MantisAgentCard]:
+    """
+    List all agents from the registry using JSONRPC transport.
+
+    Args:
+        page_size: Number of agents to fetch per page (default: 200)
+        include_inactive: Whether to include inactive agents (default: False)
+
+    Returns:
+        List of MantisAgentCard objects
+    """
+    if OBSERVABILITY_AVAILABLE and obs_logger:
+        obs_logger.info(f"🎯 TOOL_INVOKED: list_all_agents (page_size: {page_size})")
+
+    try:
+        # JSONRPC request to registry
+        jsonrpc_request = {"jsonrpc": "2.0", "method": "list_agents", "params": {}, "id": 1}
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{DEFAULT_REGISTRY}/jsonrpc", json=jsonrpc_request, headers={"Content-Type": "application/json"}
+            ) as response:
+                if response.status != 200:
+                    raise Exception(f"HTTP {response.status}: {await response.text()}")
+
+                data = await response.json()
+
+                if "error" in data:
+                    raise Exception(f"JSONRPC Error: {data['error']}")
+
+                result = data.get("result", {})
+                registry_agent_cards = result.get("agents", [])
+
+                if OBSERVABILITY_AVAILABLE and obs_logger:
+                    obs_logger.info(f"Retrieved {len(registry_agent_cards)} agents from registry")
+
+                # Convert registry agent cards to MantisAgentCard objects
+                mantis_cards = []
+                for registry_card in registry_agent_cards:
+                    try:
+                        # The registry returns FastA2A format directly, not wrapped in agent_card
+                        # Convert to MantisAgentCard using the existing loader
+                        mantis_card = load_agent_card_from_json(registry_card)
+                        mantis_cards.append(mantis_card)
+
+                    except Exception as e:
+                        logger.warning(f"Failed to parse agent card: {e}")
+                        continue
+
+                return mantis_cards
+
+    except Exception as e:
+        error_msg = f"Error listing agents from registry: {str(e)}"
+        if OBSERVABILITY_AVAILABLE and obs_logger:
+            obs_logger.error(f"List all agents failed: {e}")
+        raise Exception(error_msg)
+
+
+async def get_agent_by_name(agent_name: str) -> MantisAgentCard:
+    """Get a specific agent by name from the registry.
+
+    Args:
+        agent_name: Name of the agent to retrieve
+
+    Returns:
+        MantisAgentCard for the requested agent
+
+    Raises:
+        ValueError: If agent not found
+        Exception: If registry access fails
+    """
+    if OBSERVABILITY_AVAILABLE and obs_logger:
+        obs_logger.info(f"🎯 TOOL_INVOKED: get_agent_by_name with name: '{agent_name}'")
+
+    try:
+        all_agents = await list_all_agents()
+
+        # Search by name or ID
+        from ..agent import AgentInterface
+
+        for agent_card in all_agents:
+            agent_interface = AgentInterface(agent_card)
+            if agent_interface.name == agent_name or agent_interface.agent_id == agent_name:
+                if OBSERVABILITY_AVAILABLE and obs_logger:
+                    obs_logger.info(f"Found agent '{agent_name}' in registry")
+                return agent_card
+
+        # If not found, try fallback to mock agents for development
+        try:
+            from ..tools.team_formation import _get_mock_agents
+
+            mock_agents = _get_mock_agents()
+            for agent_card in mock_agents:
+                agent_interface = AgentInterface(agent_card)
+                if agent_interface.name == agent_name or agent_interface.agent_id == agent_name:
+                    if OBSERVABILITY_AVAILABLE and obs_logger:
+                        obs_logger.info(f"Found agent '{agent_name}' in mock agents fallback")
+                    return agent_card
+        except Exception as mock_error:
+            if OBSERVABILITY_AVAILABLE and obs_logger:
+                obs_logger.warning(f"Mock agents fallback failed: {mock_error}")
+
+        # Agent not found
+        available_names = []
+        for agent_card in all_agents:
+            agent_interface = AgentInterface(agent_card)
+            available_names.append(agent_interface.name)
+
+        available_str = ", ".join(available_names[:10])
+        if len(available_names) > 10:
+            available_str += "..."
+
+        raise ValueError(f"Agent '{agent_name}' not found in registry. Available: {available_str}")
+
+    except ValueError:
+        raise  # Re-raise agent not found errors
+    except Exception as e:
+        error_msg = f"Error getting agent '{agent_name}' from registry: {str(e)}"
+        if OBSERVABILITY_AVAILABLE and obs_logger:
+            obs_logger.error(f"Get agent by name failed: {e}")
+        raise Exception(error_msg)

@@ -52,7 +52,7 @@ def run_command(cmd: list[str], check: bool = True) -> subprocess.CompletedProce
     return result
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Mantis release script")
     parser.add_argument("version", help="Version to release (e.g., 0.1.1)")
     parser.add_argument("--dry-run", action="store_true", help="Only update version, don't build")

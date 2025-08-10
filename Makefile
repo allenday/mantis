@@ -83,7 +83,7 @@ format: install-dev
 	$(VENV)/bin/ruff format src/ scripts/
 
 # Run tests
-test: install-dev proto
+test: proto
 	$(VENV)/bin/pytest tests/ -v
 
 # CI pipeline - what GitHub Actions runs

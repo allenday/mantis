@@ -281,7 +281,7 @@ class TestDirectExecutorRealLLMIntegration:
     @pytest.mark.asyncio
     async def test_direct_executor_with_real_llm_tools(self):
         """Test DirectExecutor executing agents that actually use tools."""
-        from mantis.core.orchestrator import DirectExecutor
+        from mantis.core.executor import DirectExecutor
         from mantis.proto.mantis.v1 import mantis_core_pb2
         
         # Skip if no API keys available
@@ -308,9 +308,12 @@ class TestDirectExecutorRealLLMIntegration:
         response = await executor.execute_agent(simulation_input, agent_spec, 0)
         
         # Verify the response indicates tool usage
-        assert response.text_response is not None
-        assert len(response.text_response) > 100  # Should have substantial response
-        response_lower = response.text_response.lower()
+        assert response.response_message is not None
+        assert len(response.response_message.content) > 0
+        response_text = response.response_message.content[0].text
+        assert response_text is not None
+        assert len(response_text) > 100  # Should have substantial response
+        response_lower = response_text.lower()
         
         # The response should indicate the agent tried to use tools or understood the request
         assert any(word in response_lower for word in ["json", "data", "structure", "httpbin", "fetch"])
@@ -318,7 +321,7 @@ class TestDirectExecutorRealLLMIntegration:
     @pytest.mark.asyncio
     async def test_direct_executor_tool_availability(self):
         """Test that DirectExecutor properly initializes tools."""
-        from mantis.core.orchestrator import DirectExecutor
+        from mantis.core.executor import DirectExecutor
         
         executor = DirectExecutor()
         available_tools = executor.get_available_tools()
