@@ -10,9 +10,9 @@ import json
 import logging
 from typing import Dict, Any
 from aiohttp import web, web_request
+from google.protobuf.json_format import MessageToDict
 
 from ..proto.mantis.v1 import mantis_core_pb2
-from ..proto import a2a_pb2
 from ..core.orchestrator import SimulationOrchestrator
 
 logger = logging.getLogger(__name__)
@@ -151,59 +151,8 @@ class MantisJSONRPCService:
         logger.info(f"Executing simulation with context_id: {simulation_input.context_id}")
         result = await self.orchestrator.execute_simulation(simulation_input)
 
-        # Convert protobuf SimulationOutput to dictionary
-        return self._simulation_output_to_dict(result)
-
-    def _simulation_output_to_dict(self, output: mantis_core_pb2.SimulationOutput) -> Dict[str, Any]:
-        """Convert protobuf SimulationOutput to dictionary with nested results."""
-        result = {
-            "context_id": output.context_id,
-            "final_state": a2a_pb2.TaskState.Name(output.final_state),
-            "recursion_depth": output.recursion_depth,
-            "execution_strategy": mantis_core_pb2.ExecutionStrategy.Name(output.execution_strategy),
-            "team_size": max(0, len(output.response_artifacts) - 1),  # Total artifacts minus Chief of Staff
-        }
-
-        # Convert response message
-        if output.response_message:
-            result["response_message"] = {
-                "message_id": output.response_message.message_id,
-                "context_id": output.response_message.context_id,
-                "task_id": output.response_message.task_id,
-                "role": output.response_message.role,
-                "content": [{"text": part.text} for part in output.response_message.content],
-            }
-
-        # Convert artifacts
-        if output.response_artifacts:
-            result["response_artifacts"] = [
-                {
-                    "artifact_id": artifact.artifact_id,
-                    "name": artifact.name,
-                    "description": artifact.description,
-                    "parts": [{"text": part.text} for part in artifact.parts],
-                }
-                for artifact in output.response_artifacts
-            ]
-
-        # Convert nested results (recursive structure)
-        if output.results:
-            result["nested_results"] = [
-                self._simulation_output_to_dict(nested_result) for nested_result in output.results
-            ]
-
-        # Add execution result if present
-        if output.execution_result:
-            result["execution_result"] = {
-                "status": mantis_core_pb2.ExecutionStatus.Name(output.execution_result.status)
-            }
-            if output.execution_result.error_info:
-                result["execution_result"]["error_info"] = {
-                    "error_type": mantis_core_pb2.ErrorType.Name(output.execution_result.error_info.error_type),
-                    "error_message": output.execution_result.error_info.error_message,
-                }
-
-        return result
+        # Convert protobuf SimulationOutput to dictionary using native protobuf JSON conversion
+        return MessageToDict(result, preserving_proto_field_name=True, including_default_value_fields=True)
 
     async def get_service_info(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Get service information."""
