@@ -9,9 +9,10 @@ import subprocess
 import sys
 import re
 from pathlib import Path
+from typing import Optional, List
 
 
-def run_command(cmd, cwd=None):
+def run_command(cmd: List[str], cwd: Optional[Path] = None) -> bool:
     """Run a shell command and return the result."""
     print(f"Running: {' '.join(cmd)}")
     result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
@@ -23,7 +24,7 @@ def run_command(cmd, cwd=None):
     return True
 
 
-def fix_imports(proto_file, output_dir):
+def fix_imports(proto_file: Path, output_dir: Path) -> bool:
     """Fix malformed imports in generated proto files."""
     content = proto_file.read_text()
     original_content = content
@@ -91,7 +92,7 @@ def fix_imports(proto_file, output_dir):
         return False
 
 
-def test_imports(output_dir):
+def test_imports(output_dir: Path) -> bool:
     """Test that generated proto files can be imported."""
     print("🧪 Testing imports...")
 
@@ -130,7 +131,7 @@ def test_imports(output_dir):
     return success
 
 
-def main():
+def main() -> int:
     # Get project root
     project_root = Path(__file__).parent.parent
     proto_dir = project_root / "proto"
@@ -145,8 +146,8 @@ def main():
     print(f"Output dir: {output_dir}")
 
     # Set up include paths
-    import google.api.annotations_pb2
-    import grpc_tools
+    import google.api.annotations_pb2  # type: ignore[import-untyped]
+    import grpc_tools  # type: ignore[import-untyped]
 
     google_package_path = Path(google.api.annotations_pb2.__file__).parents[2]
     grpc_tools_proto_path = Path(grpc_tools.__file__).parent / "_proto"
