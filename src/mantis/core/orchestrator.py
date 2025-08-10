@@ -57,7 +57,10 @@ class SimulationOrchestrator:
                 return await invoke_agent_by_name(agent_name, query, self, context, max_depth)
 
             async def bound_invoke_multiple_agents(
-                agent_names: list[str], query_template: str, individual_contexts: Optional[list[str]] = None, max_depth: int = 1
+                agent_names: list[str],
+                query_template: str,
+                individual_contexts: Optional[list[str]] = None,
+                max_depth: int = 1,
             ) -> Dict[str, str]:
                 # Use proper depth control - let current_depth increment naturally
                 return await invoke_multiple_agents(agent_names, query_template, self, individual_contexts, max_depth)
@@ -109,35 +112,36 @@ class SimulationOrchestrator:
                 if agent_spec.HasField("agent") and agent_spec.agent:
                     # Load specific agent by name from registry using the agent info in the spec
                     from ..tools.agent_registry import get_agent_by_name
+
                     try:
                         # Get the full MantisAgentCard from registry using the agent name
                         target_agent_card = await get_agent_by_name(agent_spec.agent.name)
-                        
+
                         logger.info(
                             f"Using specified agent from registry: {agent_spec.agent.name}",
                             structured_data={
                                 "agent_name": agent_spec.agent.name,
                                 "agent_id": agent_spec.agent.agent_id,
-                                "context_id": simulation_input.context_id
-                            }
+                                "context_id": simulation_input.context_id,
+                            },
                         )
                     except Exception as e:
                         logger.warning(
                             f"Failed to load specified agent '{agent_spec.agent.name}' from registry: {e}, falling back to Chief of Staff",
-                            structured_data={"context_id": simulation_input.context_id}
+                            structured_data={"context_id": simulation_input.context_id},
                         )
                         target_agent_card = None
-                    
+
             # Fallback to Chief of Staff for coordination if no specific agent provided
             if not target_agent_card:
                 target_agent_card = await self._get_chief_of_staff_agent()
                 logger.info(
                     "Using Chief of Staff agent (no specific agent provided or fallback)",
-                    structured_data={"context_id": simulation_input.context_id}
+                    structured_data={"context_id": simulation_input.context_id},
                 )
 
             # Execute the simulation
-            disable_tools = (simulation_input.max_depth <= 0)
+            disable_tools = simulation_input.max_depth <= 0
             logger.info(
                 "Executing simulation with depth control",
                 structured_data={
@@ -147,7 +151,7 @@ class SimulationOrchestrator:
                     "depth_logic": f"disable_tools = ({simulation_input.max_depth} <= 0) = {disable_tools}",
                 },
             )
-            
+
             task = await self._execute_task_with_agent(
                 query=simulation_input.query,
                 agent_card=target_agent_card,
@@ -333,14 +337,14 @@ class SimulationOrchestrator:
         try:
             # Try to get all agents from registry
             all_agents = await list_all_agents()
-            
+
             if not all_agents or len(all_agents) == 0:
                 logger.warning("No agents found in registry, trying local fallback")
                 raise ValueError("Registry unavailable or empty")
-                
+
         except Exception as registry_error:
             logger.warning(f"Registry access failed: {registry_error}, using local fallback")
-            
+
             # Fall back to local Chief of Staff agent
             local_agent = get_default_base_agent()
             if local_agent:

@@ -350,7 +350,7 @@ class StructuredExtractor:
                     tools_available = list(tools.keys())
                 except (AttributeError, TypeError):
                     tools_available = []
-            
+
             interaction = trace_llm_interaction(
                 model_spec=final_model,
                 provider=provider,
@@ -381,7 +381,7 @@ class StructuredExtractor:
                     if tools_values is not None:
                         tool_functions = list(tools_values)
                         if OBSERVABILITY_AVAILABLE and obs_logger:
-                            tools_keys = list(tools.keys()) if hasattr(tools, 'keys') else []
+                            tools_keys = list(tools.keys()) if hasattr(tools, "keys") else []
                             obs_logger.info(f"Using {len(tool_functions)} native pydantic-ai tools: {tools_keys}")
                     else:
                         if OBSERVABILITY_AVAILABLE and obs_logger:
@@ -389,12 +389,16 @@ class StructuredExtractor:
                         tool_functions = []
                 except (TypeError, AttributeError) as e:
                     if OBSERVABILITY_AVAILABLE and obs_logger:
-                        obs_logger.warning(f"Error extracting tool functions from tools dict: {e}, using empty tool list")
+                        obs_logger.warning(
+                            f"Error extracting tool functions from tools dict: {e}, using empty tool list"
+                        )
                     tool_functions = []
             elif tools is not None:
                 # tools is not None but also not a dict - log warning and use empty list
                 if OBSERVABILITY_AVAILABLE and obs_logger:
-                    obs_logger.warning(f"Invalid tools type: {type(tools)}. Expected dict or None, using empty tool list")
+                    obs_logger.warning(
+                        f"Invalid tools type: {type(tools)}. Expected dict or None, using empty tool list"
+                    )
                 tool_functions = []
 
             # Create agent with native tools
@@ -414,13 +418,13 @@ class StructuredExtractor:
 
             # Run and get text response
             result = await agent.run(query)
-            
+
             # Extract clean response text from the result object
             # The result object may have a .data or .output attribute for clean text
-            if hasattr(result, 'data') and result.data:
+            if hasattr(result, "data") and result.data:
                 response_text = str(result.data)
-            elif hasattr(result, 'output') and result.output:
-                response_text = str(result.output) 
+            elif hasattr(result, "output") and result.output:
+                response_text = str(result.output)
             else:
                 # Fallback: convert to string and try to extract from wrapper
                 result_str = str(result)
@@ -636,7 +640,9 @@ class StructuredExtractor:
                             setattr(protobuf_obj, field_name, value)
                         except (TypeError, ValueError) as e:
                             logger.warning(f"Failed to set protobuf field {field_name}={value}: {e}")
-                            raise StructuredExtractionError(f"Invalid protobuf field assignment: {field_name}={value}: {e}")
+                            raise StructuredExtractionError(
+                                f"Invalid protobuf field assignment: {field_name}={value}: {e}"
+                            )
 
                 except Exception as e:
                     logger.error(f"Critical error processing protobuf field {field_name}: {e}", exc_info=True)
@@ -655,7 +661,9 @@ class StructuredExtractor:
                     setattr(protobuf_obj, field_name, value)
                 except (TypeError, ValueError) as e:
                     logger.warning(f"Failed to set nested protobuf field {field_name}={value}: {e}")
-                    raise StructuredExtractionError(f"Invalid nested protobuf field assignment: {field_name}={value}: {e}")
+                    raise StructuredExtractionError(
+                        f"Invalid nested protobuf field assignment: {field_name}={value}: {e}"
+                    )
         return protobuf_obj
 
 

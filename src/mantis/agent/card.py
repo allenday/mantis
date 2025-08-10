@@ -133,7 +133,9 @@ def _create_base_agent_card(name: str, content: str, path: Path) -> "AgentCard":
     return agent_card
 
 
-def _enhance_with_llm(base_card: "AgentCard", content: str, persona_name: str, model_spec: Optional[str] = None) -> "MantisAgentCard":
+def _enhance_with_llm(
+    base_card: "AgentCard", content: str, persona_name: str, model_spec: Optional[str] = None
+) -> "MantisAgentCard":
     """Enhance AgentCard with LLM-extracted persona data."""
     from ..llm.structured_extractor import get_structured_extractor
     from ..proto.mantis.v1.mantis_persona_pb2 import (

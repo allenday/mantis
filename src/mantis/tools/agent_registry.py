@@ -184,35 +184,37 @@ async def list_all_agents(page_size: int = 200, include_inactive: bool = False) 
 
 async def get_agent_by_name(agent_name: str) -> MantisAgentCard:
     """Get a specific agent by name from the registry.
-    
+
     Args:
         agent_name: Name of the agent to retrieve
-        
+
     Returns:
         MantisAgentCard for the requested agent
-        
+
     Raises:
         ValueError: If agent not found
         Exception: If registry access fails
     """
     if OBSERVABILITY_AVAILABLE and obs_logger:
         obs_logger.info(f"🎯 TOOL_INVOKED: get_agent_by_name with name: '{agent_name}'")
-    
+
     try:
         all_agents = await list_all_agents()
-        
+
         # Search by name or ID
         from ..agent import AgentInterface
+
         for agent_card in all_agents:
             agent_interface = AgentInterface(agent_card)
             if agent_interface.name == agent_name or agent_interface.agent_id == agent_name:
                 if OBSERVABILITY_AVAILABLE and obs_logger:
                     obs_logger.info(f"Found agent '{agent_name}' in registry")
                 return agent_card
-        
+
         # If not found, try fallback to mock agents for development
         try:
             from ..tools.team_formation import _get_mock_agents
+
             mock_agents = _get_mock_agents()
             for agent_card in mock_agents:
                 agent_interface = AgentInterface(agent_card)
@@ -223,19 +225,19 @@ async def get_agent_by_name(agent_name: str) -> MantisAgentCard:
         except Exception as mock_error:
             if OBSERVABILITY_AVAILABLE and obs_logger:
                 obs_logger.warning(f"Mock agents fallback failed: {mock_error}")
-        
+
         # Agent not found
         available_names = []
         for agent_card in all_agents:
             agent_interface = AgentInterface(agent_card)
             available_names.append(agent_interface.name)
-        
+
         available_str = ", ".join(available_names[:10])
         if len(available_names) > 10:
             available_str += "..."
-            
+
         raise ValueError(f"Agent '{agent_name}' not found in registry. Available: {available_str}")
-        
+
     except ValueError:
         raise  # Re-raise agent not found errors
     except Exception as e:

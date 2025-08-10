@@ -142,7 +142,9 @@ class AbstractNarrator(ABC):
             execution_context=execution_context,
         )
 
-        composed_prompt = await composition_engine.compose_prompt(context=context, strategy=mantis_core_pb2.COMPOSITION_STRATEGY_BLENDED)
+        composed_prompt = await composition_engine.compose_prompt(
+            context=context, strategy=mantis_core_pb2.COMPOSITION_STRATEGY_BLENDED
+        )
 
         # Execute narrator
         extractor = StructuredExtractor()

@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 class CompositionContext(BaseModel):
     """Context information needed for prompt composition."""
+
     # FIXME: TYPE-SAFETY: Replace Any types with proper protobuf type hints
     # Should import from mantis.proto.mantis.v1 using TYPE_CHECKING pattern
 

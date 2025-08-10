@@ -26,7 +26,7 @@ class ExecutionContext:
         self._trace_token: Optional[contextvars.Token] = None
         self._metadata_token: Optional[contextvars.Token] = None
 
-    def __enter__(self) -> 'ExecutionContext':
+    def __enter__(self) -> "ExecutionContext":
         """Enter the execution context."""
         self._trace_token = _current_trace.set(self.trace)
         self._metadata_token = _execution_metadata.set(self.metadata)

@@ -100,8 +100,9 @@ Please respond as {agent_name} would, drawing on your expertise and perspective.
             if target_agent_card:
                 # Create AgentSpec with the specific agent - populate the AgentInterface correctly
                 from ..agent import AgentInterface as AgentInterfaceWrapper
+
                 agent_wrapper = AgentInterfaceWrapper(target_agent_card)
-                
+
                 agent_spec = mantis_core_pb2.AgentSpec()
                 # Populate the mantis_core AgentInterface (not a2a AgentInterface!)
                 agent_spec.agent.agent_id = agent_wrapper.agent_id
@@ -112,24 +113,23 @@ Please respond as {agent_name} would, drawing on your expertise and perspective.
                 agent_spec.agent.role_preference = agent_wrapper.role_preference
                 agent_spec.count = 1
                 simulation_input.agents.append(agent_spec)
-                
+
                 logger.info(
-                    "Added specific agent to simulation input", 
+                    "Added specific agent to simulation input",
                     structured_data={
-                        "agent_name": agent_name, 
+                        "agent_name": agent_name,
                         "agent_id": agent_wrapper.agent_id,
-                        "context_id": simulation_input.context_id
-                    }
+                        "context_id": simulation_input.context_id,
+                    },
                 )
             else:
                 logger.warning(
-                    "Could not load specific agent, will use default",
-                    structured_data={"agent_name": agent_name}
+                    "Could not load specific agent, will use default", structured_data={"agent_name": agent_name}
                 )
         except Exception as e:
             logger.warning(
                 "Failed to load specific agent, will use default",
-                structured_data={"agent_name": agent_name, "error": str(e)}
+                structured_data={"agent_name": agent_name, "error": str(e)},
             )
 
         # Execute recursive simulation
@@ -263,7 +263,7 @@ async def _validate_agent_exists(agent_name: str) -> None:
         except Exception as registry_error:
             logger.warning(f"Registry access failed: {registry_error}, using mock agents for validation")
             all_agents = _get_mock_agents()
-            
+
         if not all_agents:
             raise ValueError("No agents available from registry or local fallback")
 

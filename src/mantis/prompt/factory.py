@@ -61,12 +61,19 @@ def create_simulation_prompt_with_interface(
     # not by string matching on agent names. Need proper role detection system.
     agent_name_lower = agent_interface.name.lower()
     is_coordinator = "chief" in agent_name_lower and "staff" in agent_name_lower
-    
+
     # Only apply coordination constraints to coordinator agents
     if is_coordinator:
         # Coordinator gets both team formation guidance and coordination constraints
-        suffixes = [CHIEF_OF_STAFF_TEAM_FORMATION, AGENT_COORDINATION_CONSTRAINTS, SIMULATION_BASE_SUFFIX, PERSONA_ADHERENCE_SUFFIX]
-        logger.info(f"Added Chief of Staff team formation guidance and coordination constraints for agent: {agent_interface.name}")
+        suffixes = [
+            CHIEF_OF_STAFF_TEAM_FORMATION,
+            AGENT_COORDINATION_CONSTRAINTS,
+            SIMULATION_BASE_SUFFIX,
+            PERSONA_ADHERENCE_SUFFIX,
+        ]
+        logger.info(
+            f"Added Chief of Staff team formation guidance and coordination constraints for agent: {agent_interface.name}"
+        )
     else:
         # Regular team members get standard suffixes without coordination constraints
         suffixes = [SIMULATION_BASE_SUFFIX, PERSONA_ADHERENCE_SUFFIX]

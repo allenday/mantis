@@ -38,7 +38,9 @@ class PromptCompositionEngine:
         logger.info(f"Registered {len(self.modules)} core prompt modules")
 
     async def compose_prompt(
-        self, context: CompositionContext, strategy: mantis_core_pb2.CompositionStrategy = mantis_core_pb2.COMPOSITION_STRATEGY_BLENDED
+        self,
+        context: CompositionContext,
+        strategy: mantis_core_pb2.CompositionStrategy = mantis_core_pb2.COMPOSITION_STRATEGY_BLENDED,
     ) -> mantis_core_pb2.ComposedPrompt:
         """
         Compose a prompt using selected modules and specified strategy.
@@ -83,7 +85,7 @@ class PromptCompositionEngine:
         composed_prompt.final_prompt = final_prompt
         composed_prompt.modules_used.extend([m.get_module_name() for m, _ in module_contents])
         composed_prompt.strategy = strategy
-        
+
         # Convert variables_resolved dict to protobuf Struct
         if variables_resolved:
             # Convert complex Python types to JSON-serializable types for protobuf
@@ -101,11 +103,11 @@ class PromptCompositionEngine:
                     # Convert other types to string representation
                     safe_variables[key] = str(value)
             composed_prompt.variables_resolved.update(safe_variables)
-        
+
         # Add metadata as protobuf Struct
         metadata = {
             "total_modules": len(applicable_modules),
-            "active_modules": len(module_contents), 
+            "active_modules": len(module_contents),
             "prompt_length": len(final_prompt),
         }
         composed_prompt.metadata.update(metadata)

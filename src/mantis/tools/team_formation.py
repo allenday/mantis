@@ -17,7 +17,7 @@ logger = get_structured_logger(__name__)
 def _get_mock_agents() -> List[mantis_persona_pb2.MantisAgentCard]:
     """Create mock agents for testing when registry is unavailable."""
     mock_agents = []
-    
+
     # Mock Philosopher Agent
     philosopher = mantis_persona_pb2.MantisAgentCard()
     philosopher.agent_card.agent_id = "mock-philosopher"
@@ -27,7 +27,7 @@ def _get_mock_agents() -> List[mantis_persona_pb2.MantisAgentCard]:
     philosopher.agent_card.primary_domains.extend(["philosophy", "ethics", "critical thinking"])
     philosopher.agent_card.communication_style = "thoughtful and reflective with careful reasoning"
     mock_agents.append(philosopher)
-    
+
     # Mock Psychologist Agent
     psychologist = mantis_persona_pb2.MantisAgentCard()
     psychologist.agent_card.agent_id = "mock-psychologist"
@@ -37,7 +37,7 @@ def _get_mock_agents() -> List[mantis_persona_pb2.MantisAgentCard]:
     psychologist.agent_card.primary_domains.extend(["psychology", "mental health", "human behavior"])
     psychologist.agent_card.communication_style = "empathetic and evidence-based with practical insights"
     mock_agents.append(psychologist)
-    
+
     # Mock Life Coach Agent
     coach = mantis_persona_pb2.MantisAgentCard()
     coach.agent_card.agent_id = "mock-coach"
@@ -47,7 +47,7 @@ def _get_mock_agents() -> List[mantis_persona_pb2.MantisAgentCard]:
     coach.agent_card.primary_domains.extend(["life coaching", "personal development", "motivation"])
     coach.agent_card.communication_style = "energetic and supportive with actionable advice"
     mock_agents.append(coach)
-    
+
     return mock_agents
 
 
@@ -79,7 +79,7 @@ async def get_random_agents_from_registry(count: int = 3) -> str:
         except Exception as registry_error:
             logger.warning(f"Registry access failed: {registry_error}, using local mock agents")
             all_agents = _get_mock_agents()
-        
+
         if not all_agents:
             return "Error: No agents available from registry or local fallback"
 
