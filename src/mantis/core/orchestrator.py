@@ -51,18 +51,16 @@ class SimulationOrchestrator:
             # Create bound methods for recursive invocation tools
             # CRITICAL: max_depth must be 0 to prevent infinite recursion
             async def bound_invoke_agent_by_name(
-                agent_name: str, query: str, context: Optional[str] = None, max_depth: int = 0
+                agent_name: str, query: str, context: Optional[str] = None, max_depth: int = 1
             ):
-                # Force max_depth to 0 to prevent recursion - sub-agents cannot invoke more agents
-                logger.info(f"Tool invoke_agent_by_name called with max_depth={max_depth}, forcing to 0 for safety")
-                return await invoke_agent_by_name(agent_name, query, self, context, 0)
+                # Use proper depth control - let current_depth increment naturally
+                return await invoke_agent_by_name(agent_name, query, self, context, max_depth)
 
             async def bound_invoke_multiple_agents(
-                agent_names: list, query_template: str, individual_contexts: Optional[list] = None, max_depth: int = 0
+                agent_names: list, query_template: str, individual_contexts: Optional[list] = None, max_depth: int = 1
             ):
-                # Force max_depth to 0 to prevent recursion - sub-agents cannot invoke more agents  
-                logger.info(f"Tool invoke_multiple_agents called with max_depth={max_depth}, forcing to 0 for safety")
-                return await invoke_multiple_agents(agent_names, query_template, self, individual_contexts, 0)
+                # Use proper depth control - let current_depth increment naturally
+                return await invoke_multiple_agents(agent_names, query_template, self, individual_contexts, max_depth)
 
             self.tools.update(
                 {

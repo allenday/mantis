@@ -159,7 +159,8 @@ Your task:
 
 Focus on multiple schools of thought including virtue ethics, existentialism, and eudaimonia.""",
                 "execution_strategy": "DIRECT",
-                "max_depth": 2,
+                "max_depth": 1,
+                "min_depth": 1,
                 "context": "Deep philosophical inquiry requiring coordinated multi-perspective analysis",
                 "agents": [{
                     "count": 1,
