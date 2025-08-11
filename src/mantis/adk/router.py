@@ -49,6 +49,14 @@ class ChiefOfStaffRouter:
             from dotenv import load_dotenv
             load_dotenv()
         
+        # Validate API key availability
+        api_key = os.environ.get('ANTHROPIC_API_KEY')
+        if not api_key:
+            logger.error("ANTHROPIC_API_KEY not found - ADK router will fail")
+            raise ValueError("ANTHROPIC_API_KEY environment variable is required for ADK integration")
+        
+        logger.info("ANTHROPIC_API_KEY found - ADK router can initialize")
+        
         # Parse model from DEFAULT_MODEL (e.g., "anthropic:claude-3-5-haiku-20241022") 
         model_name = DEFAULT_MODEL.split(":", 1)[1] if ":" in DEFAULT_MODEL else DEFAULT_MODEL
         
@@ -111,21 +119,51 @@ coordinate with appropriate agents.""",
         )
 
         try:
-            # Execute through pydantic-ai
-            result = await self.chief_of_staff_agent.run(simulation_input.query)
+            import asyncio
+            
+            # Add timeout to prevent hanging - key fix for A2A protocol
+            timeout_seconds = 30  # Reasonable timeout for AI processing
+            
+            logger.info(f"Starting ADK processing with {timeout_seconds}s timeout")
+            
+            # Execute through pydantic-ai with timeout protection
+            result = await asyncio.wait_for(
+                self.chief_of_staff_agent.run(simulation_input.query),
+                timeout=timeout_seconds
+            )
             
             # Extract response text
             final_response_text = str(result.output) if result.output else ""
+            
+            logger.info(
+                "ADK processing completed successfully",
+                structured_data={
+                    "context_id": simulation_input.context_id,
+                    "response_length": len(final_response_text)
+                }
+            )
 
             # Convert back to A2A format
             return self._create_simulation_output(simulation_input, final_response_text)
 
+        except asyncio.TimeoutError:
+            error_msg = f"ADK processing timed out after {timeout_seconds} seconds"
+            logger.error(
+                "ADK routing timed out", 
+                structured_data={
+                    "context_id": simulation_input.context_id,
+                    "timeout_seconds": timeout_seconds
+                }
+            )
+            return self._create_error_simulation_output(simulation_input, error_msg)
+            
         except Exception as e:
             logger.error(
                 "pydantic-ai routing failed", 
                 structured_data={
                     "context_id": simulation_input.context_id,
-                    "error": str(e)
+                    "error": str(e),
+                    "error_type": type(e).__name__
                 }
             )
             return self._create_error_simulation_output(simulation_input, str(e))

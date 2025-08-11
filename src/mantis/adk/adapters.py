@@ -137,6 +137,9 @@ class ADKSkillHandler:
     
     This class implements the FastA2A skill handler interface while
     internally using ADK orchestration for enhanced capabilities.
+    
+    NOTE: This handler integrates with FastA2A's async task system to avoid
+    blocking the A2A message/send endpoint while ADK processing happens.
     """
 
     def __init__(self, skill_name: str, description: str, tools: Optional[Dict[str, Any]] = None) -> None:
@@ -151,8 +154,65 @@ class ADKSkillHandler:
         Handle skill request (FastA2A interface).
         
         This method is called by FastA2A when a skill request is made.
+        For ADK integration, we need to ensure this doesn't block the A2A protocol.
+        
+        The key insight is that FastA2A will manage the async task lifecycle,
+        so this handler should complete efficiently while still providing the
+        full ADK orchestration capability.
         """
-        return await self.bridge.handle_skill_request(self.skill_name, request, context)
+        try:
+            import asyncio
+            
+            logger.info(
+                f"ADK skill handler called for '{self.skill_name}'",
+                structured_data={
+                    "skill_name": self.skill_name,
+                    "request_length": len(request),
+                    "has_context": context is not None
+                }
+            )
+            
+            # Add timeout protection to prevent hanging A2A requests
+            # This ensures the A2A message/send endpoint can return promptly
+            timeout_seconds = 25  # Slightly less than ADK router timeout
+            
+            result = await asyncio.wait_for(
+                self.bridge.handle_skill_request(self.skill_name, request, context),
+                timeout=timeout_seconds
+            )
+            
+            logger.info(
+                f"ADK skill request completed for '{self.skill_name}'",
+                structured_data={
+                    "skill_name": self.skill_name,
+                    "response_length": len(result),
+                    "success": True
+                }
+            )
+            return result
+            
+        except asyncio.TimeoutError:
+            error_msg = f"ADK processing for {self.skill_name} timed out after {timeout_seconds} seconds. This may indicate an API connectivity issue or complex request requiring more time."
+            logger.error(
+                f"ADK skill handler timeout for '{self.skill_name}'",
+                structured_data={
+                    "skill_name": self.skill_name,
+                    "timeout_seconds": timeout_seconds,
+                    "error_type": "timeout"
+                }
+            )
+            return error_msg
+            
+        except Exception as e:
+            logger.error(
+                f"ADK skill handler error for '{self.skill_name}'",
+                structured_data={
+                    "skill_name": self.skill_name,
+                    "error": str(e),
+                    "error_type": type(e).__name__
+                }
+            )
+            return f"I encountered an error while processing your {self.skill_name} request: {str(e)}. Please try again."
 
 
 def create_adk_enhanced_skills(base_skills: list, tools: Optional[Dict[str, Any]] = None) -> list:
@@ -195,3 +255,84 @@ def create_adk_enhanced_skills(base_skills: list, tools: Optional[Dict[str, Any]
         logger.info(f"Created ADK-enhanced skill: {base_skill.name}")
     
     return enhanced_skills
+
+
+def convert_protobuf_to_pydantic_dict(protobuf_obj: Any) -> Dict[str, Any]:
+    """
+    Convert protobuf object to Pydantic-compatible dictionary.
+    
+    This fixes the serialization issue when protobuf objects are passed
+    to FastA2A which expects Pydantic-compatible data structures.
+    
+    Args:
+        protobuf_obj: Protobuf object to convert
+        
+    Returns:
+        Dictionary that can be serialized by Pydantic
+    """
+    try:
+        from google.protobuf.json_format import MessageToDict
+        
+        # Convert protobuf to dictionary
+        if hasattr(protobuf_obj, 'DESCRIPTOR'):
+            # This is a protobuf message
+            return MessageToDict(protobuf_obj, preserving_proto_field_name=True)
+        else:
+            # Handle non-protobuf objects
+            if hasattr(protobuf_obj, '__dict__'):
+                return protobuf_obj.__dict__
+            else:
+                # Primitive types
+                return protobuf_obj
+                
+    except Exception as e:
+        logger.warning(f"Failed to convert protobuf object to dict: {e}")
+        # Fallback: return basic dict representation
+        return {"conversion_error": str(e), "type": str(type(protobuf_obj))}
+
+
+def create_adk_compatible_agent_params(base_card: Any) -> Dict[str, Any]:
+    """
+    Create FastA2A-compatible parameters from protobuf AgentCard.
+    
+    This function converts protobuf objects to Pydantic-compatible
+    structures to avoid serialization errors in FastA2A.
+    
+    Args:
+        base_card: Protobuf AgentCard object
+        
+    Returns:
+        Dictionary with FastA2A-compatible parameters
+    """
+    try:
+        # Convert protobuf provider to dictionary
+        provider_dict = None
+        if hasattr(base_card, 'provider') and base_card.provider:
+            provider_dict = convert_protobuf_to_pydantic_dict(base_card.provider)
+        
+        # Create compatible parameters
+        params = {
+            "name": base_card.name if hasattr(base_card, 'name') else "Unknown Agent",
+            "url": base_card.url if hasattr(base_card, 'url') else "http://localhost:9000",
+            "version": base_card.version if hasattr(base_card, 'version') else "1.0.0",
+            "description": base_card.description if hasattr(base_card, 'description') else "ADK-enhanced agent",
+        }
+        
+        # Add provider as dictionary if available
+        if provider_dict:
+            params["provider"] = provider_dict
+            
+        logger.info("Created ADK-compatible agent parameters", 
+                   structured_data={"has_provider": provider_dict is not None})
+        
+        return params
+        
+    except Exception as e:
+        logger.error(f"Failed to create ADK-compatible parameters: {e}")
+        # Fallback parameters
+        return {
+            "name": "ADK Chief of Staff",
+            "url": "http://localhost:9053",
+            "version": "1.0.0", 
+            "description": "ADK-enhanced Chief of Staff agent",
+        }
