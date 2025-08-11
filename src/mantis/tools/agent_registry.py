@@ -46,7 +46,8 @@ async def registry_search_agents(query: str, limit: int = 20) -> str:
 
         # Simple HTTP search request
         search_url = f"{DEFAULT_REGISTRY}/search"
-        async with aiohttp.ClientSession() as session:
+        timeout = aiohttp.ClientTimeout(total=30)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.post(search_url, json={"query": query, "limit": limit}) as response:
                 if response.status != 200:
                     return f"Registry search failed: HTTP {response.status}"
@@ -98,7 +99,8 @@ async def registry_get_agent_details(agent_url: str) -> str:
         # from ..agent.card import format_mantis_card_for_llm  # TODO: Implement this function
 
         # Simple HTTP request to get agent details
-        async with aiohttp.ClientSession() as session:
+        timeout = aiohttp.ClientTimeout(total=30)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(agent_url) as response:
                 if response.status != 200:
                     return f"Failed to fetch agent details: HTTP {response.status}"
@@ -142,7 +144,9 @@ async def list_all_agents(page_size: int = 200, include_inactive: bool = False) 
         # JSONRPC request to registry
         jsonrpc_request = {"jsonrpc": "2.0", "method": "list_agents", "params": {}, "id": 1}
 
-        async with aiohttp.ClientSession() as session:
+        # Use same SSL fix as registration to avoid aiohttp issues
+        timeout = aiohttp.ClientTimeout(total=30)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.post(
                 f"{DEFAULT_REGISTRY}/jsonrpc", json=jsonrpc_request, headers={"Content-Type": "application/json"}
             ) as response:
