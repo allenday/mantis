@@ -955,32 +955,67 @@ def serve_all(
                     "id": 1,
                 }
 
-                async with aiohttp.ClientSession() as session:
-                    async with session.post(
-                        f"{registry_url}/jsonrpc", json=payload, headers={"Content-Type": "application/json"}
-                    ) as response:
-                        if response.status == 200:
-                            result = await response.json()
-                            if "error" in result:
-                                console.print(
-                                    f"[red]❌ Registry error for {base_card.name}: {result['error']['message']}[/red]"
-                                )
-                                return False
-                            elif "result" in result and result["result"].get("success"):
-                                if verbose:
-                                    console.print(
-                                        f"[green]✅ Successfully registered {base_card.name} with registry[/green]"
-                                    )
-                                return True
-                            else:
-                                console.print(f"[yellow]⚠️ Unexpected response for {base_card.name}: {result}[/yellow]")
-                                return False
+                # Use synchronous requests instead of aiohttp to avoid SSL issues
+                if verbose:
+                    console.print(f"[dim]Attempting to register {base_card.name} with {registry_url}/jsonrpc[/dim]")
+                
+                # Use requests library with retry for registry readiness
+                import requests
+                import time
+                
+                # Retry registration with backoff for registry readiness
+                max_retries = 5
+                retry_delay = 5
+                
+                for attempt in range(max_retries):
+                    try:
+                        response = requests.post(
+                            f"{registry_url}/jsonrpc",
+                            json=payload,
+                            headers={"Content-Type": "application/json"},
+                            timeout=10
+                        )
+                        break  # Success, exit retry loop
+                    except requests.exceptions.ConnectionError as e:
+                        if attempt < max_retries - 1:
+                            if verbose:
+                                console.print(f"[dim]Registry not ready, retrying in {retry_delay}s (attempt {attempt + 1}/{max_retries})[/dim]")
+                            time.sleep(retry_delay)
+                            retry_delay *= 1.5  # Exponential backoff
+                            continue
                         else:
-                            response_text = await response.text()
+                            # Final attempt failed
+                            console.print(f"[yellow]⚠️ Registry unreachable after {max_retries} attempts for {base_card.name}[/yellow]")
+                            return False
+                    except requests.RequestException as e:
+                        console.print(f"[yellow]⚠️ Network error registering {base_card.name}: {e}[/yellow]")
+                        return False
+                
+                try:
+                    if response.status_code == 200:
+                        result = response.json()
+                        if "error" in result:
                             console.print(
-                                f"[yellow]⚠️ Failed to register {base_card.name}: HTTP {response.status} - {response_text[:200]}[/yellow]"
+                                f"[red]❌ Registry error for {base_card.name}: {result['error']['message']}[/red]"
                             )
                             return False
+                        elif "result" in result and result["result"].get("success"):
+                            if verbose:
+                                console.print(
+                                    f"[green]✅ Successfully registered {base_card.name} with registry[/green]"
+                                )
+                            return True
+                        else:
+                            console.print(f"[yellow]⚠️ Unexpected response for {base_card.name}: {result}[/yellow]")
+                            return False
+                    else:
+                        console.print(
+                            f"[yellow]⚠️ Failed to register {base_card.name}: HTTP {response.status_code} - {response.text[:200]}[/yellow]"
+                        )
+                        return False
+                except requests.RequestException as req_e:
+                    console.print(f"[yellow]⚠️ Network error registering {base_card.name}: {req_e}[/yellow]")
+                    return False
             except Exception as e:
                 console.print(f"[yellow]⚠️ Error registering {base_card.name} with registry: {e}[/yellow]")
                 return False
@@ -1037,15 +1072,19 @@ def serve_all(
                     debug=verbose,
                 )
 
-                # Check if this is Chief of Staff and ADK is enabled
-                is_chief_of_staff = "chief of staff" in base_card.name.lower()
-                if is_chief_of_staff and enable_adk:
+                # Use ADK A2A servers for all agents when enabled
+                if enable_adk:
                     try:
-                        # Create native ADK A2A server for Chief of Staff
-                        from ..adk.a2a_server import create_chief_of_staff_a2a_server
-                        
-                        # Create native ADK A2A server (FastAPI-based)
-                        adk_a2a_server = create_chief_of_staff_a2a_server(port=port)
+                        # Check if this is Chief of Staff for special handling
+                        is_chief_of_staff = "chief of staff" in base_card.name.lower()
+                        if is_chief_of_staff:
+                            # Create native ADK A2A server for Chief of Staff
+                            from ..adk.a2a_server import create_chief_of_staff_a2a_server
+                            adk_a2a_server = create_chief_of_staff_a2a_server(port=port)
+                        else:
+                            # Create ADK A2A server for other agents
+                            from ..adk.a2a_server import create_adk_a2a_server_from_agent_card
+                            adk_a2a_server = create_adk_a2a_server_from_agent_card(base_card, port=port)
                         
                         # Use the FastAPI app from the ADK A2A server
                         servers.append((adk_a2a_server.app, port, f"{base_card.name} (Native ADK A2A)"))
@@ -1060,7 +1099,7 @@ def serve_all(
                         # Fall back to regular FastA2A server
                         servers.append((app, port, base_card.name))
                 else:
-                    # Regular FastA2A server
+                    # Regular FastA2A server (when ADK not enabled)
                     servers.append((app, port, base_card.name))
 
                 registration_tasks.append(register_agent_with_registry(agent_card, registry_url))
