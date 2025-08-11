@@ -1041,18 +1041,34 @@ def serve_all(
                 is_chief_of_staff = "chief of staff" in base_card.name.lower()
                 if is_chief_of_staff and enable_adk:
                     try:
-                        # Create ADK-enhanced server for Chief of Staff
-                        from ..adk.router import ChiefOfStaffRouter
-                        from ..adk.server import create_adk_router_app
+                        # Create ADK-enhanced FastA2A server for Chief of Staff
+                        from ..adk.adapters import create_adk_enhanced_skills
+                        from ..core.orchestrator import SimulationOrchestrator
                         
-                        adk_router = ChiefOfStaffRouter()
-                        adk_app = create_adk_router_app(adk_router, f"ADK {base_card.name}")
+                        # Initialize orchestrator to get tools for ADK
+                        orchestrator = SimulationOrchestrator()
+                        
+                        # Replace regular skills with ADK-enhanced skills
+                        adk_enhanced_skills = create_adk_enhanced_skills(base_card.skills, tools=orchestrator.tools)
+                        
+                        # Create FastA2A app with ADK-enhanced skills
+                        adk_app = FastA2A(
+                            storage=InMemoryStorage(),
+                            broker=InMemoryBroker(),
+                            name=base_card.name,
+                            url=base_card.url,
+                            version=base_card.version,
+                            description=f"ADK-Enhanced: {base_card.description}",
+                            provider=base_card.provider,
+                            skills=adk_enhanced_skills,
+                            debug=verbose,
+                        )
                         
                         servers.append((adk_app, port, f"{base_card.name} (ADK-Enhanced)"))
-                        console.print(f"  ✓ [magenta]{base_card.name}[/magenta] (ADK-Enhanced with Gemini 2.0)")
+                        console.print(f"  ✓ [magenta]{base_card.name}[/magenta] (ADK-Enhanced via FastA2A)")
                         if verbose:
                             console.print(f"    [dim]URL: {base_card.url}[/dim]")
-                            console.print(f"    [dim]Backend: ADK with Google's Agent Development Kit[/dim]")
+                            console.print(f"    [dim]Backend: ADK via FastA2A with {len(adk_enhanced_skills)} enhanced skills[/dim]")
                     except Exception as e:
                         console.print(f"[yellow]⚠️ ADK enhancement failed for {base_card.name}: {e}[/yellow]")
                         console.print("[dim]Falling back to FastA2A backend[/dim]")
