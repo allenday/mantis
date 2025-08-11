@@ -829,19 +829,23 @@ def serve_single(
 @click.option("--base-port", "-p", type=int, default=9001, help="Base port for agent servers (default: 9001)")
 @click.option("--host", "-h", default="0.0.0.0", help="Server host (default: 0.0.0.0)")
 @click.option("--registry-url", "-r", default="http://localhost:8080", help="A2A registry URL")
+@click.option("--enable-adk", is_flag=True, help="Enable ADK backend for Chief of Staff agent (experimental)")
 def serve_all(
-    agents_dir: str, model: Optional[str], verbose: bool, base_port: int, host: str, registry_url: str
+    agents_dir: str, model: Optional[str], verbose: bool, base_port: int, host: str, registry_url: str, enable_adk: bool
 ) -> int:
     """
     Serve all agents through individual A2A servers.
 
     This creates individual servers for each agent found in the agents directory,
-    assigning each agent a unique port starting from the base port.
+    assigning each agent a unique port starting from the base port. When --enable-adk
+    is specified, the Chief of Staff agent will be automatically enhanced with Google's
+    ADK backend for advanced orchestration capabilities.
 
     Examples:
         mantis agent serve-all
+        mantis agent serve-all --enable-adk
         mantis agent serve-all --base-port 9000 --agents-dir ./my-agents
-        mantis agent serve-all --registry-url http://registry:8080
+        mantis agent serve-all --registry-url http://registry:8080 --enable-adk
     """
     try:
         import os
@@ -867,6 +871,8 @@ def serve_all(
         console.print("[bold green]🎭 Starting Multi-Agent Server Farm[/bold green]")
         console.print(f"[cyan]Agents directory: {agents_path}[/cyan]")
         console.print(f"[cyan]Registry: {registry_url}[/cyan]")
+        if enable_adk:
+            console.print("[cyan]ADK Enhancement: [bold green]ENABLED[/bold green] for Chief of Staff (experimental)[/cyan]")
         console.print()
 
         # Load and validate AgentCard objects
@@ -894,10 +900,18 @@ def serve_all(
                 agent_cards[agent_key] = agent_card
                 port_assignments[agent_key] = assigned_port
 
-                console.print(f"  ✓ [cyan]{base_card.name}[/cyan] ({len(base_card.skills)} skills)")
+                # Check if this will be ADK-enhanced
+                is_chief_of_staff = "chief of staff" in base_card.name.lower()
+                if is_chief_of_staff and enable_adk:
+                    console.print(f"  ✓ [cyan]{base_card.name}[/cyan] ({len(base_card.skills)} skills) [magenta]→ ADK-Enhanced[/magenta]")
+                else:
+                    console.print(f"  ✓ [cyan]{base_card.name}[/cyan] ({len(base_card.skills)} skills)")
+                
                 if verbose:
                     console.print(f"    [dim]File: {agent_file}[/dim]")
                     console.print(f"    [dim]URL: {base_card.url}[/dim]")
+                    if is_chief_of_staff and enable_adk:
+                        console.print(f"    [dim]Backend: Will use ADK (Google Agent Development Kit)[/dim]")
             except Exception as e:
                 console.print(f"[red]❌ Failed to load {agent_file.name}: {e}[/red]")
                 continue
@@ -1023,7 +1037,31 @@ def serve_all(
                     debug=verbose,
                 )
 
-                servers.append((app, port, base_card.name))
+                # Check if this is Chief of Staff and ADK is enabled
+                is_chief_of_staff = "chief of staff" in base_card.name.lower()
+                if is_chief_of_staff and enable_adk:
+                    try:
+                        # Create ADK-enhanced server for Chief of Staff
+                        from ..adk.router import ChiefOfStaffRouter
+                        from ..adk.server import create_adk_router_app
+                        
+                        adk_router = ChiefOfStaffRouter()
+                        adk_app = create_adk_router_app(adk_router, f"ADK {base_card.name}")
+                        
+                        servers.append((adk_app, port, f"{base_card.name} (ADK-Enhanced)"))
+                        console.print(f"  ✓ [magenta]{base_card.name}[/magenta] (ADK-Enhanced with Gemini 2.0)")
+                        if verbose:
+                            console.print(f"    [dim]URL: {base_card.url}[/dim]")
+                            console.print(f"    [dim]Backend: ADK with Google's Agent Development Kit[/dim]")
+                    except Exception as e:
+                        console.print(f"[yellow]⚠️ ADK enhancement failed for {base_card.name}: {e}[/yellow]")
+                        console.print("[dim]Falling back to FastA2A backend[/dim]")
+                        # Fall back to regular FastA2A server
+                        servers.append((app, port, base_card.name))
+                else:
+                    # Regular FastA2A server
+                    servers.append((app, port, base_card.name))
+
                 registration_tasks.append(register_agent_with_registry(agent_card, registry_url))
 
             # Register agents in batches to avoid thundering herd

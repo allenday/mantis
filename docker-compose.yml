@@ -27,8 +27,9 @@ services:
     environment:
       - PYTHONPATH=/app/src
       - REGISTRY_URL=http://a2a-registry:8080
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
     volumes:
-      - ./agents:/app/agents:ro
+      - ./agents-quick:/app/agents-quick:ro
       - ./src:/app/src:ro
     depends_on:
       - a2a-registry
@@ -37,11 +38,12 @@ services:
       - agent-network
     command: [
       "python", "-m", "mantis", "agent", "serve-all",
-      "--agents-dir", "/app/agents",
+      "--agents-dir", "/app/agents-quick",
       "--base-port", "9001",
       "--host", "0.0.0.0",
       "--registry-url", "http://a2a-registry:8080",
-      "--verbose"
+      "--verbose",
+      "--enable-adk"
     ]
 
 networks:
