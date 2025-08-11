@@ -28,6 +28,7 @@ services:
       - PYTHONPATH=/app/src
       - REGISTRY_URL=http://a2a-registry:8080
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}  # For ADK Gemini models
     volumes:
       - ./agents-quick:/app/agents-quick:ro
       - ./src:/app/src:ro
