@@ -519,3 +519,24 @@ def create_chief_of_staff_a2a_server(port: int = 9053) -> ADKA2AServer:
         description="ADK-powered Chief of Staff for strategic coordination and multi-agent orchestration",
         port=port
     )
+
+def create_adk_a2a_server_from_agent_card(agent_card, port: int) -> ADKA2AServer:
+    """Create ADK A2A server from any agent card."""
+    try:
+        from ..agent import AgentInterface
+        
+        # Create agent interface using the correct class method for base AgentCard
+        agent_interface = AgentInterface.from_agent_card(agent_card)
+        
+        return ADKA2AServer(
+            agent_name=agent_interface.name,
+            description=agent_interface.description,
+            port=port
+        )
+    except Exception as e:
+        # Log the actual error for debugging
+        from ..observability.logger import get_structured_logger
+        logger = get_structured_logger(__name__)
+        logger.error(f"Failed to create ADK A2A server from agent card: {e}", 
+                    structured_data={"error": str(e), "agent_card_type": type(agent_card).__name__})
+        raise
