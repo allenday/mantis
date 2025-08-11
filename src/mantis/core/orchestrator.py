@@ -152,6 +152,25 @@ class SimulationOrchestrator:
                 },
             )
 
+            # Check if we should route through ADK
+            if self._should_use_adk_routing(target_agent_card, disable_tools):
+                logger.info(
+                    "Routing simulation through ADK",
+                    structured_data={
+                        "context_id": simulation_input.context_id,
+                        "agent_name": target_agent_card.agent_card.name,
+                    }
+                )
+                
+                from ..adk.router import ChiefOfStaffRouter
+                
+                # Pass tools to ADK router (empty dict if tools disabled)
+                adk_tools = {} if disable_tools else self.tools
+                adk_router = ChiefOfStaffRouter(tools=adk_tools)
+                
+                return await adk_router.route_simulation(simulation_input)
+            
+            # Traditional execution path
             task = await self._execute_task_with_agent(
                 query=simulation_input.query,
                 agent_card=target_agent_card,
@@ -390,3 +409,34 @@ class SimulationOrchestrator:
             if hasattr(task, "context") and context in task.context:
                 matching_tasks.append(task)
         return matching_tasks
+
+    def _should_use_adk_routing(self, agent_card: mantis_persona_pb2.MantisAgentCard, disable_tools: bool) -> bool:
+        """Determine if simulation should be routed through ADK."""
+        import os
+        
+        # Check if ADK is enabled via environment variable
+        adk_enabled = os.getenv('ENABLE_ADK', 'false').lower() == 'true'
+        if not adk_enabled:
+            return False
+        
+        # Don't use ADK if tools are disabled (max_depth <= 0)
+        if disable_tools:
+            logger.debug("ADK routing disabled due to tools being disabled")
+            return False
+        
+        # Check if agent is Chief of Staff
+        agent_name = agent_card.agent_card.name.lower()
+        is_chief_of_staff = "chief" in agent_name and "staff" in agent_name
+        
+        logger.debug(
+            "ADK routing decision",
+            structured_data={
+                "adk_enabled": adk_enabled,
+                "disable_tools": disable_tools,
+                "agent_name": agent_card.agent_card.name,
+                "is_chief_of_staff": is_chief_of_staff,
+                "will_use_adk": is_chief_of_staff and adk_enabled and not disable_tools
+            }
+        )
+        
+        return is_chief_of_staff
