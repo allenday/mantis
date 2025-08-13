@@ -509,7 +509,7 @@ def get_parsed_extensions(agent_card: "AgentCard") -> Dict[str, Any]:
     parsed_extensions = {}
 
     for extension in agent_card.capabilities.extensions:
-        parsed_data = parse_extension_data(extension.uri, extension.params)
+        parsed_data = parse_extension_data(extension.uri, extension.params)  # type: ignore[arg-type]
         if parsed_data:
             parsed_extensions[extension.uri] = parsed_data
 

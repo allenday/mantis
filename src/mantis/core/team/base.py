@@ -246,7 +246,7 @@ class BaseTeam(AbstractTeam):
 
         # If the member already has a MantisAgentCard reference, use it
         if hasattr(member, "mantis_agent_card"):
-            return member.mantis_agent_card
+            return member.mantis_agent_card  # type: ignore[return-value]
 
         # Otherwise, try to convert from the base agent_card
         # This would typically involve calling ensure_mantis_agent_card()
@@ -257,7 +257,7 @@ class BaseTeam(AbstractTeam):
             # Create AgentCard from member.agent_card and convert
             temp_card = AgentCard()
             temp_card.CopyFrom(member.agent_card)
-            return ensure_mantis_agent_card(temp_card)
+            return ensure_mantis_agent_card(temp_card)  # type: ignore[return-value]
 
         except Exception:
             # FIXME: SILENT-FAILURE-SECURITY: Auth failures return None instead of failing fast

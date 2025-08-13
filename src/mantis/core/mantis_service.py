@@ -368,7 +368,7 @@ class MantisService:
             # Method may not be available in all protobuf versions
             import time
 
-            health_status["timestamp"].seconds = int(time.time())
+            health_status["timestamp"].seconds = int(time.time())  # type: ignore[attr-defined]
 
         logger.debug("Retrieved service health status", structured_data=health_status)
 

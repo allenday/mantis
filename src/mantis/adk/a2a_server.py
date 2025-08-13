@@ -497,7 +497,7 @@ work with appropriate agents."""
                         "task_id": task_id,
                         "context_id": simulation_output.context_id,
                         "structured_results_count": len(simulation_output.results),
-                        "response_length": len(response_data.get("text_response", "")),
+                        "response_length": len(str(response_data.get("text_response", ""))),  # type: ignore[arg-type]
                     },
                 )
 

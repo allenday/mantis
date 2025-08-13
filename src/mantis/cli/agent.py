@@ -701,7 +701,7 @@ def serve_single(
         agent_card = load_agent_card_from_json(agent_data)
 
         if verbose:
-            agent_name = agent_card.agent_card.name if hasattr(agent_card, "agent_card") else agent_card.name
+            agent_name = agent_card.agent_card.name if hasattr(agent_card, "agent_card") else getattr(agent_card, 'name', 'Unknown Agent')  # type: ignore[attr-defined]
             console.print(f"[dim]Loaded agent: {agent_name}[/dim]")
 
         # Load custom system prompt if provided (not yet implemented for single serve)
@@ -774,11 +774,11 @@ def serve_single(
                             result = await response.json()
                             if "error" in result:
                                 console.print(
-                                    f"[red]❌ Registry error for {base_card.name}: {result['error']['message']}[/red]"
+                                    f"[red]❌ Registry error for {base_card.name}: {result['error']['message']}[/red]"  # type: ignore[union-attr]
                                 )
                             elif "result" in result and result["result"].get("success"):
                                 console.print(
-                                    f"[green]✅ Successfully registered {base_card.name} with registry[/green]"
+                                    f"[green]✅ Successfully registered {base_card.name} with registry[/green]"  # type: ignore[union-attr]
                                 )
                             else:
                                 console.print(f"[yellow]⚠️ Unexpected registry response: {result}[/yellow]")
@@ -1034,12 +1034,12 @@ def serve_all(
                 base_card = agent_card.agent_card if hasattr(agent_card, "agent_card") else agent_card
 
                 if verbose:
-                    console.print(f"[dim]Creating server for {base_card.name} on port {port}[/dim]")
+                    console.print(f"[dim]Creating server for {base_card.name} on port {port}[/dim]")  # type: ignore[union-attr]
 
                 # Convert AgentCard skills to FastA2A skills
                 fasta2a_skills = []
-                for skill in base_card.skills:
-                    system_prompt = f"You are {base_card.name}.\n\n{base_card.description}\n\nYou are specifically being asked to help with: {skill.name}\n{skill.description}"
+                for skill in base_card.skills:  # type: ignore[union-attr]
+                    system_prompt = f"You are {base_card.name}.\n\n{base_card.description}\n\nYou are specifically being asked to help with: {skill.name}\n{skill.description}"  # type: ignore[union-attr]
 
                     fasta2a_skill = Skill(
                         name=skill.name.lower().replace(" ", "_"),
