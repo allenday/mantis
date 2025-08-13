@@ -758,50 +758,50 @@ def protobuf_to_json_agent_card(
 def load_leader_agent_card(leader_card_name: str) -> Optional["MantisAgentCard"]:
     """
     Load a leader agent card from the agents/cards/ directory structure.
-    
+
     Args:
         leader_card_name: Name of the leader card (e.g., "chief_of_staff", "elon_musk")
-        
+
     Returns:
         MantisAgentCard if found, None otherwise
     """
     import os
     import json
-    from pathlib import Path
-    
+
     try:
         # Get the project root directory
         current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # src/mantis
         project_root = os.path.dirname(os.path.dirname(current_dir))  # mantis project root
         agents_cards_dir = os.path.join(project_root, "agents", "cards")
-        
+
         # Search for the leader card recursively
         leader_card_path = None
         for root, dirs, files in os.walk(agents_cards_dir):
             for file in files:
-                if file.endswith('.json'):
+                if file.endswith(".json"):
                     # Check if filename matches (with or without .json)
-                    file_stem = file.replace('.json', '')
-                    if (file_stem.lower() == leader_card_name.lower() or 
-                        file_stem.lower().replace('_', ' ') == leader_card_name.lower().replace('_', ' ')):
+                    file_stem = file.replace(".json", "")
+                    if file_stem.lower() == leader_card_name.lower() or file_stem.lower().replace(
+                        "_", " "
+                    ) == leader_card_name.lower().replace("_", " "):
                         leader_card_path = os.path.join(root, file)
                         break
             if leader_card_path:
                 break
-        
+
         if not leader_card_path:
             print(f"Leader card '{leader_card_name}' not found in {agents_cards_dir}")
             return None
-            
+
         # Load and parse the JSON agent card
-        with open(leader_card_path, 'r', encoding='utf-8') as f:
+        with open(leader_card_path, "r", encoding="utf-8") as f:
             agent_card_json = json.load(f)
-            
+
         # Convert to MantisAgentCard
         mantis_card = load_agent_card_from_json(agent_card_json)
         print(f"✓ Loaded leader agent card: {mantis_card.agent_card.name} from {leader_card_path}")
         return mantis_card
-        
+
     except Exception as e:
         print(f"Error loading leader card '{leader_card_name}': {e}")
         return None

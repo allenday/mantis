@@ -61,29 +61,29 @@ class SimulationOrchestrator:
                         "agent_name": agent_name,
                         "query_preview": query[:100] + "..." if len(query) > 100 else query,
                         "orchestrator_id": id(self),
-                        "current_results_count_before": len(self.current_structured_results)
-                    }
+                        "current_results_count_before": len(self.current_structured_results),
+                    },
                 )
-                
+
                 # Get structured result
                 simulation_output = await invoke_agent_by_name(agent_name, query, self, context, max_depth)
-                
+
                 # Store structured result for final aggregation
                 self.current_structured_results.append(simulation_output)
-                
+
                 logger.info(
                     "🎯 ORCHESTRATOR: Stored structured result from recursive call",
                     structured_data={
                         "agent_name": agent_name,
                         "orchestrator_id": id(self),
                         "current_results_count_after": len(self.current_structured_results),
-                        "simulation_output_context_id": simulation_output.context_id if simulation_output else "None"
-                    }
+                        "simulation_output_context_id": simulation_output.context_id if simulation_output else "None",
+                    },
                 )
-                
+
                 # Extract text for LLM
                 if simulation_output.response_message and simulation_output.response_message.content:
-                    return simulation_output.response_message.content[0].text
+                    return str(simulation_output.response_message.content[0].text)
                 return "No response generated"
 
             async def bound_invoke_multiple_agents(
@@ -97,29 +97,33 @@ class SimulationOrchestrator:
                     structured_data={
                         "agent_names": agent_names,
                         "agent_count": len(agent_names),
-                        "query_template_preview": query_template[:100] + "..." if len(query_template) > 100 else query_template,
+                        "query_template_preview": (
+                            query_template[:100] + "..." if len(query_template) > 100 else query_template
+                        ),
                         "orchestrator_id": id(self),
-                        "current_results_count_before": len(self.current_structured_results)
-                    }
+                        "current_results_count_before": len(self.current_structured_results),
+                    },
                 )
-                
-                # Get structured results 
-                results_dict = await invoke_multiple_agents(agent_names, query_template, self, individual_contexts, max_depth)
-                
+
+                # Get structured results
+                results_dict = await invoke_multiple_agents(
+                    agent_names, query_template, self, individual_contexts, max_depth
+                )
+
                 # Store all structured results for final aggregation
                 for agent_name, sim_output in results_dict.items():
                     self.current_structured_results.append(sim_output)
-                
+
                 logger.info(
                     "🎯 ORCHESTRATOR: Stored structured results from multiple agents",
                     structured_data={
                         "agent_names": agent_names,
                         "orchestrator_id": id(self),
                         "current_results_count_after": len(self.current_structured_results),
-                        "results_added": len(results_dict)
-                    }
+                        "results_added": len(results_dict),
+                    },
                 )
-                
+
                 # Format results as text for LLM
                 text_results = []
                 for agent_name, sim_output in results_dict.items():
@@ -128,7 +132,7 @@ class SimulationOrchestrator:
                         text_results.append(f"**{agent_name}:** {response_text}")
                     else:
                         text_results.append(f"**{agent_name}:** No response generated")
-                
+
                 return "\n\n".join(text_results)
 
             async def bound_invoke_agent_by_url(
@@ -140,15 +144,15 @@ class SimulationOrchestrator:
                         "agent_url": agent_url,
                         "agent_name": agent_name,
                         "query_preview": query[:100] + "..." if len(query) > 100 else query,
-                    }
+                    },
                 )
-                
+
                 # Call the direct URL invocation (no orchestrator needed for this one)
                 simulation_output = await invoke_agent_by_url(agent_url, query, agent_name or None, context or None)
-                
+
                 # Store structured result for final aggregation
                 self.current_structured_results.append(simulation_output)
-                
+
                 logger.info(
                     "🎯 ORCHESTRATOR: Stored structured result from URL invocation",
                     structured_data={
@@ -156,12 +160,12 @@ class SimulationOrchestrator:
                         "agent_name": agent_name,
                         "orchestrator_id": id(self),
                         "current_results_count": len(self.current_structured_results),
-                    }
+                    },
                 )
-                
+
                 # Extract text for LLM
                 if simulation_output.response_message and simulation_output.response_message.content:
-                    return simulation_output.response_message.content[0].text
+                    return str(simulation_output.response_message.content[0].text)
                 return "No response generated"
 
             self.tools.update(
@@ -259,17 +263,17 @@ class SimulationOrchestrator:
                     structured_data={
                         "context_id": simulation_input.context_id,
                         "agent_name": target_agent_card.agent_card.name,
-                    }
+                    },
                 )
-                
+
                 from ..adk.router import ChiefOfStaffRouter
-                
+
                 # Pass tools to ADK router (empty dict if tools disabled)
                 adk_tools = {} if disable_tools else self.tools
                 adk_router = ChiefOfStaffRouter(tools=adk_tools, orchestrator=self)
-                
+
                 return await adk_router.route_simulation(simulation_input)
-            
+
             # Traditional execution path
             task = await self._execute_task_with_agent(
                 query=simulation_input.query,
@@ -513,21 +517,21 @@ class SimulationOrchestrator:
     def _should_use_adk_routing(self, agent_card: mantis_persona_pb2.MantisAgentCard, disable_tools: bool) -> bool:
         """Determine if simulation should be routed through ADK."""
         import os
-        
+
         # Check if ADK is enabled via environment variable
-        adk_enabled = os.getenv('ENABLE_ADK', 'false').lower() == 'true'
+        adk_enabled = os.getenv("ENABLE_ADK", "false").lower() == "true"
         if not adk_enabled:
             return False
-        
+
         # Don't use ADK if tools are disabled (max_depth <= 0)
         if disable_tools:
             logger.debug("ADK routing disabled due to tools being disabled")
             return False
-        
+
         # Check if agent is Chief of Staff
         agent_name = agent_card.agent_card.name.lower()
         is_chief_of_staff = "chief" in agent_name and "staff" in agent_name
-        
+
         logger.debug(
             "ADK routing decision",
             structured_data={
@@ -535,8 +539,8 @@ class SimulationOrchestrator:
                 "disable_tools": disable_tools,
                 "agent_name": agent_card.agent_card.name,
                 "is_chief_of_staff": is_chief_of_staff,
-                "will_use_adk": is_chief_of_staff and adk_enabled and not disable_tools
-            }
+                "will_use_adk": is_chief_of_staff and adk_enabled and not disable_tools,
+            },
         )
-        
+
         return is_chief_of_staff

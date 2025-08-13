@@ -704,8 +704,8 @@ def serve_single(
         console.print(f"[cyan]💡 Serving {len(base_card.skills)} skills:[/cyan]")
         for skill in base_card.skills:
             console.print(f"  • {skill.name}")
-        
-        console.print(f"[cyan]🔧 Backend: ADK (Google Agent Development Kit)[/cyan]")
+
+        console.print("[cyan]🔧 Backend: ADK (Google Agent Development Kit)[/cyan]")
         console.print(f"\n[yellow]🌐 Server starting on http://{host}:{port}[/yellow]")
         console.print(f"[yellow]📋 Will register with A2A registry at: {registry_url}[/yellow]")
         console.print("\n[dim]Press Ctrl+C to stop the server[/dim]")
@@ -728,12 +728,15 @@ def serve_single(
 
         # Use ADK A2A server for all agents (consistent with serve-all, fail hard)
         from ..adk.a2a_server import create_adk_a2a_server_from_agent_card
+
         adk_a2a_server = create_adk_a2a_server_from_agent_card(base_card, port=port)
-        
+
         # Use the FastAPI app from the ADK A2A server
         app = adk_a2a_server.app
         if verbose:
-            console.print(f"[dim]Native ADK A2A Server initialized with {len(adk_a2a_server.orchestrator.tools)} tools[/dim]")
+            console.print(
+                f"[dim]Native ADK A2A Server initialized with {len(adk_a2a_server.orchestrator.tools)} tools[/dim]"
+            )
 
         async def register_agent() -> None:
             """Register agent with the A2A registry using JSON-RPC."""
@@ -828,7 +831,6 @@ def serve_all(
     try:
         import os
         import asyncio
-        import aiohttp
         import uvicorn
 
         agents_path = Path(agents_dir)
@@ -879,11 +881,11 @@ def serve_all(
 
                 # All agents use ADK backend
                 console.print(f"  ✓ [cyan]{base_card.name}[/cyan] ({len(base_card.skills)} skills) [blue]→ ADK[/blue]")
-                
+
                 if verbose:
                     console.print(f"    [dim]File: {agent_file}[/dim]")
                     console.print(f"    [dim]URL: {base_card.url}[/dim]")
-                    console.print(f"    [dim]Backend: ADK (Google Agent Development Kit)[/dim]")
+                    console.print("    [dim]Backend: ADK (Google Agent Development Kit)[/dim]")
             except Exception as e:
                 console.print(f"[red]❌ Failed to load {agent_file.name}: {e}[/red]")
                 continue
@@ -930,39 +932,43 @@ def serve_all(
                 # Use synchronous requests instead of aiohttp to avoid SSL issues
                 if verbose:
                     console.print(f"[dim]Attempting to register {base_card.name} with {registry_url}/jsonrpc[/dim]")
-                
+
                 # Use requests library with retry for registry readiness
                 import requests
                 import time
-                
+
                 # Retry registration with backoff for registry readiness
                 max_retries = 5
                 retry_delay = 5
-                
+
                 for attempt in range(max_retries):
                     try:
                         response = requests.post(
                             f"{registry_url}/jsonrpc",
                             json=payload,
                             headers={"Content-Type": "application/json"},
-                            timeout=10
+                            timeout=10,
                         )
                         break  # Success, exit retry loop
-                    except requests.exceptions.ConnectionError as e:
+                    except requests.exceptions.ConnectionError:
                         if attempt < max_retries - 1:
                             if verbose:
-                                console.print(f"[dim]Registry not ready, retrying in {retry_delay}s (attempt {attempt + 1}/{max_retries})[/dim]")
+                                console.print(
+                                    f"[dim]Registry not ready, retrying in {retry_delay}s (attempt {attempt + 1}/{max_retries})[/dim]"
+                                )
                             time.sleep(retry_delay)
-                            retry_delay *= 1.5  # Exponential backoff
+                            retry_delay = int(retry_delay * 1.5)  # Exponential backoff
                             continue
                         else:
                             # Final attempt failed
-                            console.print(f"[yellow]⚠️ Registry unreachable after {max_retries} attempts for {base_card.name}[/yellow]")
+                            console.print(
+                                f"[yellow]⚠️ Registry unreachable after {max_retries} attempts for {base_card.name}[/yellow]"
+                            )
                             return False
                     except requests.RequestException as e:
                         console.print(f"[yellow]⚠️ Network error registering {base_card.name}: {e}[/yellow]")
                         return False
-                
+
                 try:
                     if response.status_code == 200:
                         result = response.json()
@@ -1046,14 +1052,15 @@ def serve_all(
 
                 # Use ADK A2A servers for all agents (always enabled, fail hard)
                 from ..adk.a2a_server import create_adk_a2a_server_from_agent_card
+
                 adk_a2a_server = create_adk_a2a_server_from_agent_card(base_card, port=port)
-                
+
                 # Use the FastAPI app from the ADK A2A server
                 servers.append((adk_a2a_server.app, port, f"{base_card.name} (Native ADK A2A)"))
                 console.print(f"  ✓ [green]{base_card.name}[/green] (Native ADK A2A Server)")
                 if verbose:
                     console.print(f"    [dim]URL: {base_card.url}[/dim]")
-                    console.print(f"    [dim]Backend: Native ADK with FastAPI A2A Protocol[/dim]")
+                    console.print("    [dim]Backend: Native ADK with FastAPI A2A Protocol[/dim]")
                     console.print(f"    [dim]Tools: {len(adk_a2a_server.orchestrator.tools)} orchestration tools[/dim]")
 
                 registration_tasks.append(register_agent_with_registry(agent_card, registry_url))

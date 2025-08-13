@@ -20,19 +20,15 @@ logger = get_structured_logger(__name__)
 def create_adk_router_app(router: ChiefOfStaffRouter, name: str = "ADK Chief of Staff Router") -> FastAPI:
     """
     Create FastAPI application for ADK router.
-    
+
     Args:
         router: ChiefOfStaffRouter instance
         name: Server name for identification
-        
+
     Returns:
         FastAPI application with A2A-compatible endpoints
     """
-    app = FastAPI(
-        title=name,
-        description="ADK-powered orchestration router with A2A boundaries",
-        version="1.0.0"
-    )
+    app = FastAPI(title=name, description="ADK-powered orchestration router with A2A boundaries", version="1.0.0")
 
     @app.get("/health")
     async def health_check() -> Dict[str, Any]:
@@ -48,13 +44,13 @@ def create_adk_router_app(router: ChiefOfStaffRouter, name: str = "ADK Chief of 
     async def simulate(request: Dict[str, Any]) -> Union[Dict[str, Any], JSONResponse]:
         """
         A2A-compatible simulation endpoint.
-        
+
         Accepts A2A SimulationInput and returns A2A SimulationOutput via ADK routing.
         """
         try:
             # Convert dict to protobuf SimulationInput
             simulation_input = mantis_core_pb2.SimulationInput()
-            
+
             # Basic field mapping - extend as needed
             if "query" in request:
                 simulation_input.query = request["query"]
@@ -62,6 +58,7 @@ def create_adk_router_app(router: ChiefOfStaffRouter, name: str = "ADK Chief of 
                 simulation_input.context_id = request["context_id"]
             else:
                 import uuid
+
                 simulation_input.context_id = f"adk-{uuid.uuid4().hex[:8]}"
             if "execution_strategy" in request:
                 simulation_input.execution_strategy = request["execution_strategy"]
@@ -77,7 +74,7 @@ def create_adk_router_app(router: ChiefOfStaffRouter, name: str = "ADK Chief of 
                 structured_data={
                     "context_id": simulation_input.context_id,
                     "query_length": len(simulation_input.query),
-                }
+                },
             )
 
             # Route through ADK
@@ -85,17 +82,14 @@ def create_adk_router_app(router: ChiefOfStaffRouter, name: str = "ADK Chief of 
 
             # Convert protobuf response to dict
             from google.protobuf.json_format import MessageToDict
-            response_dict = MessageToDict(
-                simulation_output,
-                preserving_proto_field_name=True
-            )
+
+            response_dict = MessageToDict(simulation_output, preserving_proto_field_name=True)
 
             return JSONResponse(content=response_dict)
 
         except Exception as e:
             logger.error(
-                "ADK simulation failed", 
-                structured_data={"error": str(e), "request_keys": list(request.keys())}
+                "ADK simulation failed", structured_data={"error": str(e), "request_keys": list(request.keys())}
             )
             raise HTTPException(status_code=500, detail=f"Simulation failed: {str(e)}")
 
@@ -110,7 +104,7 @@ def create_adk_router_app(router: ChiefOfStaffRouter, name: str = "ADK Chief of 
             "model": model_name,
             "full_model_spec": DEFAULT_MODEL,
             "endpoints": "/simulate,/health",
-            "status": "operational"
+            "status": "operational",
         }
 
     return app
