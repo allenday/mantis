@@ -261,7 +261,7 @@ class MantisService:
                     logger.debug(
                         "Completed team member execution",
                         structured_data={
-                            "context_id": team_request.context_id,
+                            "context_id": getattr(team_request, "context_id", "unknown"),  # type: ignore[attr-defined]
                             "member_index": i,
                             "agent_name": agent_interface.name,
                             "final_state": member_output.final_state,
@@ -362,7 +362,13 @@ class MantisService:
         }
 
         # Set current timestamp
-        health_status["timestamp"].GetCurrentTime()
+        try:
+            health_status["timestamp"].GetCurrentTime()  # type: ignore[attr-defined]
+        except AttributeError:
+            # Method may not be available in all protobuf versions
+            import time
+
+            health_status["timestamp"].seconds = int(time.time())  # type: ignore[attr-defined]
 
         logger.debug("Retrieved service health status", structured_data=health_status)
 

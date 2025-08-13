@@ -10,11 +10,107 @@ from typing import Dict, Optional, TYPE_CHECKING
 from ..observability.logger import get_structured_logger
 from ..core.orchestrator import current_agent_context
 from ..proto.mantis.v1 import mantis_core_pb2
+from ..proto import a2a_pb2
 
 if TYPE_CHECKING:
     from ..core.orchestrator import SimulationOrchestrator
 
 logger = get_structured_logger(__name__)
+
+
+async def invoke_agent_by_url(
+    agent_url: str,
+    query: str,
+    agent_name: Optional[str] = None,
+    context: Optional[str] = None,
+) -> mantis_core_pb2.SimulationOutput:
+    """
+    Invoke agent directly by URL, bypassing registry lookup.
+
+    Useful for direct coordination and N-replica querying where we know
+    the exact agent endpoints.
+
+    Args:
+        agent_url: Direct URL to the agent (e.g., http://localhost:9203)
+        query: Query to send to agent
+        agent_name: Optional display name for the agent
+        context: Optional context
+
+    Returns:
+        Complete SimulationOutput from the invoked agent
+
+    Raises:
+        Exception: If agent call fails
+    """
+    from .base import log_tool_invocation, log_tool_result
+
+    agent_ctx = current_agent_context.get({})
+    invoking_agent = agent_ctx.get("agent_name", "unknown")
+    task_id = agent_ctx.get("task_id", "unknown")
+    context_id = agent_ctx.get("context_id", "unknown")
+
+    display_name = agent_name or f"Agent@{agent_url}"
+
+    log_tool_invocation(
+        "recursive_invocation",
+        "invoke_agent_by_url",
+        {"agent_url": agent_url, "agent_name": display_name, "query_length": len(query)},
+    )
+
+    logger.info(
+        "Invoking agent directly by URL",
+        structured_data={
+            "invoking_agent": invoking_agent,
+            "target_url": agent_url,
+            "target_agent": display_name,
+            "task_id": task_id,
+            "context_id": context_id,
+        },
+    )
+
+    try:
+        # Use the existing direct A2A call function
+        result = await _call_agent_directly_a2a(
+            agent_name=display_name, agent_url=agent_url, query=query, context=context
+        )
+
+        log_tool_result(
+            "recursive_invocation",
+            "invoke_agent_by_url",
+            {
+                "agent_url": agent_url,
+                "agent_name": display_name,
+                "success": True,
+                "response_length": (
+                    len(result.response_message.content[0].text) if result.response_message.content else 0
+                ),
+            },
+        )
+
+        logger.info(
+            "Successfully completed direct agent invocation by URL",
+            structured_data={
+                "invoking_agent": invoking_agent,
+                "target_url": agent_url,
+                "target_agent": display_name,
+                "success": True,
+            },
+        )
+
+        return result
+
+    except Exception as e:
+        logger.error(
+            "Direct agent invocation by URL failed",
+            structured_data={
+                "invoking_agent": invoking_agent,
+                "target_url": agent_url,
+                "target_agent": display_name,
+                "error": str(e),
+                "task_id": task_id,
+            },
+        )
+        raise
 
 
 async def invoke_agent_by_name(
@@ -23,7 +119,7 @@ async def invoke_agent_by_name(
     orchestrator: "SimulationOrchestrator",
     context: Optional[str] = None,
     max_depth: int = 1,
-) -> str:
+) -> mantis_core_pb2.SimulationOutput:
     """
     Invoke specific agent through recursive SimulationInput execution.
 
@@ -37,7 +133,7 @@ async def invoke_agent_by_name(
         max_depth: Maximum recursion depth
 
     Returns:
-        Agent's response text
+        Complete SimulationOutput from the invoked agent
 
     Raises:
         ValueError: If agent not found in registry
@@ -51,18 +147,41 @@ async def invoke_agent_by_name(
     # Validate agent exists in registry
     await _validate_agent_exists(agent_name)
 
-    # SAFETY: Enforce max_depth limit to prevent infinite recursion
-    if max_depth > 0:
-        logger.warning(
-            "Recursive invocation attempted with max_depth > 0, forcing to 0 for safety",
-            structured_data={
-                "invoking_agent": invoking_agent,
-                "target_agent": agent_name,
-                "requested_max_depth": max_depth,
-                "enforced_max_depth": 0,
-            },
+    # HOTFIX: Bypass registry complexity - hardcode agent URLs for basic coordination
+    # This is a temporary fix to get coordination working without registry dependency
+
+    logger.info(
+        "🔧 HOTFIX: Using hardcoded agent URLs, bypassing registry",
+        structured_data={
+            "invoking_agent": invoking_agent,
+            "target_agent": agent_name,
+            "original_max_depth": max_depth,
+        },
+    )
+
+    # Map actual Docker agent names to their container ports
+    # These are the agents running in Docker containers with proper registry registration
+    agent_url_map = {
+        "John Malone": "http://localhost:9202",
+        "Steve Jobs": "http://localhost:9203",
+        "Peter Drucker": "http://localhost:9204",
+        "Chief Of Staff": "http://localhost:9201",
+        # Note: Other agents like Niccolo Machiavelli, Andrew Carnegie are available via agent-server multiplex
+        # but we'll use direct container agents first for reliability
+    }
+
+    if agent_name in agent_url_map:
+        # Use direct A2A call instead of recursive simulation
+        return await _call_agent_directly_a2a(
+            agent_name=agent_name, agent_url=agent_url_map[agent_name], query=query, context=context
         )
-        max_depth = 0
+
+    # Fallback: Force max_depth to 0 for safety if not in hardcoded list
+    max_depth = 0
+    logger.warning(
+        "Agent not in hardcoded list, using fallback with max_depth=0",
+        structured_data={"agent_name": agent_name, "available_agents": list(agent_url_map.keys())},
+    )
 
     logger.info(
         "Invoking agent through recursive simulation",
@@ -135,15 +254,15 @@ Please respond as {agent_name} would, drawing on your expertise and perspective.
         # Execute recursive simulation
         nested_output = await orchestrator.execute_simulation(simulation_input)
 
-        # Extract response text
-        response_text = "No response generated"
-        if nested_output.response_message and nested_output.response_message.content:
-            response_text = nested_output.response_message.content[0].text
-
-        # Aggregate nested artifacts to parent task
+        # Aggregate nested artifacts to parent task (for legacy compatibility)
         await _aggregate_nested_output(
             parent_task_id=task_id, nested_output=nested_output, orchestrator=orchestrator, source_agent=agent_name
         )
+
+        # Extract response text for logging
+        response_text = "No response generated"
+        if nested_output.response_message and nested_output.response_message.content:
+            response_text = nested_output.response_message.content[0].text
 
         logger.info(
             "Successfully completed recursive agent invocation",
@@ -155,7 +274,8 @@ Please respond as {agent_name} would, drawing on your expertise and perspective.
             },
         )
 
-        return response_text
+        # Return the complete structured SimulationOutput instead of just text
+        return nested_output
 
     except Exception as e:
         logger.error(
@@ -176,7 +296,7 @@ async def invoke_multiple_agents(
     orchestrator: "SimulationOrchestrator",
     individual_contexts: Optional[list] = None,
     max_depth: int = 1,
-) -> Dict[str, str]:
+) -> Dict[str, mantis_core_pb2.SimulationOutput]:
     """
     Invoke multiple agents in parallel with proper artifact aggregation.
 
@@ -188,7 +308,7 @@ async def invoke_multiple_agents(
         max_depth: Maximum recursion depth
 
     Returns:
-        Dictionary mapping agent names to responses
+        Dictionary mapping agent names to complete SimulationOutput objects
     """
     agent_ctx = current_agent_context.get({})
     invoking_agent = agent_ctx.get("agent_name", "unknown")
@@ -219,15 +339,32 @@ async def invoke_multiple_agents(
     try:
         responses = await asyncio.gather(*[task for _, task in tasks], return_exceptions=True)
 
-        results = {}
+        results: Dict[str, mantis_core_pb2.SimulationOutput] = {}
         for (agent_name, _), response in zip(tasks, responses):
             if isinstance(response, Exception):
-                results[agent_name] = f"Error: {str(response)}"
+                # Create error SimulationOutput for failed agents
+                error_output = mantis_core_pb2.SimulationOutput()
+                error_output.context_id = f"error-{agent_name}"
+                error_output.final_state = a2a_pb2.TASK_STATE_FAILED
+
+                # Create error message
+                error_msg = a2a_pb2.Message()
+                error_msg.role = a2a_pb2.ROLE_AGENT
+                error_part = a2a_pb2.Part()
+                error_part.text = f"Error: {str(response)}"
+                error_msg.content.append(error_part)
+                error_output.response_message.CopyFrom(error_msg)
+
+                results[agent_name] = error_output
                 logger.error(f"Agent {agent_name} failed", structured_data={"error": str(response)})
             else:
-                results[agent_name] = str(response)
+                # Type guard: response should be SimulationOutput if not an Exception
+                assert isinstance(response, mantis_core_pb2.SimulationOutput), (
+                    f"Expected SimulationOutput, got {type(response)}"
+                )
+                results[agent_name] = response
 
-        successful_count = len([r for r in results.values() if not r.startswith("Error:")])
+        successful_count = len([r for r in results.values() if r.final_state != a2a_pb2.TASK_STATE_FAILED])
         logger.info(
             "Multiple agent invocation completed",
             structured_data={
@@ -247,25 +384,199 @@ async def invoke_multiple_agents(
         raise
 
 
+async def _call_agent_directly_a2a(
+    agent_name: str, agent_url: str, query: str, context: Optional[str] = None
+) -> mantis_core_pb2.SimulationOutput:
+    """
+    HOTFIX: Call agent directly via A2A protocol, bypassing registry complexity.
+    """
+    import aiohttp
+    import uuid
+    import asyncio
+
+    logger.info(f"🔧 HOTFIX: Calling {agent_name} directly at {agent_url}")
+
+    # CRITICAL FIX: Add agent availability validation before attempting coordination
+    try:
+        await _validate_agent_availability(agent_url, agent_name)
+    except Exception as validation_error:
+        logger.error(f"❌ HOTFIX: Agent {agent_name} at {agent_url} is not available: {validation_error}")
+        return _create_unavailable_agent_output(agent_name, str(validation_error))
+
+    try:
+        # Format query with context
+        full_query = f"""You are {agent_name}. Please provide your perspective on the following:
+
+{query}
+
+{f"Additional context: {context}" if context else ""}
+
+Please respond as {agent_name} would, drawing on your expertise and perspective. Keep your response focused and authentic to your role."""
+
+        async with aiohttp.ClientSession() as session:
+            # Step 1: Send message/send
+            message_request = {
+                "jsonrpc": "2.0",
+                "method": "message/send",
+                "params": {
+                    "message": {
+                        "role": "user",
+                        "parts": [{"kind": "text", "text": full_query}],
+                        "kind": "message",
+                        "messageId": str(uuid.uuid4()),
+                    }
+                },
+                "id": str(uuid.uuid4()),
+            }
+
+            async with session.post(
+                agent_url,
+                json=message_request,
+                headers={"Content-Type": "application/json"},
+                timeout=aiohttp.ClientTimeout(total=30),
+            ) as response:
+                if response.status != 200:
+                    raise Exception(f"Message send failed: HTTP {response.status}")
+
+                send_result = await response.json()
+                if "error" in send_result and send_result["error"] is not None:
+                    raise Exception(f"JSON-RPC error: {send_result['error']}")
+
+                task_id = send_result.get("result", {}).get("id")
+                if not task_id:
+                    raise Exception(f"No task ID returned: {send_result}")
+
+            # Step 2: Poll for result with reasonable timeout
+            for poll_attempt in range(30):  # 60 seconds max
+                await asyncio.sleep(2)
+
+                tasks_request = {
+                    "jsonrpc": "2.0",
+                    "method": "tasks/get",
+                    "params": {"id": task_id},
+                    "id": str(uuid.uuid4()),
+                }
+
+                async with session.post(
+                    agent_url,
+                    json=tasks_request,
+                    headers={"Content-Type": "application/json"},
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as response:
+                    if response.status != 200:
+                        continue
+
+                    task_result = await response.json()
+                    if "error" in task_result and task_result["error"] is not None:
+                        raise Exception(f"Poll error: {task_result['error']}")
+
+                    task_data = task_result.get("result", {})
+                    task_state = task_data.get("status", {}).get("state")
+
+                    if task_state == "completed":
+                        result_text = task_data.get("result", "No response generated")
+
+                        # Create SimulationOutput for consistency
+                        output = mantis_core_pb2.SimulationOutput()
+                        output.context_id = f"hotfix-{agent_name.lower().replace(' ', '-')}"
+                        output.final_state = a2a_pb2.TASK_STATE_COMPLETED
+
+                        # Create response message
+                        response_msg = a2a_pb2.Message()
+                        response_msg.role = a2a_pb2.ROLE_AGENT
+                        response_part = a2a_pb2.Part()
+                        response_part.text = result_text
+                        response_msg.content.append(response_part)
+                        output.response_message.CopyFrom(response_msg)
+
+                        logger.info(f"✅ HOTFIX: {agent_name} responded successfully in {poll_attempt * 2} seconds")
+                        return output
+
+                    elif task_state == "failed":
+                        error_info = task_data.get("status", {}).get("error", "Unknown error")
+                        raise Exception(f"Task failed: {error_info}")
+
+                    elif task_state in ["pending", "running"]:
+                        continue
+
+            raise Exception(f"Polling timeout after 60 seconds for {agent_name}")
+
+    except Exception as e:
+        logger.error(f"❌ HOTFIX: Direct A2A call to {agent_name} failed: {e}")
+
+        # Return error SimulationOutput
+        error_output = mantis_core_pb2.SimulationOutput()
+        error_output.context_id = f"error-{agent_name.lower().replace(' ', '-')}"
+        error_output.final_state = a2a_pb2.TASK_STATE_FAILED
+
+        error_msg = a2a_pb2.Message()
+        error_msg.role = a2a_pb2.ROLE_AGENT
+        error_part = a2a_pb2.Part()
+        error_part.text = f"Error calling {agent_name}: {str(e)}"
+        error_msg.content.append(error_part)
+        error_output.response_message.CopyFrom(error_msg)
+
+        return error_output
+
+
+async def _validate_agent_availability(agent_url: str, agent_name: str) -> None:
+    """
+    CRITICAL FIX: Validate that agent is reachable before attempting coordination.
+
+    Performs a quick health check to prevent coordination failures and server disconnections.
+    """
+    import aiohttp
+    import asyncio
+
+    try:
+        # Quick health check with short timeout
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5, connect=2)) as session:
+            # Try to get agent card first
+            async with session.get(f"{agent_url}/.well-known/agent.json") as response:
+                if response.status == 200:
+                    agent_card = await response.json()
+                    actual_name = agent_card.get("name", "Unknown")
+                    logger.info(
+                        f"✅ HOTFIX: Agent {agent_name} is available at {agent_url} (actual name: {actual_name})"
+                    )
+                    return
+                else:
+                    raise Exception(f"Agent card endpoint returned HTTP {response.status}")
+
+    except asyncio.TimeoutError:
+        raise Exception("Agent health check timeout after 5s")
+    except aiohttp.ClientError as e:
+        raise Exception(f"Network error: {e}")
+    except Exception as e:
+        raise Exception(f"Health check failed: {e}")
+
+
+def _create_unavailable_agent_output(agent_name: str, error_msg: str) -> mantis_core_pb2.SimulationOutput:
+    """Create SimulationOutput for unavailable agent."""
+    error_output = mantis_core_pb2.SimulationOutput()
+    error_output.context_id = f"unavailable-{agent_name.lower().replace(' ', '-')}"
+    error_output.final_state = a2a_pb2.TASK_STATE_FAILED
+
+    error_msg_obj = a2a_pb2.Message()
+    error_msg_obj.role = a2a_pb2.ROLE_AGENT
+    error_part = a2a_pb2.Part()
+    error_part.text = f"Agent {agent_name} is not available for coordination: {error_msg}"
+    error_msg_obj.content.append(error_part)
+    error_output.response_message.CopyFrom(error_msg_obj)
+
+    return error_output
+
+
 async def _validate_agent_exists(agent_name: str) -> None:
-    """Validate that agent exists in registry or mock agents."""
+    """Validate that agent exists in registry - fail fast if not available."""
     from ..tools.agent_registry import list_all_agents
-    from ..tools.team_formation import _get_mock_agents
     from ..agent import AgentInterface
 
     try:
-        # Try to get agents from registry first
-        try:
-            all_agents = await list_all_agents()
-            if not all_agents:
-                logger.warning("Registry returned no agents, using mock agents for validation")
-                all_agents = _get_mock_agents()
-        except Exception as registry_error:
-            logger.warning(f"Registry access failed: {registry_error}, using mock agents for validation")
-            all_agents = _get_mock_agents()
-
+        # Get agents from registry - fail fast if unavailable
+        all_agents = await list_all_agents()
         if not all_agents:
-            raise ValueError("No agents available from registry or local fallback")
+            raise RuntimeError("Registry returned no agents - agent validation failed")
 
         # Check if agent exists by name or ID
         available_agents = []

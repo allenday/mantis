@@ -27,8 +27,10 @@ services:
     environment:
       - PYTHONPATH=/app/src
       - REGISTRY_URL=http://a2a-registry:8080
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}  # For ADK Gemini models
     volumes:
-      - ./agents:/app/agents:ro
+      - ./agents-quick:/app/agents-quick:ro
       - ./src:/app/src:ro
     depends_on:
       - a2a-registry
@@ -37,8 +39,125 @@ services:
       - agent-network
     command: [
       "python", "-m", "mantis", "agent", "serve-all",
-      "--agents-dir", "/app/agents",
+      "--agents-dir", "/app/agents-quick",
       "--base-port", "9001",
+      "--host", "0.0.0.0",
+      "--registry-url", "http://a2a-registry:8080",
+      "--verbose"
+    ]
+
+  # Individual Debug Agents - Explicit port mappings for debugging
+  chief-of-staff:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.agent-server
+    container_name: chief-of-staff
+    ports:
+      - "9201:9201"
+    environment:
+      - PYTHONPATH=/app/src
+      - REGISTRY_URL=http://a2a-registry:8080
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+    volumes:
+      - ./agents-quick:/app/agents-quick:ro
+      - ./src:/app/src:ro
+    depends_on:
+      - a2a-registry
+    restart: unless-stopped
+    networks:
+      - agent-network
+    command: [
+      "python", "-m", "mantis", "agent", "serve-single",
+      "/app/agents-quick/chief_of_staff.json",
+      "--port", "9201",
+      "--host", "0.0.0.0",
+      "--registry-url", "http://a2a-registry:8080",
+      "--verbose"
+    ]
+
+  john-malone:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.agent-server
+    container_name: john-malone
+    ports:
+      - "9202:9202"
+    environment:
+      - PYTHONPATH=/app/src
+      - REGISTRY_URL=http://a2a-registry:8080
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+    volumes:
+      - ./agents-quick:/app/agents-quick:ro
+      - ./src:/app/src:ro
+    depends_on:
+      - a2a-registry
+    restart: unless-stopped
+    networks:
+      - agent-network
+    command: [
+      "python", "-m", "mantis", "agent", "serve-single",
+      "/app/agents-quick/john_malone.json",
+      "--port", "9202",
+      "--host", "0.0.0.0",
+      "--registry-url", "http://a2a-registry:8080",
+      "--verbose"
+    ]
+
+  steve-jobs:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.agent-server
+    container_name: steve-jobs
+    ports:
+      - "9203:9203"
+    environment:
+      - PYTHONPATH=/app/src
+      - REGISTRY_URL=http://a2a-registry:8080
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+    volumes:
+      - ./agents-quick:/app/agents-quick:ro
+      - ./src:/app/src:ro
+    depends_on:
+      - a2a-registry
+    restart: unless-stopped
+    networks:
+      - agent-network
+    command: [
+      "python", "-m", "mantis", "agent", "serve-single",
+      "/app/agents-quick/steve_jobs.json",
+      "--port", "9203",
+      "--host", "0.0.0.0",
+      "--registry-url", "http://a2a-registry:8080",
+      "--verbose"
+    ]
+
+  peter-drucker:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.agent-server
+    container_name: peter-drucker
+    ports:
+      - "9204:9204"
+    environment:
+      - PYTHONPATH=/app/src
+      - REGISTRY_URL=http://a2a-registry:8080
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+    volumes:
+      - ./agents-quick:/app/agents-quick:ro
+      - ./src:/app/src:ro
+    depends_on:
+      - a2a-registry
+    restart: unless-stopped
+    networks:
+      - agent-network
+    command: [
+      "python", "-m", "mantis", "agent", "serve-single",
+      "/app/agents-quick/peter_drucker.json",
+      "--port", "9204",
       "--host", "0.0.0.0",
       "--registry-url", "http://a2a-registry:8080",
       "--verbose"

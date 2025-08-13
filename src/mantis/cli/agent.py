@@ -25,7 +25,7 @@ def display_agent_card_summary(agent_card: Any, verbose: bool = False) -> None:
     mantis_card = ensure_mantis_agent_card(agent_card)
 
     # Header with persona title
-    title = mantis_card.persona_title if mantis_card.persona_title else mantis_card.agent_card.name
+    title = getattr(mantis_card, "persona_title", None) or mantis_card.agent_card.name  # type: ignore[attr-defined]
     console.print(f"\n[bold magenta]✨ {title}[/bold magenta]")
 
     # Basic info panel
@@ -62,8 +62,8 @@ def display_agent_card_summary(agent_card: Any, verbose: bool = False) -> None:
         )
 
         # Persona Characteristics from extension
-        char = mantis_card.persona_characteristics
-        if char.core_principles or char.communication_style or char.thinking_patterns:
+        char = getattr(mantis_card, "persona_characteristics", None)  # type: ignore[attr-defined]
+        if char and (char.core_principles or char.communication_style or char.thinking_patterns):
             # Find the persona-characteristics extension for header info
             persona_ext = None
             for ext in mantis_card.agent_card.capabilities.extensions:
@@ -124,9 +124,9 @@ def display_agent_card_summary(agent_card: Any, verbose: bool = False) -> None:
             console.print(persona_table)
 
         # Competency Scores from extension
-        comp = mantis_card.competency_scores
+        comp = getattr(mantis_card, "competency_scores", None)  # type: ignore[attr-defined]
 
-        if comp.competency_scores or comp.role_adaptation:
+        if comp and (comp.competency_scores or comp.role_adaptation):
             # Find the competency-scores extension for header info
             competency_ext = None
             for ext in mantis_card.agent_card.capabilities.extensions:
@@ -232,8 +232,10 @@ def display_agent_card_summary(agent_card: Any, verbose: bool = False) -> None:
                 console.print(role_table)
 
         # Domain Expertise from extension
-        domain = mantis_card.domain_expertise
-        if domain.primary_domains or domain.methodologies or domain.secondary_domains or domain.tools_and_frameworks:
+        domain = getattr(mantis_card, "domain_expertise", None)  # type: ignore[attr-defined]
+        if domain and (
+            domain.primary_domains or domain.methodologies or domain.secondary_domains or domain.tools_and_frameworks
+        ):
             # Find the domain-expertise extension for header info
             domain_ext = None
             for ext in mantis_card.agent_card.capabilities.extensions:
@@ -292,8 +294,8 @@ def display_agent_card_summary(agent_card: Any, verbose: bool = False) -> None:
             console.print(domain_table)
 
         # Skills Summary from extension
-        skills = mantis_card.skills_summary
-        if (
+        skills = getattr(mantis_card, "skills_summary", None)  # type: ignore[attr-defined]
+        if skills and (
             skills.primary_skill_tags
             or skills.secondary_skill_tags
             or skills.skill_overview
@@ -457,7 +459,9 @@ def inspect(
 
                         if verbose:
                             agent_name = (
-                                agent_card.agent_card.name if hasattr(agent_card, "agent_card") else agent_card.name
+                                agent_card.agent_card.name
+                                if hasattr(agent_card, "agent_card")
+                                else getattr(agent_card, "name", "Unknown Agent")  # type: ignore[attr-defined]
                             )
                             console.print(f"[dim]✅ Agent found: {agent_name}[/dim]")
 
@@ -580,7 +584,11 @@ def generate(
 
         if not quiet:
             # Get the name from the appropriate source
-            agent_name = agent_card.agent_card.name if hasattr(agent_card, "agent_card") else agent_card.name
+            agent_name = (
+                agent_card.agent_card.name
+                if hasattr(agent_card, "agent_card")
+                else getattr(agent_card, "name", "Unknown Agent")
+            )  # type: ignore[attr-defined]
             console.print(f"\n[bold green]✅ Successfully generated AgentCard: {agent_name}[/bold green]")
 
             # Display AgentCard information
@@ -593,7 +601,11 @@ def generate(
                 output_dir = output if output.is_dir() else Path(output)
                 output_dir.mkdir(parents=True, exist_ok=True)
                 # Get name from appropriate source
-                persona_name = agent_card.agent_card.name if hasattr(agent_card, "agent_card") else agent_card.name
+                persona_name = (
+                    agent_card.agent_card.name
+                    if hasattr(agent_card, "agent_card")
+                    else getattr(agent_card, "name", "Unknown Agent")
+                )  # type: ignore[attr-defined]
                 filename = f"{persona_name.lower().replace(' ', '_')}_persona.json"
                 output_file = output_dir / filename
             else:
@@ -615,12 +627,12 @@ def generate(
                 if verbose:
                     # Get appropriate references for MantisAgentCard vs AgentCard
                     base_card = agent_card.agent_card if hasattr(agent_card, "agent_card") else agent_card
-                    skills_count = len(base_card.skills)
-                    extensions_count = len(base_card.capabilities.extensions)
+                    skills_count = len(base_card.skills)  # type: ignore[union-attr]
+                    extensions_count = len(base_card.capabilities.extensions)  # type: ignore[union-attr]
                     console.print(
                         f"[dim]Saved A2A AgentCard with {skills_count} skills and {extensions_count} extensions[/dim]"
                     )
-                    console.print(f"[dim]A2A URL: {base_card.url}[/dim]")
+                    console.print(f"[dim]A2A URL: {base_card.url}[/dim]")  # type: ignore[union-attr]
 
         return 0
 
@@ -689,7 +701,7 @@ def serve_single(
         agent_card = load_agent_card_from_json(agent_data)
 
         if verbose:
-            agent_name = agent_card.agent_card.name if hasattr(agent_card, "agent_card") else agent_card.name
+            agent_name = agent_card.agent_card.name if hasattr(agent_card, "agent_card") else getattr(agent_card, 'name', 'Unknown Agent')  # type: ignore[attr-defined]
             console.print(f"[dim]Loaded agent: {agent_name}[/dim]")
 
         # Load custom system prompt if provided (not yet implemented for single serve)
@@ -700,11 +712,12 @@ def serve_single(
         # Get agent card reference
         base_card = agent_card.agent_card if hasattr(agent_card, "agent_card") else agent_card
 
-        console.print(f"\n[bold green]🌟 Starting {base_card.name} A2A Agent Server[/bold green]")
-        console.print(f"[cyan]💡 Serving {len(base_card.skills)} skills:[/cyan]")
-        for skill in base_card.skills:
+        console.print(f"\n[bold green]🌟 Starting {base_card.name} A2A Agent Server[/bold green]")  # type: ignore[union-attr]
+        console.print(f"[cyan]💡 Serving {len(base_card.skills)} skills:[/cyan]")  # type: ignore[union-attr]
+        for skill in base_card.skills:  # type: ignore[union-attr]
             console.print(f"  • {skill.name}")
 
+        console.print("[cyan]🔧 Backend: ADK (Google Agent Development Kit)[/cyan]")
         console.print(f"\n[yellow]🌐 Server starting on http://{host}:{port}[/yellow]")
         console.print(f"[yellow]📋 Will register with A2A registry at: {registry_url}[/yellow]")
         console.print("\n[dim]Press Ctrl+C to stop the server[/dim]")
@@ -717,42 +730,25 @@ def serve_single(
         if verbose:
             console.print(f"[dim]Using model: {model_spec}[/dim]")
 
-        # Create single agent server
-        from fasta2a import FastA2A, Skill
-        from fasta2a.storage import InMemoryStorage
-        from fasta2a.broker import InMemoryBroker
+        # Create ADK agent server (always enabled for consistency with serve-all)
         import asyncio
         import aiohttp
         import uvicorn
 
-        # Convert AgentCard skills to FastA2A skills
-        fasta2a_skills = []
-        for skill in base_card.skills:
-            # Create system prompt for this skill
-            system_prompt = f"You are {base_card.name}.\n\n{base_card.description}\n\nYou are specifically being asked to help with: {skill.name}\n{skill.description}"
-
-            fasta2a_skill = Skill(
-                name=skill.name.lower().replace(" ", "_"),
-                description=skill.description,
-                system_prompt=system_prompt,
-                model=model_spec,
-            )
-            fasta2a_skills.append(fasta2a_skill)
-
         # Update agent card URL
-        base_card.url = f"http://{host}:{port}"
+        base_card.url = f"http://{host}:{port}"  # type: ignore[union-attr]
 
-        app = FastA2A(
-            storage=InMemoryStorage(),
-            broker=InMemoryBroker(),
-            name=base_card.name,
-            url=base_card.url,
-            version=base_card.version,
-            description=base_card.description,
-            provider=base_card.provider,
-            skills=fasta2a_skills,
-            debug=verbose,
-        )
+        # Use ADK A2A server for all agents (consistent with serve-all, fail hard)
+        from ..adk.a2a_server import create_adk_a2a_server_from_agent_card
+
+        adk_a2a_server = create_adk_a2a_server_from_agent_card(base_card, port=port)
+
+        # Use the FastAPI app from the ADK A2A server
+        app = adk_a2a_server.app
+        if verbose:
+            console.print(
+                f"[dim]Native ADK A2A Server initialized with {len(adk_a2a_server.orchestrator.tools)} tools[/dim]"
+            )
 
         async def register_agent() -> None:
             """Register agent with the A2A registry using JSON-RPC."""
@@ -778,11 +774,11 @@ def serve_single(
                             result = await response.json()
                             if "error" in result:
                                 console.print(
-                                    f"[red]❌ Registry error for {base_card.name}: {result['error']['message']}[/red]"
+                                    f"[red]❌ Registry error for {base_card.name}: {result['error']['message']}[/red]"  # type: ignore[union-attr]
                                 )
                             elif "result" in result and result["result"].get("success"):
                                 console.print(
-                                    f"[green]✅ Successfully registered {base_card.name} with registry[/green]"
+                                    f"[green]✅ Successfully registered {base_card.name} with registry[/green]"  # type: ignore[union-attr]
                                 )
                             else:
                                 console.print(f"[yellow]⚠️ Unexpected registry response: {result}[/yellow]")
@@ -836,7 +832,8 @@ def serve_all(
     Serve all agents through individual A2A servers.
 
     This creates individual servers for each agent found in the agents directory,
-    assigning each agent a unique port starting from the base port.
+    assigning each agent a unique port starting from the base port. All agents use
+    the ADK backend for advanced orchestration capabilities.
 
     Examples:
         mantis agent serve-all
@@ -846,7 +843,6 @@ def serve_all(
     try:
         import os
         import asyncio
-        import aiohttp
         import uvicorn
 
         agents_path = Path(agents_dir)
@@ -867,6 +863,7 @@ def serve_all(
         console.print("[bold green]🎭 Starting Multi-Agent Server Farm[/bold green]")
         console.print(f"[cyan]Agents directory: {agents_path}[/cyan]")
         console.print(f"[cyan]Registry: {registry_url}[/cyan]")
+        console.print("[cyan]ADK Backend: [bold green]ENABLED[/bold green] for all agents[/cyan]")
         console.print()
 
         # Load and validate AgentCard objects
@@ -885,19 +882,22 @@ def serve_all(
                 # Get base card reference
                 base_card = agent_card.agent_card if hasattr(agent_card, "agent_card") else agent_card
 
-                agent_key = base_card.name.lower().replace(" ", "-")
+                agent_key = base_card.name.lower().replace(" ", "-")  # type: ignore[union-attr]
                 assigned_port = base_port + i
 
                 # Update agent URL
-                base_card.url = f"http://{host}:{assigned_port}"
+                base_card.url = f"http://{host}:{assigned_port}"  # type: ignore[union-attr]
 
                 agent_cards[agent_key] = agent_card
                 port_assignments[agent_key] = assigned_port
 
-                console.print(f"  ✓ [cyan]{base_card.name}[/cyan] ({len(base_card.skills)} skills)")
+                # All agents use ADK backend
+                console.print(f"  ✓ [cyan]{base_card.name}[/cyan] ({len(base_card.skills)} skills) [blue]→ ADK[/blue]")  # type: ignore[union-attr]
+
                 if verbose:
                     console.print(f"    [dim]File: {agent_file}[/dim]")
-                    console.print(f"    [dim]URL: {base_card.url}[/dim]")
+                    console.print(f"    [dim]URL: {base_card.url}[/dim]")  # type: ignore[union-attr]
+                    console.print("    [dim]Backend: ADK (Google Agent Development Kit)[/dim]")
             except Exception as e:
                 console.print(f"[red]❌ Failed to load {agent_file.name}: {e}[/red]")
                 continue
@@ -941,32 +941,71 @@ def serve_all(
                     "id": 1,
                 }
 
-                async with aiohttp.ClientSession() as session:
-                    async with session.post(
-                        f"{registry_url}/jsonrpc", json=payload, headers={"Content-Type": "application/json"}
-                    ) as response:
-                        if response.status == 200:
-                            result = await response.json()
-                            if "error" in result:
+                # Use synchronous requests instead of aiohttp to avoid SSL issues
+                if verbose:
+                    console.print(f"[dim]Attempting to register {base_card.name} with {registry_url}/jsonrpc[/dim]")
+
+                # Use requests library with retry for registry readiness
+                import requests
+                import time
+
+                # Retry registration with backoff for registry readiness
+                max_retries = 5
+                retry_delay = 5
+
+                for attempt in range(max_retries):
+                    try:
+                        response = requests.post(
+                            f"{registry_url}/jsonrpc",
+                            json=payload,
+                            headers={"Content-Type": "application/json"},
+                            timeout=10,
+                        )
+                        break  # Success, exit retry loop
+                    except requests.exceptions.ConnectionError:
+                        if attempt < max_retries - 1:
+                            if verbose:
                                 console.print(
-                                    f"[red]❌ Registry error for {base_card.name}: {result['error']['message']}[/red]"
+                                    f"[dim]Registry not ready, retrying in {retry_delay}s (attempt {attempt + 1}/{max_retries})[/dim]"
                                 )
-                                return False
-                            elif "result" in result and result["result"].get("success"):
-                                if verbose:
-                                    console.print(
-                                        f"[green]✅ Successfully registered {base_card.name} with registry[/green]"
-                                    )
-                                return True
-                            else:
-                                console.print(f"[yellow]⚠️ Unexpected response for {base_card.name}: {result}[/yellow]")
-                                return False
+                            time.sleep(retry_delay)
+                            retry_delay = int(retry_delay * 1.5)  # Exponential backoff
+                            continue
                         else:
-                            response_text = await response.text()
+                            # Final attempt failed
                             console.print(
-                                f"[yellow]⚠️ Failed to register {base_card.name}: HTTP {response.status} - {response_text[:200]}[/yellow]"
+                                f"[yellow]⚠️ Registry unreachable after {max_retries} attempts for {base_card.name}[/yellow]"
                             )
                             return False
+                    except requests.RequestException as e:
+                        console.print(f"[yellow]⚠️ Network error registering {base_card.name}: {e}[/yellow]")
+                        return False
+
+                try:
+                    if response.status_code == 200:
+                        result = response.json()
+                        if "error" in result:
+                            console.print(
+                                f"[red]❌ Registry error for {base_card.name}: {result['error']['message']}[/red]"
+                            )
+                            return False
+                        elif "result" in result and result["result"].get("success"):
+                            if verbose:
+                                console.print(
+                                    f"[green]✅ Successfully registered {base_card.name} with registry[/green]"
+                                )
+                            return True
+                        else:
+                            console.print(f"[yellow]⚠️ Unexpected response for {base_card.name}: {result}[/yellow]")
+                            return False
+                    else:
+                        console.print(
+                            f"[yellow]⚠️ Failed to register {base_card.name}: HTTP {response.status_code} - {response.text[:200]}[/yellow]"
+                        )
+                        return False
+                except requests.RequestException as req_e:
+                    console.print(f"[yellow]⚠️ Network error registering {base_card.name}: {req_e}[/yellow]")
+                    return False
             except Exception as e:
                 console.print(f"[yellow]⚠️ Error registering {base_card.name} with registry: {e}[/yellow]")
                 return False
@@ -995,12 +1034,12 @@ def serve_all(
                 base_card = agent_card.agent_card if hasattr(agent_card, "agent_card") else agent_card
 
                 if verbose:
-                    console.print(f"[dim]Creating server for {base_card.name} on port {port}[/dim]")
+                    console.print(f"[dim]Creating server for {base_card.name} on port {port}[/dim]")  # type: ignore[union-attr]
 
                 # Convert AgentCard skills to FastA2A skills
                 fasta2a_skills = []
-                for skill in base_card.skills:
-                    system_prompt = f"You are {base_card.name}.\n\n{base_card.description}\n\nYou are specifically being asked to help with: {skill.name}\n{skill.description}"
+                for skill in base_card.skills:  # type: ignore[union-attr]
+                    system_prompt = f"You are {base_card.name}.\n\n{base_card.description}\n\nYou are specifically being asked to help with: {skill.name}\n{skill.description}"  # type: ignore[union-attr]
 
                     fasta2a_skill = Skill(
                         name=skill.name.lower().replace(" ", "_"),
@@ -1014,16 +1053,28 @@ def serve_all(
                 app = FastA2A(
                     storage=InMemoryStorage(),
                     broker=InMemoryBroker(),
-                    name=base_card.name,
-                    url=base_card.url,
-                    version=base_card.version,
-                    description=base_card.description,
-                    provider=base_card.provider,
+                    name=base_card.name,  # type: ignore[union-attr]
+                    url=base_card.url,  # type: ignore[union-attr]
+                    version=base_card.version,  # type: ignore[union-attr]
+                    description=base_card.description,  # type: ignore[union-attr]
+                    provider=base_card.provider,  # type: ignore[union-attr]
                     skills=fasta2a_skills,
                     debug=verbose,
                 )
 
-                servers.append((app, port, base_card.name))
+                # Use ADK A2A servers for all agents (always enabled, fail hard)
+                from ..adk.a2a_server import create_adk_a2a_server_from_agent_card
+
+                adk_a2a_server = create_adk_a2a_server_from_agent_card(base_card, port=port)
+
+                # Use the FastAPI app from the ADK A2A server
+                servers.append((adk_a2a_server.app, port, f"{base_card.name} (Native ADK A2A)"))  # type: ignore[union-attr]
+                console.print(f"  ✓ [green]{base_card.name}[/green] (Native ADK A2A Server)")  # type: ignore[union-attr]
+                if verbose:
+                    console.print(f"    [dim]URL: {base_card.url}[/dim]")  # type: ignore[union-attr]
+                    console.print("    [dim]Backend: Native ADK with FastAPI A2A Protocol[/dim]")
+                    console.print(f"    [dim]Tools: {len(adk_a2a_server.orchestrator.tools)} orchestration tools[/dim]")
+
                 registration_tasks.append(register_agent_with_registry(agent_card, registry_url))
 
             # Register agents in batches to avoid thundering herd

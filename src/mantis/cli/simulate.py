@@ -123,9 +123,19 @@ def simulate(
 def _display_simulation_output(simulation_output: mantis_core_pb2.SimulationOutput, verbose: bool = False) -> None:
     """Display SimulationOutput in a formatted way."""
     # Display main response
+    # Note: response and text_response may not exist in current protobuf definition
+    try:
+        response_text = (
+            simulation_output.response_message.content[0].text
+            if simulation_output.response_message.content
+            else "No response content"
+        )
+    except (AttributeError, IndexError):
+        response_text = "Response content not available"
+
     console.print(
         Panel(
-            simulation_output.response.text_response,
+            response_text,
             title="Simulation Result",
             border_style=(
                 "green"
@@ -143,12 +153,12 @@ def _display_simulation_output(simulation_output: mantis_core_pb2.SimulationOutp
     console.print(f"  Team Size: {simulation_output.team_size}")
     console.print(f"  Recursion Depth: {simulation_output.recursion_depth}")
 
-    if simulation_output.execution_strategies:
-        strategy_names = [
-            mantis_core_pb2.ExecutionStrategy.Name(s).replace("EXECUTION_STRATEGY_", "")
-            for s in simulation_output.execution_strategies
-        ]
-        console.print(f"  Strategies: {', '.join(strategy_names)}")
+    # execution_strategies field may not exist in current protobuf
+    if hasattr(simulation_output, "execution_strategy"):
+        strategy_name = mantis_core_pb2.ExecutionStrategy.Name(simulation_output.execution_strategy).replace(
+            "EXECUTION_STRATEGY_", ""
+        )
+        console.print(f"  Strategy: {strategy_name}")
 
     # Display error info if present
     if simulation_output.execution_result.HasField("error_info"):
@@ -158,8 +168,9 @@ def _display_simulation_output(simulation_output: mantis_core_pb2.SimulationOutp
         console.print(f"  Type: {error_type}")
         console.print(f"  Message: {error_info.error_message}")
 
-    if verbose and simulation_output.response.output_modes:
-        console.print(f"\n[dim]Output Modes: {', '.join(simulation_output.response.output_modes)}[/dim]")
+    # output_modes field may not exist in current protobuf definition
+    if verbose:
+        console.print(f"\n[dim]Response available: {bool(simulation_output.response_message)}[/dim]")
 
 
 def _display_simulation_input(simulation_input: mantis_core_pb2.SimulationInput, verbose: bool = False) -> None:
