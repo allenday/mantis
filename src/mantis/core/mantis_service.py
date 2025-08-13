@@ -261,7 +261,7 @@ class MantisService:
                     logger.debug(
                         "Completed team member execution",
                         structured_data={
-                            "context_id": getattr(team_request, 'context_id', 'unknown'),  # type: ignore[attr-defined]
+                            "context_id": getattr(team_request, "context_id", "unknown"),  # type: ignore[attr-defined]
                             "member_index": i,
                             "agent_name": agent_interface.name,
                             "final_state": member_output.final_state,
@@ -367,6 +367,7 @@ class MantisService:
         except AttributeError:
             # Method may not be available in all protobuf versions
             import time
+
             health_status["timestamp"].seconds = int(time.time())
 
         logger.debug("Retrieved service health status", structured_data=health_status)

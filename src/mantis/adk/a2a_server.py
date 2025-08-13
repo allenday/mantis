@@ -149,7 +149,7 @@ class ADKA2AServer:
 
             # Convert orchestrator tools to ADK format
             self._convert_orchestrator_tools_to_adk()
-            adk_tools = getattr(self, 'adk_tools', [])
+            adk_tools = getattr(self, "adk_tools", [])
 
             # Use custom leader instruction if provided, otherwise use default
             instruction = (
@@ -529,6 +529,7 @@ work with appropriate agents."""
             # Update task with structured result - FAIL HARD, NO SAFETY FALLBACKS
             if "response_data" in locals():
                 import json
+
                 task.result = json.dumps(response_data)  # Serialize structured response
             else:
                 task.result = response_text  # This WILL fail if response_text not defined - GOOD!

@@ -25,7 +25,7 @@ def display_agent_card_summary(agent_card: Any, verbose: bool = False) -> None:
     mantis_card = ensure_mantis_agent_card(agent_card)
 
     # Header with persona title
-    title = getattr(mantis_card, 'persona_title', None) or mantis_card.agent_card.name  # type: ignore[attr-defined]
+    title = getattr(mantis_card, "persona_title", None) or mantis_card.agent_card.name  # type: ignore[attr-defined]
     console.print(f"\n[bold magenta]✨ {title}[/bold magenta]")
 
     # Basic info panel
@@ -62,7 +62,7 @@ def display_agent_card_summary(agent_card: Any, verbose: bool = False) -> None:
         )
 
         # Persona Characteristics from extension
-        char = getattr(mantis_card, 'persona_characteristics', None)  # type: ignore[attr-defined]
+        char = getattr(mantis_card, "persona_characteristics", None)  # type: ignore[attr-defined]
         if char and (char.core_principles or char.communication_style or char.thinking_patterns):
             # Find the persona-characteristics extension for header info
             persona_ext = None
@@ -124,7 +124,7 @@ def display_agent_card_summary(agent_card: Any, verbose: bool = False) -> None:
             console.print(persona_table)
 
         # Competency Scores from extension
-        comp = getattr(mantis_card, 'competency_scores', None)  # type: ignore[attr-defined]
+        comp = getattr(mantis_card, "competency_scores", None)  # type: ignore[attr-defined]
 
         if comp and (comp.competency_scores or comp.role_adaptation):
             # Find the competency-scores extension for header info
@@ -232,8 +232,10 @@ def display_agent_card_summary(agent_card: Any, verbose: bool = False) -> None:
                 console.print(role_table)
 
         # Domain Expertise from extension
-        domain = getattr(mantis_card, 'domain_expertise', None)  # type: ignore[attr-defined]
-        if domain and (domain.primary_domains or domain.methodologies or domain.secondary_domains or domain.tools_and_frameworks):
+        domain = getattr(mantis_card, "domain_expertise", None)  # type: ignore[attr-defined]
+        if domain and (
+            domain.primary_domains or domain.methodologies or domain.secondary_domains or domain.tools_and_frameworks
+        ):
             # Find the domain-expertise extension for header info
             domain_ext = None
             for ext in mantis_card.agent_card.capabilities.extensions:
@@ -292,7 +294,7 @@ def display_agent_card_summary(agent_card: Any, verbose: bool = False) -> None:
             console.print(domain_table)
 
         # Skills Summary from extension
-        skills = getattr(mantis_card, 'skills_summary', None)  # type: ignore[attr-defined]
+        skills = getattr(mantis_card, "skills_summary", None)  # type: ignore[attr-defined]
         if skills and (
             skills.primary_skill_tags
             or skills.secondary_skill_tags
@@ -457,7 +459,9 @@ def inspect(
 
                         if verbose:
                             agent_name = (
-                                agent_card.agent_card.name if hasattr(agent_card, "agent_card") else getattr(agent_card, 'name', 'Unknown Agent')  # type: ignore[attr-defined]
+                                agent_card.agent_card.name
+                                if hasattr(agent_card, "agent_card")
+                                else getattr(agent_card, "name", "Unknown Agent")  # type: ignore[attr-defined]
                             )
                             console.print(f"[dim]✅ Agent found: {agent_name}[/dim]")
 
@@ -580,7 +584,11 @@ def generate(
 
         if not quiet:
             # Get the name from the appropriate source
-            agent_name = agent_card.agent_card.name if hasattr(agent_card, "agent_card") else getattr(agent_card, 'name', 'Unknown Agent')  # type: ignore[attr-defined]
+            agent_name = (
+                agent_card.agent_card.name
+                if hasattr(agent_card, "agent_card")
+                else getattr(agent_card, "name", "Unknown Agent")
+            )  # type: ignore[attr-defined]
             console.print(f"\n[bold green]✅ Successfully generated AgentCard: {agent_name}[/bold green]")
 
             # Display AgentCard information
@@ -593,7 +601,11 @@ def generate(
                 output_dir = output if output.is_dir() else Path(output)
                 output_dir.mkdir(parents=True, exist_ok=True)
                 # Get name from appropriate source
-                persona_name = agent_card.agent_card.name if hasattr(agent_card, "agent_card") else getattr(agent_card, 'name', 'Unknown Agent')  # type: ignore[attr-defined]
+                persona_name = (
+                    agent_card.agent_card.name
+                    if hasattr(agent_card, "agent_card")
+                    else getattr(agent_card, "name", "Unknown Agent")
+                )  # type: ignore[attr-defined]
                 filename = f"{persona_name.lower().replace(' ', '_')}_persona.json"
                 output_file = output_dir / filename
             else:

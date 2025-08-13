@@ -352,7 +352,6 @@ coordinate with appropriate agents.""",
         if not self.tools:
             return pydantic_tools
 
-
         # Helper function to create tool wrappers with proper closure capture
         def create_web_fetch_wrapper(func: Any) -> Any:
             async def web_fetch_wrapper(url: str) -> str:

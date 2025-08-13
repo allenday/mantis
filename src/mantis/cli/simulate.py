@@ -125,10 +125,14 @@ def _display_simulation_output(simulation_output: mantis_core_pb2.SimulationOutp
     # Display main response
     # Note: response and text_response may not exist in current protobuf definition
     try:
-        response_text = simulation_output.response_message.content[0].text if simulation_output.response_message.content else "No response content"
+        response_text = (
+            simulation_output.response_message.content[0].text
+            if simulation_output.response_message.content
+            else "No response content"
+        )
     except (AttributeError, IndexError):
         response_text = "Response content not available"
-    
+
     console.print(
         Panel(
             response_text,
@@ -150,8 +154,10 @@ def _display_simulation_output(simulation_output: mantis_core_pb2.SimulationOutp
     console.print(f"  Recursion Depth: {simulation_output.recursion_depth}")
 
     # execution_strategies field may not exist in current protobuf
-    if hasattr(simulation_output, 'execution_strategy'):
-        strategy_name = mantis_core_pb2.ExecutionStrategy.Name(simulation_output.execution_strategy).replace("EXECUTION_STRATEGY_", "")
+    if hasattr(simulation_output, "execution_strategy"):
+        strategy_name = mantis_core_pb2.ExecutionStrategy.Name(simulation_output.execution_strategy).replace(
+            "EXECUTION_STRATEGY_", ""
+        )
         console.print(f"  Strategy: {strategy_name}")
 
     # Display error info if present

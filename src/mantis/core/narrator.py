@@ -150,14 +150,14 @@ class AbstractNarrator(ABC):
         extractor = StructuredExtractor()
         model = DEFAULT_MODEL
 
-        result = await extractor.extract_text_response(
+        _result = await extractor.extract_text_response(
             prompt=composed_prompt.final_prompt, query=narrator_simulation.query, model=model
         )
 
         # Create final response
         response = mantis_core_pb2.AgentResponse()
         # Note: text_response and output_modes are not part of current protobuf definition
-        # response.text_response = result  
+        # response.text_response = result
         # response.output_modes.append("text/markdown")
 
         return response
@@ -200,13 +200,13 @@ class TarotNarrator(AbstractNarrator):
         # Note: member_tasks and member_messages should exist but text_response might not
         for i, (member, response) in enumerate(zip(team_result.member_tasks, team_result.member_messages)):
             # position and metadata fields may not exist in current protobuf
-            position = getattr(member, 'position', f"Position {i + 1}")
+            position = getattr(member, "position", f"Position {i + 1}")
             # metadata and agent_name fields may not exist in current Task protobuf
-            agent_name = getattr(member, 'agent_name', f"Agent {i + 1}")
+            agent_name = getattr(member, "agent_name", f"Agent {i + 1}")
             card_name = agent_name
 
             # text_response may not exist in Message protobuf
-            response_text = getattr(response, 'text_response', str(response))
+            response_text = getattr(response, "text_response", str(response))
             section = f"### {position}: {card_name}\n{response_text}"
             concatenated_responses.append(section)
 
@@ -224,7 +224,7 @@ class TarotNarrator(AbstractNarrator):
         card_descriptions = []
         for i, member in enumerate(team_result.member_tasks):
             # agent_name and metadata may not exist in Task protobuf
-            agent_name = getattr(member, 'agent_name', f"Agent {i + 1}")
+            agent_name = getattr(member, "agent_name", f"Agent {i + 1}")
             card_descriptions.append(agent_name)
 
         narrative_context = f"""
