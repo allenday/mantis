@@ -49,6 +49,7 @@ class MantisJSONRPCService:
         self.orchestrator = SimulationOrchestrator()
         self.methods = {
             "process_simulation_input": self.process_simulation_input,
+            "process_narrator_request": self.process_narrator_request,
             "get_service_info": self.get_service_info,
             "health_check": self.health_check,
         }
@@ -166,6 +167,89 @@ class MantisJSONRPCService:
     async def health_check(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Health check endpoint."""
         return {"status": "healthy", "orchestrator": self.orchestrator is not None}
+
+    async def process_narrator_request(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Process NarratorRequest for final synthesis and presentation.
+        
+        Args:
+            params: Dictionary containing NarratorRequest data with:
+                - narrator_strategy: Path to narrator agent card JSON file
+                - team_result: Raw synthesis data from leader coordination
+                - original_query: Original user query for context
+                - context: Additional context information
+                
+        Returns:
+            Dictionary containing final narrative presentation
+        """
+        # Load narrator agent card from strategy path
+        if "narrator_strategy" not in params:
+            raise ValueError("narrator_strategy (path to narrator agent card) is required")
+        
+        narrator_path = params["narrator_strategy"]
+        
+        try:
+            import json
+            from ..agent.card import load_agent_card_from_json
+            
+            # Load narrator agent card
+            with open(narrator_path, 'r', encoding='utf-8') as f:
+                narrator_card_json = json.load(f)
+            
+            narrator_card = load_agent_card_from_json(narrator_card_json)
+            logger.info(f"Loaded narrator agent: {narrator_card.agent_card.name} from {narrator_path}")
+            
+        except Exception as e:
+            raise ValueError(f"Failed to load narrator agent card from {narrator_path}: {e}")
+        
+        # Extract raw synthesis from team_result
+        team_result = params.get("team_result", {})
+        original_query = params.get("original_query", "")
+        context = params.get("context", "")
+        
+        # Get the authentic narrator persona content
+        narrator_persona = narrator_card.persona_characteristics.original_content
+        
+        # Create narrative synthesis prompt using narrator's authentic voice
+        narrative_prompt = f"""{narrator_persona}
+
+Original User Query: {original_query}
+
+Raw Synthesis Results to Present:
+{json.dumps(team_result, indent=2)}
+
+Context: {context}
+
+Your task as narrator:
+Take the above raw synthesis results and present them to the user in your distinctive narrative style and voice. Transform the structured data into an engaging, coherent presentation that reflects your characteristic communication patterns, thinking style, and presentation approach as defined in your persona.
+
+Maintain your authentic personality while ensuring the user receives all the key insights and information from the synthesis in a clear, compelling narrative form."""
+
+        # Execute narrator using orchestrator
+        try:
+            from ..llm.structured_extractor import StructuredExtractor
+            from ..config import DEFAULT_MODEL
+            
+            extractor = StructuredExtractor()
+            
+            # Generate final narrative presentation
+            narrative_result = await extractor.extract_text_response(
+                prompt=narrative_prompt,
+                query=f"Present the synthesis results using your authentic narrative voice",
+                model=DEFAULT_MODEL
+            )
+            
+            # Return final narrative response
+            return {
+                "narrator_agent": narrator_card.agent_card.name,
+                "narrative_response": narrative_result,
+                "raw_synthesis": team_result,
+                "status": "completed"
+            }
+            
+        except Exception as e:
+            logger.error(f"Narrator execution failed: {e}", exc_info=True)
+            raise ValueError(f"Narrator synthesis failed: {e}")
 
     async def handle_info(self, request: web_request.Request) -> web.Response:
         """Handle GET /info requests for service information."""

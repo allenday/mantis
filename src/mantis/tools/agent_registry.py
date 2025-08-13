@@ -215,20 +215,7 @@ async def get_agent_by_name(agent_name: str) -> MantisAgentCard:
                     obs_logger.info(f"Found agent '{agent_name}' in registry")
                 return agent_card
 
-        # If not found, try fallback to mock agents for development
-        try:
-            from ..tools.team_formation import _get_mock_agents
-
-            mock_agents = _get_mock_agents()
-            for agent_card in mock_agents:
-                agent_interface = AgentInterface(agent_card)
-                if agent_interface.name == agent_name or agent_interface.agent_id == agent_name:
-                    if OBSERVABILITY_AVAILABLE and obs_logger:
-                        obs_logger.info(f"Found agent '{agent_name}' in mock agents fallback")
-                    return agent_card
-        except Exception as mock_error:
-            if OBSERVABILITY_AVAILABLE and obs_logger:
-                obs_logger.warning(f"Mock agents fallback failed: {mock_error}")
+        # No fallbacks - fail fast if agent not found in registry
 
         # Agent not found
         available_names = []

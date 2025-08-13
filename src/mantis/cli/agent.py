@@ -704,7 +704,8 @@ def serve_single(
         console.print(f"[cyan]💡 Serving {len(base_card.skills)} skills:[/cyan]")
         for skill in base_card.skills:
             console.print(f"  • {skill.name}")
-
+        
+        console.print(f"[cyan]🔧 Backend: ADK (Google Agent Development Kit)[/cyan]")
         console.print(f"\n[yellow]🌐 Server starting on http://{host}:{port}[/yellow]")
         console.print(f"[yellow]📋 Will register with A2A registry at: {registry_url}[/yellow]")
         console.print("\n[dim]Press Ctrl+C to stop the server[/dim]")
@@ -717,42 +718,22 @@ def serve_single(
         if verbose:
             console.print(f"[dim]Using model: {model_spec}[/dim]")
 
-        # Create single agent server
-        from fasta2a import FastA2A, Skill
-        from fasta2a.storage import InMemoryStorage
-        from fasta2a.broker import InMemoryBroker
+        # Create ADK agent server (always enabled for consistency with serve-all)
         import asyncio
         import aiohttp
         import uvicorn
 
-        # Convert AgentCard skills to FastA2A skills
-        fasta2a_skills = []
-        for skill in base_card.skills:
-            # Create system prompt for this skill
-            system_prompt = f"You are {base_card.name}.\n\n{base_card.description}\n\nYou are specifically being asked to help with: {skill.name}\n{skill.description}"
-
-            fasta2a_skill = Skill(
-                name=skill.name.lower().replace(" ", "_"),
-                description=skill.description,
-                system_prompt=system_prompt,
-                model=model_spec,
-            )
-            fasta2a_skills.append(fasta2a_skill)
-
         # Update agent card URL
         base_card.url = f"http://{host}:{port}"
 
-        app = FastA2A(
-            storage=InMemoryStorage(),
-            broker=InMemoryBroker(),
-            name=base_card.name,
-            url=base_card.url,
-            version=base_card.version,
-            description=base_card.description,
-            provider=base_card.provider,
-            skills=fasta2a_skills,
-            debug=verbose,
-        )
+        # Use ADK A2A server for all agents (consistent with serve-all, fail hard)
+        from ..adk.a2a_server import create_adk_a2a_server_from_agent_card
+        adk_a2a_server = create_adk_a2a_server_from_agent_card(base_card, port=port)
+        
+        # Use the FastAPI app from the ADK A2A server
+        app = adk_a2a_server.app
+        if verbose:
+            console.print(f"[dim]Native ADK A2A Server initialized with {len(adk_a2a_server.orchestrator.tools)} tools[/dim]")
 
         async def register_agent() -> None:
             """Register agent with the A2A registry using JSON-RPC."""
@@ -829,23 +810,20 @@ def serve_single(
 @click.option("--base-port", "-p", type=int, default=9001, help="Base port for agent servers (default: 9001)")
 @click.option("--host", "-h", default="0.0.0.0", help="Server host (default: 0.0.0.0)")
 @click.option("--registry-url", "-r", default="http://localhost:8080", help="A2A registry URL")
-@click.option("--enable-adk", is_flag=True, help="Enable ADK backend for Chief of Staff agent (experimental)")
 def serve_all(
-    agents_dir: str, model: Optional[str], verbose: bool, base_port: int, host: str, registry_url: str, enable_adk: bool
+    agents_dir: str, model: Optional[str], verbose: bool, base_port: int, host: str, registry_url: str
 ) -> int:
     """
     Serve all agents through individual A2A servers.
 
     This creates individual servers for each agent found in the agents directory,
-    assigning each agent a unique port starting from the base port. When --enable-adk
-    is specified, the Chief of Staff agent will be automatically enhanced with Google's
-    ADK backend for advanced orchestration capabilities.
+    assigning each agent a unique port starting from the base port. All agents use
+    the ADK backend for advanced orchestration capabilities.
 
     Examples:
         mantis agent serve-all
-        mantis agent serve-all --enable-adk
         mantis agent serve-all --base-port 9000 --agents-dir ./my-agents
-        mantis agent serve-all --registry-url http://registry:8080 --enable-adk
+        mantis agent serve-all --registry-url http://registry:8080
     """
     try:
         import os
@@ -871,8 +849,7 @@ def serve_all(
         console.print("[bold green]🎭 Starting Multi-Agent Server Farm[/bold green]")
         console.print(f"[cyan]Agents directory: {agents_path}[/cyan]")
         console.print(f"[cyan]Registry: {registry_url}[/cyan]")
-        if enable_adk:
-            console.print("[cyan]ADK Enhancement: [bold green]ENABLED[/bold green] for Chief of Staff (experimental)[/cyan]")
+        console.print("[cyan]ADK Backend: [bold green]ENABLED[/bold green] for all agents[/cyan]")
         console.print()
 
         # Load and validate AgentCard objects
@@ -900,18 +877,13 @@ def serve_all(
                 agent_cards[agent_key] = agent_card
                 port_assignments[agent_key] = assigned_port
 
-                # Check if this will be ADK-enhanced
-                is_chief_of_staff = "chief of staff" in base_card.name.lower()
-                if is_chief_of_staff and enable_adk:
-                    console.print(f"  ✓ [cyan]{base_card.name}[/cyan] ({len(base_card.skills)} skills) [magenta]→ ADK-Enhanced[/magenta]")
-                else:
-                    console.print(f"  ✓ [cyan]{base_card.name}[/cyan] ({len(base_card.skills)} skills)")
+                # All agents use ADK backend
+                console.print(f"  ✓ [cyan]{base_card.name}[/cyan] ({len(base_card.skills)} skills) [blue]→ ADK[/blue]")
                 
                 if verbose:
                     console.print(f"    [dim]File: {agent_file}[/dim]")
                     console.print(f"    [dim]URL: {base_card.url}[/dim]")
-                    if is_chief_of_staff and enable_adk:
-                        console.print(f"    [dim]Backend: Will use ADK (Google Agent Development Kit)[/dim]")
+                    console.print(f"    [dim]Backend: ADK (Google Agent Development Kit)[/dim]")
             except Exception as e:
                 console.print(f"[red]❌ Failed to load {agent_file.name}: {e}[/red]")
                 continue
@@ -1072,35 +1044,17 @@ def serve_all(
                     debug=verbose,
                 )
 
-                # Use ADK A2A servers for all agents when enabled
-                if enable_adk:
-                    try:
-                        # Check if this is Chief of Staff for special handling
-                        is_chief_of_staff = "chief of staff" in base_card.name.lower()
-                        if is_chief_of_staff:
-                            # Create native ADK A2A server for Chief of Staff
-                            from ..adk.a2a_server import create_chief_of_staff_a2a_server
-                            adk_a2a_server = create_chief_of_staff_a2a_server(port=port)
-                        else:
-                            # Create ADK A2A server for other agents
-                            from ..adk.a2a_server import create_adk_a2a_server_from_agent_card
-                            adk_a2a_server = create_adk_a2a_server_from_agent_card(base_card, port=port)
-                        
-                        # Use the FastAPI app from the ADK A2A server
-                        servers.append((adk_a2a_server.app, port, f"{base_card.name} (Native ADK A2A)"))
-                        console.print(f"  ✓ [green]{base_card.name}[/green] (Native ADK A2A Server)")
-                        if verbose:
-                            console.print(f"    [dim]URL: {base_card.url}[/dim]")
-                            console.print(f"    [dim]Backend: Native ADK with FastAPI A2A Protocol[/dim]")
-                            console.print(f"    [dim]Tools: {len(adk_a2a_server.orchestrator.tools)} orchestration tools[/dim]")
-                    except Exception as e:
-                        console.print(f"[yellow]⚠️ Native ADK A2A server failed for {base_card.name}: {e}[/yellow]")
-                        console.print("[dim]Falling back to FastA2A backend[/dim]")
-                        # Fall back to regular FastA2A server
-                        servers.append((app, port, base_card.name))
-                else:
-                    # Regular FastA2A server (when ADK not enabled)
-                    servers.append((app, port, base_card.name))
+                # Use ADK A2A servers for all agents (always enabled, fail hard)
+                from ..adk.a2a_server import create_adk_a2a_server_from_agent_card
+                adk_a2a_server = create_adk_a2a_server_from_agent_card(base_card, port=port)
+                
+                # Use the FastAPI app from the ADK A2A server
+                servers.append((adk_a2a_server.app, port, f"{base_card.name} (Native ADK A2A)"))
+                console.print(f"  ✓ [green]{base_card.name}[/green] (Native ADK A2A Server)")
+                if verbose:
+                    console.print(f"    [dim]URL: {base_card.url}[/dim]")
+                    console.print(f"    [dim]Backend: Native ADK with FastAPI A2A Protocol[/dim]")
+                    console.print(f"    [dim]Tools: {len(adk_a2a_server.orchestrator.tools)} orchestration tools[/dim]")
 
                 registration_tasks.append(register_agent_with_registry(agent_card, registry_url))
 
