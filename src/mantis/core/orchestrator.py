@@ -5,7 +5,7 @@ Single orchestrator class using proper protobuf SimulationOutput with recursive 
 Eliminates zombie SimpleOrchestrator and wrapper classes.
 """
 
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import uuid
 import contextvars
 from ..prompt import create_simulation_prompt_with_interface
@@ -34,6 +34,8 @@ class SimulationOrchestrator:
     def __init__(self) -> None:
         self.tools: Dict[str, Any] = {}
         self.active_tasks: Dict[str, a2a_pb2.Task] = {}
+        # Track structured results from recursive tool calls for final aggregation
+        self.current_structured_results: List[mantis_core_pb2.SimulationOutput] = []
         self._initialize_tools()
         logger.info("SimulationOrchestrator initialized", structured_data={"tools_count": len(self.tools)})
 
@@ -46,24 +48,121 @@ class SimulationOrchestrator:
             from ..tools.team_formation import get_random_agents_from_registry
 
             # Import the clean recursive invocation tools that take orchestrator as parameter
-            from ..tools.recursive_invocation import invoke_agent_by_name, invoke_multiple_agents
+            from ..tools.recursive_invocation import invoke_agent_by_name, invoke_multiple_agents, invoke_agent_by_url
 
             # Create bound methods for recursive invocation tools
             # CRITICAL: max_depth must be 0 to prevent infinite recursion
             async def bound_invoke_agent_by_name(
                 agent_name: str, query: str, context: Optional[str] = None, max_depth: int = 1
             ) -> str:
-                # Use proper depth control - let current_depth increment naturally
-                return await invoke_agent_by_name(agent_name, query, self, context, max_depth)
+                logger.info(
+                    "🎯 ORCHESTRATOR: bound_invoke_agent_by_name called",
+                    structured_data={
+                        "agent_name": agent_name,
+                        "query_preview": query[:100] + "..." if len(query) > 100 else query,
+                        "orchestrator_id": id(self),
+                        "current_results_count_before": len(self.current_structured_results)
+                    }
+                )
+                
+                # Get structured result
+                simulation_output = await invoke_agent_by_name(agent_name, query, self, context, max_depth)
+                
+                # Store structured result for final aggregation
+                self.current_structured_results.append(simulation_output)
+                
+                logger.info(
+                    "🎯 ORCHESTRATOR: Stored structured result from recursive call",
+                    structured_data={
+                        "agent_name": agent_name,
+                        "orchestrator_id": id(self),
+                        "current_results_count_after": len(self.current_structured_results),
+                        "simulation_output_context_id": simulation_output.context_id if simulation_output else "None"
+                    }
+                )
+                
+                # Extract text for LLM
+                if simulation_output.response_message and simulation_output.response_message.content:
+                    return simulation_output.response_message.content[0].text
+                return "No response generated"
 
             async def bound_invoke_multiple_agents(
                 agent_names: list[str],
                 query_template: str,
                 individual_contexts: Optional[list[str]] = None,
                 max_depth: int = 1,
-            ) -> Dict[str, str]:
-                # Use proper depth control - let current_depth increment naturally
-                return await invoke_multiple_agents(agent_names, query_template, self, individual_contexts, max_depth)
+            ) -> str:
+                logger.info(
+                    "🎯 ORCHESTRATOR: bound_invoke_multiple_agents called",
+                    structured_data={
+                        "agent_names": agent_names,
+                        "agent_count": len(agent_names),
+                        "query_template_preview": query_template[:100] + "..." if len(query_template) > 100 else query_template,
+                        "orchestrator_id": id(self),
+                        "current_results_count_before": len(self.current_structured_results)
+                    }
+                )
+                
+                # Get structured results 
+                results_dict = await invoke_multiple_agents(agent_names, query_template, self, individual_contexts, max_depth)
+                
+                # Store all structured results for final aggregation
+                for agent_name, sim_output in results_dict.items():
+                    self.current_structured_results.append(sim_output)
+                
+                logger.info(
+                    "🎯 ORCHESTRATOR: Stored structured results from multiple agents",
+                    structured_data={
+                        "agent_names": agent_names,
+                        "orchestrator_id": id(self),
+                        "current_results_count_after": len(self.current_structured_results),
+                        "results_added": len(results_dict)
+                    }
+                )
+                
+                # Format results as text for LLM
+                text_results = []
+                for agent_name, sim_output in results_dict.items():
+                    if sim_output.response_message and sim_output.response_message.content:
+                        response_text = sim_output.response_message.content[0].text
+                        text_results.append(f"**{agent_name}:** {response_text}")
+                    else:
+                        text_results.append(f"**{agent_name}:** No response generated")
+                
+                return "\n\n".join(text_results)
+
+            async def bound_invoke_agent_by_url(
+                agent_url: str, query: str, agent_name: str = "", context: str = ""
+            ) -> str:
+                logger.info(
+                    "🎯 ORCHESTRATOR: bound_invoke_agent_by_url called",
+                    structured_data={
+                        "agent_url": agent_url,
+                        "agent_name": agent_name,
+                        "query_preview": query[:100] + "..." if len(query) > 100 else query,
+                    }
+                )
+                
+                # Call the direct URL invocation (no orchestrator needed for this one)
+                simulation_output = await invoke_agent_by_url(agent_url, query, agent_name or None, context or None)
+                
+                # Store structured result for final aggregation
+                self.current_structured_results.append(simulation_output)
+                
+                logger.info(
+                    "🎯 ORCHESTRATOR: Stored structured result from URL invocation",
+                    structured_data={
+                        "agent_url": agent_url,
+                        "agent_name": agent_name,
+                        "orchestrator_id": id(self),
+                        "current_results_count": len(self.current_structured_results),
+                    }
+                )
+                
+                # Extract text for LLM
+                if simulation_output.response_message and simulation_output.response_message.content:
+                    return simulation_output.response_message.content[0].text
+                return "No response generated"
 
             self.tools.update(
                 {
@@ -73,6 +172,7 @@ class SimulationOrchestrator:
                     "draw_tarot_card": draw_tarot_card,
                     "get_random_agents_from_registry": get_random_agents_from_registry,
                     "invoke_agent_by_name": bound_invoke_agent_by_name,
+                    "invoke_agent_by_url": bound_invoke_agent_by_url,
                     "invoke_multiple_agents": bound_invoke_multiple_agents,
                 }
             )
@@ -166,7 +266,7 @@ class SimulationOrchestrator:
                 
                 # Pass tools to ADK router (empty dict if tools disabled)
                 adk_tools = {} if disable_tools else self.tools
-                adk_router = ChiefOfStaffRouter(tools=adk_tools)
+                adk_router = ChiefOfStaffRouter(tools=adk_tools, orchestrator=self)
                 
                 return await adk_router.route_simulation(simulation_input)
             
