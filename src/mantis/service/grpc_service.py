@@ -194,7 +194,7 @@ class MantisServiceServicer(mantis_core_pb2_grpc.MantisServiceServicer):
 
             # Return minimal error response
             error_response = mantis_core_pb2.AgentResponse()
-            error_response.text_response = f"Error in narrator processing: {str(e)}"
+            # error_response.text_response = f"Error in narrator processing: {str(e)}"  # text_response not in current protobuf
             return error_response
 
 

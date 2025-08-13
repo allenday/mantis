@@ -16,7 +16,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from google.adk import Agent
+from google.adk import Agent  # type: ignore[import-untyped]
 from google.genai import types
 
 from ..observability.logger import get_structured_logger
@@ -186,8 +186,8 @@ work with appropriate agents."""
             )
 
             # Create ADK runner with proper session service
-            from google.adk.sessions import InMemorySessionService
-            from google.adk.runners import Runner
+            from google.adk.sessions import InMemorySessionService  # type: ignore[import-untyped]
+            from google.adk.runners import Runner  # type: ignore[import-untyped]
 
             self.session_service = InMemorySessionService()
             self.app_name = "mantis_adk_a2a"
@@ -203,7 +203,7 @@ work with appropriate agents."""
     def _convert_orchestrator_tools_to_adk(self) -> None:
         """Convert orchestrator tools to ADK FunctionTool format."""
         try:
-            from google.adk.tools import FunctionTool
+            from google.adk.tools import FunctionTool  # type: ignore[import-untyped]
 
             adk_tools = []
 
@@ -229,7 +229,7 @@ work with appropriate agents."""
     def _create_adk_wrapper(self, orchestrator_tool: Any, tool_name: str) -> Any:
         """Create ADK-compatible wrapper for orchestrator tools."""
         import inspect
-        from google.adk.tools import ToolContext
+        from google.adk.tools import ToolContext  # type: ignore[import-untyped]
         import functools
 
         # Get the original function signature
@@ -663,7 +663,7 @@ def create_leader_a2a_server_from_card(leader_card_name: str, port: int = 9053) 
         # Extract agent interface
         from ..agent import AgentInterface
 
-        agent_interface = AgentInterface.from_agent_card(leader_card)
+        agent_interface = AgentInterface.from_agent_card(leader_card)  # type: ignore[arg-type]
 
         # Create leader-specific instruction
         leader_instruction = _create_leader_instruction(agent_interface, leader_card)

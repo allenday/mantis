@@ -156,8 +156,9 @@ class AbstractNarrator(ABC):
 
         # Create final response
         response = mantis_core_pb2.AgentResponse()
-        response.text_response = result
-        response.output_modes.append("text/markdown")
+        # Note: text_response and output_modes are not part of current protobuf definition
+        # response.text_response = result  
+        # response.output_modes.append("text/markdown")
 
         return response
 
@@ -196,13 +197,17 @@ class TarotNarrator(AbstractNarrator):
         """Aggregate tarot card responses with position information."""
         concatenated_responses = []
 
-        for i, (member, response) in enumerate(zip(team_result.member_specs, team_result.member_responses)):
-            position = member.position or f"Position {i + 1}"
-            inverted = member.metadata.get("inverted", False) if "inverted" in member.metadata else False
-            orientation = " (Inverted)" if inverted else ""
-            card_name = f"{member.agent_name}{orientation}"
+        # Note: member_tasks and member_messages should exist but text_response might not
+        for i, (member, response) in enumerate(zip(team_result.member_tasks, team_result.member_messages)):
+            # position and metadata fields may not exist in current protobuf
+            position = getattr(member, 'position', f"Position {i + 1}")
+            # metadata and agent_name fields may not exist in current Task protobuf
+            agent_name = getattr(member, 'agent_name', f"Agent {i + 1}")
+            card_name = agent_name
 
-            section = f"### {position}: {card_name}\n{response.text_response}"
+            # text_response may not exist in Message protobuf
+            response_text = getattr(response, 'text_response', str(response))
+            section = f"### {position}: {card_name}\n{response_text}"
             concatenated_responses.append(section)
 
         return "\n\n".join(concatenated_responses)
@@ -217,10 +222,10 @@ class TarotNarrator(AbstractNarrator):
 
         # Create card descriptions for context
         card_descriptions = []
-        for member in team_result.member_specs:
-            inverted = member.metadata.get("inverted", False) if "inverted" in member.metadata else False
-            orientation = " (Inverted)" if inverted else ""
-            card_descriptions.append(f"{member.agent_name}{orientation}")
+        for i, member in enumerate(team_result.member_tasks):
+            # agent_name and metadata may not exist in Task protobuf
+            agent_name = getattr(member, 'agent_name', f"Agent {i + 1}")
+            card_descriptions.append(agent_name)
 
         narrative_context = f"""
 You are the Master Tarot Reader conducting this reading.
