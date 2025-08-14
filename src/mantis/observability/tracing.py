@@ -10,20 +10,135 @@ from typing import Optional, Dict, Any, Callable, Generator
 from contextlib import contextmanager
 from functools import wraps
 
-from opentelemetry import trace, baggage  # type: ignore[import-untyped]
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter  # type: ignore[import-untyped,import-not-found]
-
-# Jaeger exporter removed due to Python 3.13 compatibility issues
-# from opentelemetry.exporter.jaeger.thrift import JaegerExporter  # type: ignore[import-untyped]
-from opentelemetry.sdk.trace import TracerProvider  # type: ignore[import-untyped,import-not-found]
-from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter  # type: ignore[import-untyped,import-not-found]
-from opentelemetry.sdk.resources import Resource  # type: ignore[import-untyped,import-not-found]
-from opentelemetry.instrumentation.aiohttp_client import AioHttpClientInstrumentor  # type: ignore[import-untyped,import-not-found]
-from opentelemetry.instrumentation.requests import RequestsInstrumentor  # type: ignore[import-untyped,import-not-found]
-from opentelemetry.propagators.b3 import B3MultiFormat  # type: ignore[import-untyped,import-not-found]
-from opentelemetry.propagate import set_global_textmap  # type: ignore[import-untyped]
-
+# Import logger here to avoid E402 - must be before try/except block
 from .logger import get_structured_logger
+
+# Optional OpenTelemetry imports - gracefully handle missing dependencies
+try:
+    from opentelemetry import trace, baggage  # type: ignore[import-untyped]
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter  # type: ignore[import-untyped,import-not-found]
+    from opentelemetry.sdk.trace import TracerProvider  # type: ignore[import-untyped,import-not-found]
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter  # type: ignore[import-untyped,import-not-found]
+    from opentelemetry.sdk.resources import Resource  # type: ignore[import-untyped,import-not-found]
+    from opentelemetry.instrumentation.aiohttp_client import AioHttpClientInstrumentor  # type: ignore[import-untyped,import-not-found]
+    from opentelemetry.instrumentation.requests import RequestsInstrumentor  # type: ignore[import-untyped,import-not-found]
+    from opentelemetry.propagators.b3 import B3MultiFormat  # type: ignore[import-untyped,import-not-found]
+    from opentelemetry.propagate import set_global_textmap  # type: ignore[import-untyped]
+
+    OTEL_AVAILABLE = True
+except ImportError:
+    # OpenTelemetry not available - create stub classes and functions
+    OTEL_AVAILABLE = False
+
+    # Create minimal stub classes for type hints
+    class trace:  # type: ignore[no-redef]
+        class Tracer:
+            def start_as_current_span(self, *args: Any, **kwargs: Any) -> "_NoOpContextManager":
+                return _NoOpContextManager()
+
+        class StatusCode:  # type: ignore[no-redef]
+            OK = "OK"
+            ERROR = "ERROR"
+
+        class Status:  # type: ignore[no-redef]
+            def __init__(self, status_code: Any, description: Any = None) -> None:
+                pass
+
+        @staticmethod
+        def set_tracer_provider(*args: Any, **kwargs: Any) -> None:
+            pass
+
+        @staticmethod
+        def get_tracer(*args: Any, **kwargs: Any) -> "trace.Tracer":
+            return trace.Tracer()  # type: ignore[abstract]
+
+        @staticmethod
+        def get_current_span(*args: Any, **kwargs: Any) -> "_NoOpContextManager":
+            return _NoOpContextManager()
+
+    class baggage:  # type: ignore[no-redef]
+        @staticmethod
+        def set_baggage(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+            return {}
+
+        @staticmethod
+        def get_baggage(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+            return {}
+
+    # Stub classes for OpenTelemetry components
+    class TracerProvider:  # type: ignore[no-redef]
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+        def add_span_processor(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+    class Resource:  # type: ignore[no-redef]
+        def __init__(self) -> None:
+            pass
+
+        @staticmethod
+        def create(*args: Any, **kwargs: Any) -> "Resource":
+            return Resource()  # type: ignore[call-arg]
+
+    class BatchSpanProcessor:  # type: ignore[no-redef]
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+    class ConsoleSpanExporter:  # type: ignore[no-redef]
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+    class OTLPSpanExporter:  # type: ignore[no-redef]
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+    class AioHttpClientInstrumentor:  # type: ignore[no-redef]
+        @staticmethod
+        def instrument() -> None:
+            pass
+
+        @staticmethod
+        def uninstrument() -> None:
+            pass
+
+    class RequestsInstrumentor:  # type: ignore[no-redef]
+        @staticmethod
+        def instrument() -> None:
+            pass
+
+        @staticmethod
+        def uninstrument() -> None:
+            pass
+
+    class B3MultiFormat:  # type: ignore[no-redef]
+        pass
+
+    def set_global_textmap(*args: Any, **kwargs: Any) -> None:  # type: ignore[no-redef,misc]
+        pass
+
+
+class _NoOpContextManager:
+    """No-op context manager for when OpenTelemetry is not available."""
+
+    def __enter__(self) -> "_NoOpContextManager":
+        return self
+
+    def __exit__(self, *args: Any) -> None:
+        pass
+
+    def set_attribute(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def add_event(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def record_exception(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def set_status(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
 
 logger = get_structured_logger(__name__)
 
@@ -49,6 +164,11 @@ class MantisTracer:
 
     def _initialize_tracing(self) -> None:
         """Initialize OpenTelemetry tracing with Mantis-specific configuration."""
+        if not OTEL_AVAILABLE:
+            logger.warning("OpenTelemetry not available - tracing disabled")
+            self.tracer = trace.get_tracer(self.service_name)  # Will be no-op stub
+            return
+
         try:
             # Create resource with service identification
             resource = Resource.create(
