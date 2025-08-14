@@ -12,6 +12,13 @@ from datetime import datetime
 from typing import Dict, Any, Optional, Union
 from pydantic import BaseModel
 
+# OpenTelemetry trace correlation (optional import)
+try:
+    from opentelemetry import trace
+    OTEL_AVAILABLE = True
+except ImportError:
+    OTEL_AVAILABLE = False
+
 from .context import get_current_trace_id, get_execution_context
 from .models import ToolInvocation, LLMInteraction, ExecutionTrace
 
@@ -40,6 +47,14 @@ class StructuredFormatter(logging.Formatter):
         trace_id = get_current_trace_id()
         if trace_id:
             log_data["trace_id"] = trace_id
+
+        # Add OpenTelemetry trace correlation
+        if OTEL_AVAILABLE:
+            span = trace.get_current_span()
+            if span.is_recording():
+                span_context = span.get_span_context()
+                log_data["otel_trace_id"] = f"{span_context.trace_id:032x}"
+                log_data["otel_span_id"] = f"{span_context.span_id:016x}"
 
         # Add execution context
         exec_context = get_execution_context()
