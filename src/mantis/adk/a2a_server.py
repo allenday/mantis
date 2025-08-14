@@ -646,7 +646,7 @@ work with appropriate agents."""
             if "response_data" in locals():
                 if response_data.get("direct_agent_response"):
                     # For direct agent responses, store the text directly (simpler format)
-                    task.result = response_data["text_response"]
+                    task.result = str(response_data["text_response"])
                     logger.info(f"Stored direct agent response for task {task_id}")
                 else:
                     # For simulation responses, use protobuf serialization
@@ -658,8 +658,10 @@ work with appropriate agents."""
                     if response_data.get("simulation_output"):
                         ParseDict(response_data["simulation_output"], simulation_output)
 
-                    # Store serialized protobuf instead of JSON
-                    task.result = simulation_output.SerializeToString()
+                    # Store serialized protobuf as base64 encoded string for JSON compatibility
+                    import base64
+
+                    task.result = base64.b64encode(simulation_output.SerializeToString()).decode("utf-8")
                     logger.info(f"Stored simulation protobuf response for task {task_id}")
             else:
                 # This should never happen after fallback removal - fail fast

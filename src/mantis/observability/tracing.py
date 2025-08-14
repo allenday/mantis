@@ -11,16 +11,16 @@ from contextlib import contextmanager
 from functools import wraps
 
 from opentelemetry import trace, baggage  # type: ignore[import-untyped]
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter  # type: ignore[import-untyped]
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter  # type: ignore[import-untyped,import-not-found]
 
 # Jaeger exporter removed due to Python 3.13 compatibility issues
 # from opentelemetry.exporter.jaeger.thrift import JaegerExporter  # type: ignore[import-untyped]
-from opentelemetry.sdk.trace import TracerProvider  # type: ignore[import-untyped]
-from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter  # type: ignore[import-untyped]
-from opentelemetry.sdk.resources import Resource  # type: ignore[import-untyped]
-from opentelemetry.instrumentation.aiohttp_client import AioHttpClientInstrumentor  # type: ignore[import-untyped]
-from opentelemetry.instrumentation.requests import RequestsInstrumentor  # type: ignore[import-untyped]
-from opentelemetry.propagators.b3 import B3MultiFormat  # type: ignore[import-untyped]
+from opentelemetry.sdk.trace import TracerProvider  # type: ignore[import-untyped,import-not-found]
+from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter  # type: ignore[import-untyped,import-not-found]
+from opentelemetry.sdk.resources import Resource  # type: ignore[import-untyped,import-not-found]
+from opentelemetry.instrumentation.aiohttp_client import AioHttpClientInstrumentor  # type: ignore[import-untyped,import-not-found]
+from opentelemetry.instrumentation.requests import RequestsInstrumentor  # type: ignore[import-untyped,import-not-found]
+from opentelemetry.propagators.b3 import B3MultiFormat  # type: ignore[import-untyped,import-not-found]
 from opentelemetry.propagate import set_global_textmap  # type: ignore[import-untyped]
 
 from .logger import get_structured_logger

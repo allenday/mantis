@@ -8,7 +8,7 @@ import logging
 try:
     from duckduckgo_search import DDGS  # type: ignore[assignment,import-untyped]
 except ImportError:
-    from ddgs import DDGS  # type: ignore[assignment,import-untyped]
+    from ddgs import DDGS  # type: ignore[assignment,import-untyped,import-not-found,no-redef]
 from .base import log_tool_invocation, log_tool_result
 
 logger = logging.getLogger(__name__)
