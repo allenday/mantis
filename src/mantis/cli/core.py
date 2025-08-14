@@ -16,6 +16,8 @@ import rich_click as click
 from rich.console import Console
 from rich.panel import Panel
 
+from ..observability.logger import get_structured_logger
+
 # Configure rich-click for better UX
 click.rich_click.USE_RICH_MARKUP = True
 click.rich_click.USE_MARKDOWN = True
@@ -25,6 +27,7 @@ click.rich_click.STYLE_ERRORS_SUGGESTION = "magenta italic"
 click.rich_click.ERRORS_SUGGESTION = "Try running the command with the '--help' flag for more information."
 
 console = Console()
+logger = get_structured_logger(__name__)
 
 # Global options registry - maps option names to click decorators
 GLOBAL_OPTIONS = {
@@ -90,6 +93,15 @@ def validate_model_string(ctx: click.Context, param: click.Parameter, value: Opt
             available_models = manager.get_all_models()
             model_names = [m.full_name for m in available_models]
 
+            logger.warning(
+                "Invalid model specified in CLI",
+                structured_data={
+                    "requested_model": value,
+                    "available_models": model_names,
+                    "context": str(ctx.info_name),
+                },
+            )
+
             console.print(f"[red]Error: Model '{value}' not found[/red]")
             console.print("\n[yellow]Available models:[/yellow]")
             for name in model_names[:10]:  # Show first 10
@@ -104,9 +116,18 @@ def validate_model_string(ctx: click.Context, param: click.Parameter, value: Opt
 
     except ImportError:
         # ModelManager not available, skip validation
+        logger.debug("ModelManager not available - skipping model validation", structured_data={"model": value})
         return value
     except Exception as e:
         console.print(f"[yellow]Warning: Could not validate model '{value}': {e}[/yellow]")
+        logger.warning(
+            "Model validation failed with unexpected error",
+            structured_data={
+                "model": value,
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+            },
+        )
         return value
 
 
@@ -141,6 +162,14 @@ def cli(ctx: click.Context, version: bool) -> None:
 
     A sophisticated CLI for multi-agent AI simulation and strategic analysis.
     """
+    logger.info(
+        "Mantis CLI invoked",
+        structured_data={
+            "command": ctx.invoked_subcommand,
+            "version_requested": version,
+            "args": ctx.params,
+        },
+    )
     if ctx.invoked_subcommand is None:
         if version:
             from .. import __version__

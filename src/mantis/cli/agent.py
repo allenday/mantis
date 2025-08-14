@@ -11,8 +11,10 @@ import rich_click as click
 from rich.console import Console
 
 from .core import cli, use_global_options
+from ..observability.logger import get_structured_logger
 
 console = Console()
+logger = get_structured_logger(__name__)
 
 
 def display_agent_card_summary(agent_card: Any, verbose: bool = False) -> None:
@@ -690,10 +692,25 @@ def serve_single(
         console.print(f"[dim]Server will run on {host}:{port}[/dim]")
         console.print(f"[dim]Registry URL: {registry_url}[/dim]")
 
+    logger.info(
+        "Starting agent server",
+        structured_data={
+            "agent_card_file": actual_input,
+            "host": host,
+            "port": port,
+            "registry_url": registry_url,
+        },
+    )
+
     try:
         # Load AgentCard data
         with open(actual_input, "r") as f:
             agent_data = json.load(f)
+
+        logger.debug(
+            "Loaded agent card data",
+            structured_data={"file": actual_input, "data_keys": list(agent_data.keys())},
+        )
 
         # Load AgentCard from JSON (handles both formats)
         from ..agent.card import load_agent_card_from_json
@@ -701,7 +718,11 @@ def serve_single(
         agent_card = load_agent_card_from_json(agent_data)
 
         if verbose:
-            agent_name = agent_card.agent_card.name if hasattr(agent_card, "agent_card") else getattr(agent_card, 'name', 'Unknown Agent')  # type: ignore[attr-defined]
+            agent_name = (
+                agent_card.agent_card.name
+                if hasattr(agent_card, "agent_card")
+                else getattr(agent_card, "name", "Unknown Agent")
+            )  # type: ignore[attr-defined]
             console.print(f"[dim]Loaded agent: {agent_name}[/dim]")
 
         # Load custom system prompt if provided (not yet implemented for single serve)
@@ -787,9 +808,27 @@ def serve_single(
                             console.print(
                                 f"[yellow]⚠️ Registry registration returned HTTP {response.status} - {response_text[:200]}[/yellow]"
                             )
+                            logger.warning(
+                                "Registry registration returned non-200 status",
+                                structured_data={
+                                    "status_code": response.status,
+                                    "response_preview": response_text[:200],
+                                    "agent_name": base_card.name,  # type: ignore[union-attr]
+                                    "registry_url": registry_url,
+                                },
+                            )
             except Exception as e:
                 console.print(f"[yellow]⚠️ Failed to register with registry: {e}[/yellow]")
                 console.print("[dim]Server will start anyway, but may not be discoverable[/dim]")
+                logger.warning(
+                    "Agent registration with registry failed",
+                    structured_data={
+                        "error_type": type(e).__name__,
+                        "error_message": str(e),
+                        "agent_name": base_card.name,  # type: ignore[union-attr]
+                        "registry_url": registry_url,
+                    },
+                )
 
         if verbose:
             console.print(f"[dim]Registering with A2A registry at {registry_url}[/dim]")
@@ -797,17 +836,36 @@ def serve_single(
         asyncio.run(register_agent())
 
         # Run the server (this blocks)
+        logger.info(
+            "Agent server starting",
+            structured_data={"agent_name": base_card.name, "host": host, "port": port},  # type: ignore[union-attr]
+        )
         uvicorn.run(app, host=host, port=port)
+
+        logger.info("Agent server stopped", structured_data={"agent_name": base_card.name})  # type: ignore[union-attr]
         return 0
 
     except FileNotFoundError:
         console.print(f"[red]❌ File not found: {actual_input}[/red]")
+        logger.error("Agent card file not found", structured_data={"file": actual_input})
         return 1
     except json.JSONDecodeError as e:
         console.print(f"[red]❌ Invalid JSON in {actual_input}: {e}[/red]")
+        logger.error(
+            "Invalid JSON in agent card file",
+            structured_data={"file": actual_input, "error_message": str(e)},
+        )
         return 1
     except Exception as e:
         console.print(f"[red]❌ Failed to start agent server: {e}[/red]")
+        logger.error(
+            "Agent server startup failed",
+            structured_data={
+                "file": actual_input,
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+            },
+        )
         if verbose:
             console.print_exception()
         return 1
@@ -912,15 +970,7 @@ def serve_all(
         console.print(f"[yellow]📋 Will register each agent with A2A registry at: {registry_url}[/yellow]")
         console.print("\n[dim]Press Ctrl+C to stop all servers[/dim]")
 
-        # Get model specification
-        from ..config import DEFAULT_MODEL
-
-        model_spec = model or DEFAULT_MODEL
-
-        # Create server tasks
-        from fasta2a import FastA2A, Skill
-        from fasta2a.storage import InMemoryStorage
-        from fasta2a.broker import InMemoryBroker
+        # Create server tasks using native ADK implementation (like serve-single)
 
         async def register_agent_with_registry(agent_card: Any, registry_url: str) -> bool:
             """Register an agent card with the A2A registry using JSON-RPC."""
@@ -1023,7 +1073,7 @@ def serve_all(
                 raise
 
         async def run_all_servers() -> None:
-            # Create FastA2A apps for each agent
+            # Create native ADK A2A servers for each agent
             servers = []
             registration_tasks = []
 
@@ -1036,33 +1086,7 @@ def serve_all(
                 if verbose:
                     console.print(f"[dim]Creating server for {base_card.name} on port {port}[/dim]")  # type: ignore[union-attr]
 
-                # Convert AgentCard skills to FastA2A skills
-                fasta2a_skills = []
-                for skill in base_card.skills:  # type: ignore[union-attr]
-                    system_prompt = f"You are {base_card.name}.\n\n{base_card.description}\n\nYou are specifically being asked to help with: {skill.name}\n{skill.description}"  # type: ignore[union-attr]
-
-                    fasta2a_skill = Skill(
-                        name=skill.name.lower().replace(" ", "_"),
-                        description=skill.description,
-                        system_prompt=system_prompt,
-                        model=model_spec,
-                    )
-                    fasta2a_skills.append(fasta2a_skill)
-
-                # Create FastA2A app
-                app = FastA2A(
-                    storage=InMemoryStorage(),
-                    broker=InMemoryBroker(),
-                    name=base_card.name,  # type: ignore[union-attr]
-                    url=base_card.url,  # type: ignore[union-attr]
-                    version=base_card.version,  # type: ignore[union-attr]
-                    description=base_card.description,  # type: ignore[union-attr]
-                    provider=base_card.provider,  # type: ignore[union-attr]
-                    skills=fasta2a_skills,
-                    debug=verbose,
-                )
-
-                # Use ADK A2A servers for all agents (always enabled, fail hard)
+                # Use native ADK A2A servers for all agents (same as serve-single)
                 from ..adk.a2a_server import create_adk_a2a_server_from_agent_card
 
                 adk_a2a_server = create_adk_a2a_server_from_agent_card(base_card, port=port)

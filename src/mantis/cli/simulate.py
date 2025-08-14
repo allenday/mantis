@@ -12,8 +12,10 @@ from rich.syntax import Syntax
 from .core import cli, use_global_options, error_handler
 from ..core import SimulationOrchestrator, SimulationInputBuilder
 from ..proto.mantis.v1 import mantis_core_pb2
+from ..observability.logger import get_structured_logger
 
 console = Console()
+logger = get_structured_logger(__name__)
 
 
 @cli.command()
@@ -62,6 +64,18 @@ def simulate(
     if verbose:
         console.print(f"[dim]Building SimulationInput for query: {query[:50]}{'...' if len(query) > 50 else ''}[/dim]")
 
+    logger.info(
+        "Starting simulation from CLI",
+        structured_data={
+            "query_length": len(query),
+            "context": context,
+            "max_depth": max_depth,
+            "model": model,
+            "temperature": temperature,
+            "agents_count": len(agents) if agents else 0,
+        },
+    )
+
     try:
         # Build SimulationInput from CLI arguments
         simulation_input = SimulationInputBuilder.from_cli_args(
@@ -106,15 +120,36 @@ def simulate(
 
         except Exception as e:
             console.print(f"[red]❌ Simulation execution failed: {e}[/red]")
+            logger.error(
+                "Simulation execution failed",
+                structured_data={
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                    "context": context,
+                    "query_length": len(query),
+                },
+            )
             if verbose:
                 console.print_exception()
             return 1
 
     except ValueError as e:
         console.print(f"[red]❌ Validation Error: {e}[/red]")
+        logger.error(
+            "Simulation input validation failed",
+            structured_data={"error_message": str(e), "query_length": len(query)},
+        )
         return 1
     except Exception as e:
         console.print(f"[red]❌ Error: {e}[/red]")
+        logger.error(
+            "Simulation CLI command failed",
+            structured_data={
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+                "query_length": len(query),
+            },
+        )
         if verbose:
             console.print_exception()
         return 1

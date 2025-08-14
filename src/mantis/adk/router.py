@@ -1,7 +1,7 @@
 """
-ChiefOfStaffRouter - ADK-powered orchestration with A2A boundaries
+AgentRouter - ADK-powered orchestration with A2A boundaries
 
-This module implements the ChiefOfStaffRouter using Google ADK's SequentialAgent
+This module implements the AgentRouter using Google ADK's SequentialAgent
 for internal orchestration while preserving A2A as the external protocol boundary.
 """
 
@@ -19,9 +19,9 @@ from ..config import DEFAULT_MODEL
 logger = get_structured_logger(__name__)
 
 
-class ChiefOfStaffRouter:
+class AgentRouter:
     """
-    ADK-powered Chief of Staff agent router.
+    ADK-powered agent router.
 
     Uses ADK SequentialAgent internally for orchestration while maintaining
     A2A protobuf boundaries for external communication.
@@ -37,13 +37,13 @@ class ChiefOfStaffRouter:
         self.app_name = "mantis-pydantic-ai-router"
         self.tools = tools or {}
         self.orchestrator = orchestrator  # Store orchestrator reference to access structured results
-        self._initialize_chief_of_staff_agent()
+        self._initialize_leader_agent()
         logger.info(
-            "ChiefOfStaffRouter initialized with pydantic-ai backend", structured_data={"tools_count": len(self.tools)}
+            "AgentRouter initialized with pydantic-ai backend", structured_data={"tools_count": len(self.tools)}
         )
 
-    def _initialize_chief_of_staff_agent(self) -> None:
-        """Initialize the Chief of Staff agent using pydantic-ai."""
+    def _initialize_leader_agent(self) -> None:
+        """Initialize the leader agent using pydantic-ai."""
         import os
 
         # Ensure API keys are loaded

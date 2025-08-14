@@ -134,6 +134,9 @@ async def call_agent_and_extract_diagnostics(url: str, query: str, timeout_secon
                         "parts": [{"kind": "text", "text": query}],
                         "kind": "message",
                         "messageId": str(uuid.uuid4())
+                    },
+                    "metadata": {
+                        "request_type": "direct_agent_request"
                     }
                 },
                 "id": str(uuid.uuid4())
@@ -322,7 +325,7 @@ Execute this simulation and return the full SimulationOutput with nested results
             return
         
         # Step 3: Extract coordination activity logs
-        coordination_logs = await extract_structured_logs("chief-of-staff", 180)
+        coordination_logs = await extract_structured_logs("agent-server", 180)
         
         print_diagnostic_section("COORDINATION LOGS EXTRACTION", {
             "raw_logs_found": coordination_logs.get("total_raw_entries", 0),

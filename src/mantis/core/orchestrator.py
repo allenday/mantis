@@ -14,8 +14,10 @@ from ..proto.mantis.v1 import mantis_persona_pb2, mantis_core_pb2
 from ..proto import a2a_pb2
 from ..config import DEFAULT_MODEL
 from ..observability.logger import get_structured_logger
+from ..observability.tracing import get_tracer, trace_simulation
 
 logger = get_structured_logger(__name__)
+tracer = get_tracer("mantis.orchestrator")
 
 # Context variable to pass agent information to tools
 current_agent_context: contextvars.ContextVar[Dict[str, str]] = contextvars.ContextVar(
@@ -187,6 +189,7 @@ class SimulationOrchestrator:
             logger.error("Failed to initialize tools", structured_data={"error": str(e)})
             raise
 
+    @trace_simulation(context_id="", execution_strategy="direct")  # Will be updated dynamically
     async def execute_simulation(
         self, simulation_input: mantis_core_pb2.SimulationInput
     ) -> mantis_core_pb2.SimulationOutput:
@@ -207,6 +210,20 @@ class SimulationOrchestrator:
                 "agent_specs": len(simulation_input.agents),
             },
         )
+
+        # Add distributed tracing context
+        with tracer.start_span(
+            "simulation.execute",
+            attributes={
+                "simulation.context_id": simulation_input.context_id,
+                "simulation.query_length": len(simulation_input.query),
+                "simulation.agent_specs": len(simulation_input.agents),
+                "simulation.execution_strategy": str(simulation_input.execution_strategy),
+                "mantis.component": "orchestrator",
+                "mantis.operation": "execute_simulation",
+            },
+        ):
+            tracer.add_agent_context("orchestrator", "SimulationOrchestrator", simulation_input.context_id)
 
         try:
             # CRITICAL FIX: Use specified agent if provided, otherwise use Chief of Staff
@@ -266,11 +283,11 @@ class SimulationOrchestrator:
                     },
                 )
 
-                from ..adk.router import ChiefOfStaffRouter
+                from ..adk.router import AgentRouter
 
                 # Pass tools to ADK router (empty dict if tools disabled)
                 adk_tools = {} if disable_tools else self.tools
-                adk_router = ChiefOfStaffRouter(tools=adk_tools, orchestrator=self)
+                adk_router = AgentRouter(tools=adk_tools, orchestrator=self)
 
                 return await adk_router.route_simulation(simulation_input)
 
@@ -451,30 +468,25 @@ class SimulationOrchestrator:
         return output
 
     async def _get_chief_of_staff_agent(self) -> mantis_persona_pb2.MantisAgentCard:
-        """Get Chief of Staff agent card from registry with local fallback."""
+        """Get Chief of Staff agent card from registry - fail fast if unavailable."""
         from ..tools.agent_registry import list_all_agents
-        from ..config import get_default_base_agent
 
         logger.info("Loading Chief of Staff agent from registry")
 
         try:
-            # Try to get all agents from registry
+            # Get all agents from registry - fail fast if unavailable
             all_agents = await list_all_agents()
 
             if not all_agents or len(all_agents) == 0:
-                logger.warning("No agents found in registry, trying local fallback")
-                raise ValueError("Registry unavailable or empty")
+                logger.error("Registry is empty - no agents available")
+                raise ValueError("Registry is empty - no agents available")
 
         except Exception as registry_error:
-            logger.warning(f"Registry access failed: {registry_error}, using local fallback")
-
-            # Fall back to local Chief of Staff agent
-            local_agent = get_default_base_agent()
-            if local_agent:
-                logger.info("Using local Chief of Staff agent as fallback")
-                return local_agent
-            else:
-                raise ValueError("No agents available - registry failed and no local fallback found")
+            logger.error(
+                "Registry access failed - system cannot operate without agent registry",
+                structured_data={"error_type": type(registry_error).__name__, "error_message": str(registry_error)},
+            )
+            raise RuntimeError(f"Registry access failed: {registry_error}") from registry_error
 
         # Look for the actual Chief of Staff agent first
         chief_of_staff = None
@@ -488,9 +500,9 @@ class SimulationOrchestrator:
             selected_agent = chief_of_staff
             logger.info("Found and selected Chief of Staff agent from registry")
         else:
-            # Fallback to first agent if Chief of Staff not found
-            selected_agent = all_agents[0]
-            logger.warning("Chief of Staff not found in registry, using fallback agent")
+            # Fail fast if Chief of Staff not found
+            logger.error("Chief of Staff agent not found in registry - system requires Chief of Staff for coordination")
+            raise ValueError("Chief of Staff agent not found in registry")
 
         logger.info(f"Selected agent: {selected_agent.agent_card.name}")
 

@@ -135,13 +135,38 @@ class ADKA2AServer:
 
             load_dotenv()
 
+            # Get model from mantis config and translate to ADK format
+            from ..config import DEFAULT_MODEL
+
+            def translate_model_to_adk(mantis_model: str) -> str:
+                """Translate mantis model format to ADK-compatible model."""
+                # Handle mantis model format: "provider:model-name" or just "model-name"
+                if ":" in mantis_model:
+                    provider, model = mantis_model.split(":", 1)
+                    if provider == "google" or provider == "gemini":
+                        return model  # Use as-is for Google models
+                    elif provider == "anthropic":
+                        # For ADK, we need to use a Google model since ADK is Google's framework
+                        logger.info(f"Translating Anthropic model {model} to Google model for ADK compatibility")
+                        return "gemini-1.5-flash"  # Use stable Google model
+                    elif provider == "openai":
+                        logger.info(f"Translating OpenAI model {model} to Google model for ADK compatibility")
+                        return "gemini-1.5-flash"
+                    else:
+                        # Default to stable Google model for unknown providers
+                        logger.warning(f"Unknown provider {provider}, using gemini-1.5-flash for ADK")
+                        return "gemini-1.5-flash"
+                else:
+                    # Assume it's already a Google model name
+                    return mantis_model
+
+            model_config = translate_model_to_adk(DEFAULT_MODEL)
+            logger.info(f"Using ADK model: {model_config} (translated from mantis config: {DEFAULT_MODEL})")
+
             # Check for API key availability
             if not os.environ.get("GOOGLE_API_KEY") and not (os.environ.get("GOOGLE_CLOUD_PROJECT")):
-                logger.warning("No GOOGLE_API_KEY or GOOGLE_CLOUD_PROJECT found - ADK agent will use mock responses")
-                # Use a simple mock model for testing
-                model_config = "gemini-2.0-flash-exp"  # Will fail gracefully
+                logger.warning("No GOOGLE_API_KEY or GOOGLE_CLOUD_PROJECT found - ADK agent may fail")
             else:
-                model_config = "gemini-2.0-flash-exp"
                 logger.info("Google API credentials found - ADK agent can use real models")
 
             # Create ADK agent with tools (sanitize name for ADK validation)
@@ -343,9 +368,12 @@ work with appropriate agents."""
     async def _handle_message_send(self, request: JSONRPCRequest) -> Dict[str, Any]:
         """Handle message/send A2A requests."""
         try:
-            # Parse message/send parameters
+            # Parse message/send parameters with metadata
             params = MessageSendParams(**request.params)
             message = params.message
+
+            # Extract metadata for request typing (following A2A spec)
+            request_metadata = request.params.get("metadata", {})
 
             logger.info(
                 "Processing A2A message/send request",
@@ -361,7 +389,7 @@ work with appropriate agents."""
             self.tasks[task_id] = task
 
             # Start async processing (don't await - return task ID immediately)
-            asyncio.create_task(self._process_task_async(task_id, message))
+            asyncio.create_task(self._process_task_async(task_id, message, request_metadata))
 
             # Return task ID immediately (A2A protocol compliance)
             return JSONRPCResponse(
@@ -390,7 +418,26 @@ work with appropriate agents."""
 
             # Add result if completed
             if task.status.state == TaskState.COMPLETED and task.result:
-                result["result"] = task.result
+                # Handle both protobuf and direct text results
+                try:
+                    if isinstance(task.result, str):
+                        # Direct agent response (text)
+                        result["result"] = task.result
+                        logger.debug(f"Returned direct text result for task {task.id}")
+                    else:
+                        # Protobuf simulation response (binary)
+                        from google.protobuf.json_format import MessageToDict
+                        from ..proto.mantis.v1 import mantis_core_pb2
+
+                        # Deserialize protobuf and convert to dict
+                        simulation_output = mantis_core_pb2.SimulationOutput()
+                        simulation_output.ParseFromString(task.result)
+                        result["result"] = MessageToDict(simulation_output)
+                        logger.debug(f"Returned protobuf simulation result for task {task.id}")
+                except Exception as e:
+                    logger.error(f"Failed to deserialize task result for JSON: {e}")
+                    # Fallback to text representation
+                    result["result"] = "Processing completed but result serialization failed"
             elif task.status.state == TaskState.FAILED and task.status.error:
                 result["status"]["error"] = task.status.error
 
@@ -400,8 +447,8 @@ work with appropriate agents."""
             logger.error(f"tasks/get failed: {e}")
             raise HTTPException(status_code=500, detail=str(e))
 
-    async def _process_task_async(self, task_id: str, message: Message) -> None:
-        """Process task asynchronously using ChiefOfStaffRouter for structured results."""
+    async def _process_task_async(self, task_id: str, message: Message, request_metadata: Dict[str, Any]) -> None:
+        """Process task asynchronously using proper A2A metadata for request typing."""
         try:
             task = self.tasks[task_id]
             task.status.state = TaskState.RUNNING
@@ -411,24 +458,47 @@ work with appropriate agents."""
             # Extract text content from A2A message
             text_content = message.parts[0].text if message.parts else ""
 
-            # Parse JSON-RPC content if present (from simulation_proper_demo.py)
-            simulation_params = None
-            if "JSON-RPC Call: process_simulation_input" in text_content:
+            # Check request type from A2A metadata (proper approach)
+            request_type = request_metadata.get("request_type", "unknown")
+            proto_type = request_metadata.get("proto_type")
+
+            logger.info(
+                f"🔍 A2A REQUEST ANALYSIS: request_type={request_type}, proto_type={proto_type}, metadata_keys={list(request_metadata.keys())}"
+            )
+
+            # Handle different request types properly
+            if request_type == "simulation_request" and proto_type == "mantis.v1.SimulationInput":
+                # Parse structured simulation request from JSON
+                try:
+                    import json
+
+                    simulation_params = json.loads(text_content)
+                    logger.info(f"Parsed simulation input: {list(simulation_params.keys())}")
+                except Exception as e:
+                    raise ValueError(f"Failed to parse SimulationInput JSON: {e}")
+
+            elif "JSON-RPC Call: process_simulation_input" in text_content:
+                # Legacy support for old format (from simulation_proper_demo.py)
                 try:
                     import json
                     import re
 
-                    # Extract the params from the JSON-RPC call text
                     params_match = re.search(r"with params:\s*(\{.*\})", text_content, re.DOTALL)
                     if params_match:
                         params_str = params_match.group(1)
                         simulation_params = json.loads(params_str)
-                        logger.info(f"Extracted simulation params: {list(simulation_params.keys())}")
+                        logger.info(f"Extracted legacy simulation params: {list(simulation_params.keys())}")
+                        request_type = "simulation_request"  # Treat as simulation
+                    else:
+                        simulation_params = None
                 except Exception as e:
-                    logger.warning(f"Failed to parse JSON-RPC params: {e}")
+                    logger.warning(f"Failed to parse legacy JSON-RPC params: {e}")
+                    simulation_params = None
+            else:
+                simulation_params = None
 
-            # CRITICAL FIX: Use ChiefOfStaffRouter instead of ADK directly
-            if simulation_params:
+            # Process based on request type
+            if request_type == "simulation_request" and simulation_params:
                 # Create proper SimulationInput for structured processing
                 from ..proto.mantis.v1 import mantis_core_pb2
 
@@ -451,15 +521,15 @@ work with appropriate agents."""
                         agent_spec.count = agent_data.get("count", 1)
                         # Note: agent details would be populated by orchestrator
 
-                # Initialize ChiefOfStaffRouter with orchestrator
+                # Initialize AgentRouter with orchestrator
                 if not hasattr(self, "router"):
-                    from ..adk.router import ChiefOfStaffRouter
+                    from ..adk.router import AgentRouter
 
-                    self.router = ChiefOfStaffRouter(tools=self.orchestrator.tools, orchestrator=self.orchestrator)
-                    logger.info("Initialized ChiefOfStaffRouter for structured results")
+                    self.router = AgentRouter(tools=self.orchestrator.tools, orchestrator=self.orchestrator)
+                    logger.info("Initialized AgentRouter for structured results")
 
-                # Route through ChiefOfStaffRouter for structured results
-                logger.info(f"🎯 A2A SERVER: Routing through ChiefOfStaffRouter for task {task_id}")
+                # Route through AgentRouter for structured results
+                logger.info(f"🎯 A2A SERVER: Routing through AgentRouter for task {task_id}")
 
                 # Process with timeout - increased for team coordination
                 timeout_seconds = 120
@@ -492,7 +562,7 @@ work with appropriate agents."""
 
                 # Store the structured output for debugging
                 logger.info(
-                    "🎯 A2A SERVER: ChiefOfStaffRouter returned structured output",
+                    "🎯 A2A SERVER: AgentRouter returned structured output",
                     structured_data={
                         "task_id": task_id,
                         "context_id": simulation_output.context_id,
@@ -501,45 +571,109 @@ work with appropriate agents."""
                     },
                 )
 
-            else:
-                # Fallback: Use ADK directly for non-simulation requests
-                logger.info(f"Using fallback ADK processing for task {task_id}")
-
-                # Create ADK session
-                session_id = f"session-{task_id}"
-                user_id = "a2a-user"
-
-                # Create session via ADK session service
-                adk_session = await self.session_service.create_session(
-                    app_name=self.app_name, user_id=user_id, session_id=session_id
+            elif request_type == "direct_agent_request":
+                # Handle direct agent requests (from recursive_invocation.py) - properly typed
+                logger.info(
+                    "Processing direct agent request via A2A metadata",
+                    structured_data={
+                        "task_id": task_id,
+                        "request_type": request_type,
+                        "text_content_preview": text_content[:100] + "..." if len(text_content) > 100 else text_content,
+                    },
                 )
 
-                # Convert A2A message to ADK Content
+                # Use ADK agent directly for simple agent-to-agent requests
+                from google.genai import types
+
+                # Convert text to ADK message format
                 adk_message = types.Content(role="user", parts=[types.Part(text=text_content)])
 
-                # Process with timeout
-                timeout_seconds = 30
-                events = await asyncio.wait_for(
-                    self._run_adk_agent_async(user_id, session_id, adk_message), timeout=timeout_seconds
+                # Generate a session for this request
+                user_id = f"a2a-user-{task_id}"
+                session_id = f"a2a-session-{task_id}"
+
+                # CRITICAL FIX: Create session in session service first (async)
+                session = await self.session_service.create_session(
+                    app_name=self.app_name, user_id=user_id, session_id=session_id
+                )
+                logger.info(
+                    f"Created ADK session {session_id} for user {user_id} with app {self.app_name} - session object: {session.id}"
                 )
 
-                # Extract response from events
-                response_text = self._extract_response_from_events(events)
+                # Run ADK agent
+                adk_events = await self._run_adk_agent_async(user_id, session_id, adk_message)
+                response_text = self._extract_response_from_events(adk_events)
 
-            # Update task with structured result - FAIL HARD, NO SAFETY FALLBACKS
-            if "response_data" in locals():
-                import json
+                if (
+                    not response_text
+                    or response_text
+                    == "I processed your request but was unable to generate a visible response. Please try again."
+                ):
+                    raise RuntimeError(f"ADK agent failed to generate response for task {task_id}")
 
-                task.result = json.dumps(response_data)  # Serialize structured response
+                # Create structured response for compatibility
+                response_data = {
+                    "text_response": response_text,
+                    "direct_agent_response": True,
+                    "context_id": f"direct-{task_id}",
+                }
+
+                logger.info(
+                    "🎯 A2A SERVER: Direct agent request processed successfully via metadata",
+                    structured_data={
+                        "task_id": task_id,
+                        "response_length": len(response_text),
+                        "processing_mode": "direct_adk_metadata",
+                    },
+                )
+
             else:
-                task.result = response_text  # This WILL fail if response_text not defined - GOOD!
+                # Unknown request type - fail fast
+                logger.error(
+                    "Unknown request type - failing fast",
+                    structured_data={
+                        "task_id": task_id,
+                        "request_type": request_type,
+                        "proto_type": proto_type,
+                        "available_metadata": list(request_metadata.keys()),
+                    },
+                )
+                raise ValueError(
+                    f"Unsupported request type '{request_type}' with proto_type '{proto_type}'. Use proper A2A metadata."
+                )
+
+            # Update task with structured result
+            if "response_data" in locals():
+                if response_data.get("direct_agent_response"):
+                    # For direct agent responses, store the text directly (simpler format)
+                    task.result = str(response_data["text_response"])
+                    logger.info(f"Stored direct agent response for task {task_id}")
+                else:
+                    # For simulation responses, use protobuf serialization
+                    from google.protobuf.json_format import ParseDict
+                    from ..proto.mantis.v1 import mantis_core_pb2
+
+                    # Create SimulationOutput protobuf from response_data
+                    simulation_output = mantis_core_pb2.SimulationOutput()
+                    if response_data.get("simulation_output"):
+                        ParseDict(response_data["simulation_output"], simulation_output)
+
+                    # Store serialized protobuf as base64 encoded string for JSON compatibility
+                    import base64
+
+                    task.result = base64.b64encode(simulation_output.SerializeToString()).decode("utf-8")
+                    logger.info(f"Stored simulation protobuf response for task {task_id}")
+            else:
+                # This should never happen after fallback removal - fail fast
+                raise RuntimeError("No response_data available after processing - system error")
             task.status.state = TaskState.COMPLETED
             task.status.timestamp = datetime.utcnow()
 
             # Add agent response to history
+            final_response_text = response_data.get("text_response", "No response generated")
             agent_response = Message(
                 role="agent",
-                parts=[MessagePart(text=response_text)],
+                parts=[MessagePart(text=final_response_text)],
                 kind="message",
                 messageId=f"agent-{uuid.uuid4().hex[:8]}",
             )
@@ -564,6 +698,9 @@ work with appropriate agents."""
         events = []
 
         try:
+            logger.info(
+                f"Starting ADK runner with user_id={user_id}, session_id={session_id}, app_name={self.app_name}"
+            )
             # ADK runner.run_async returns an async generator - collect events properly
             async_events = self.adk_runner.run_async(user_id=user_id, session_id=session_id, new_message=message)
 

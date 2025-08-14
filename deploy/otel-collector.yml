@@ -1,0 +1,174 @@
+# OpenTelemetry Collector Configuration for Mantis Multi-Agent System
+# Collects traces, metrics, and logs from distributed agent services
+
+receivers:
+  # OTLP receiver for traces and metrics from Mantis services  
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+        cors:
+          allowed_origins:
+            - "*"
+  
+  # Jaeger receiver for legacy compatibility
+  jaeger:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:14250
+      thrift_http:
+        endpoint: 0.0.0.0:14268
+      thrift_compact:
+        endpoint: 0.0.0.0:6831
+        
+  # Host metrics for container monitoring  
+  hostmetrics:
+    collection_interval: 30s
+    scrapers:
+      cpu:
+        metrics:
+          system.cpu.utilization:
+            enabled: true
+      memory:
+        metrics:
+          system.memory.utilization:
+            enabled: true
+      network: {}
+      filesystem: {}
+
+processors:
+  # Batch processor for efficient export
+  batch:
+    timeout: 1s
+    send_batch_size: 1024
+    send_batch_max_size: 2048
+    
+  # Memory limiter to prevent OOM
+  memory_limiter:
+    limit_mib: 512
+    spike_limit_mib: 128
+    check_interval: 5s
+    
+  # Resource processor to add deployment context
+  resource:
+    attributes:
+      - key: deployment.environment
+        value: ${MANTIS_ENV}
+        action: upsert
+      - key: service.namespace  
+        value: mantis.ai
+        action: upsert
+      - key: k8s.cluster.name
+        from_attribute: k8s.cluster.name
+        action: insert
+        
+  # Attribute processor for agent-specific enrichment
+  attributes/agent_context:
+    actions:
+      - key: mantis.agent.type
+        action: insert
+        value: coordination
+      - key: mantis.system.version
+        action: insert
+        value: "1.0.0"
+        
+  # Span processor for trace enhancement
+  span:
+    name:
+      to_attributes:
+        rules:
+          - ^agent\.(?P<agent_name>.*)\.(?P<operation>.*)$
+    include:
+      match_type: regexp
+      span_names:
+        - ^agent\..*
+        - ^simulation\..*
+        - ^coordination\..*
+
+exporters:
+  # Console exporter for development
+  logging:
+    loglevel: info
+    
+  # Jaeger exporter for trace visualization
+  jaeger:
+    endpoint: jaeger:14250
+    tls:
+      insecure: true
+    timeout: 5s
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_interval: 30s
+      max_elapsed_time: 120s
+      
+  # Prometheus metrics exporter
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+    namespace: mantis
+    const_labels:
+      system: agent_coordination
+    metric_expiration: 180m
+    resource_to_telemetry_conversion:
+      enabled: true
+      
+  # OTLP export to external observability platform (optional)
+  otlp/external:
+    endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+    headers:
+      authorization: Bearer ${OTEL_EXPORTER_OTLP_TOKEN}
+    timeout: 10s
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+    sending_queue:
+      enabled: true
+      queue_size: 512
+
+extensions:
+  # Health check extension
+  health_check:
+    endpoint: 0.0.0.0:13133
+    path: /health
+    
+  # Performance profiler
+  pprof:
+    endpoint: 0.0.0.0:1777
+    
+  # Memory ballast for performance
+  memory_ballast:
+    size_mib: 165
+
+service:
+  extensions: [health_check, pprof, memory_ballast]
+  
+  pipelines:
+    # Traces pipeline
+    traces:
+      receivers: [otlp, jaeger]
+      processors: [memory_limiter, resource, attributes/agent_context, span, batch]
+      exporters: [logging, jaeger]
+      
+    # Metrics pipeline  
+    metrics:
+      receivers: [otlp, hostmetrics]
+      processors: [memory_limiter, resource, batch]
+      exporters: [logging, prometheus]
+      
+    # Logs pipeline (basic)
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [logging]
+
+  # Telemetry configuration
+  telemetry:
+    logs:
+      level: "info"
+    metrics:
+      address: 0.0.0.0:8888
+      level: basic
