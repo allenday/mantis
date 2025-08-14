@@ -5,7 +5,7 @@ import warnings
 
 from mantis.v1 import mantis_core_pb2 as mantis_dot_v1_dot_mantis__core__pb2
 
-GRPC_GENERATED_VERSION = '1.71.2'
+GRPC_GENERATED_VERSION = '1.74.0'
 GRPC_VERSION = grpc.__version__
 _version_not_supported = False
 
