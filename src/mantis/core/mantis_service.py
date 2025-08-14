@@ -106,7 +106,7 @@ class MantisService:
                 },
             )
 
-            return proto_output
+            return proto_output  # type: ignore[no-any-return]
 
         except Exception as e:
             logger.error(

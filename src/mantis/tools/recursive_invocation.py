@@ -163,7 +163,7 @@ async def invoke_agent_by_name(
     # The agents will adapt their persona based on the query content
     agent_url_map = {
         "John Malone": "http://localhost:9001",
-        "Niccolo Machiavelli": "http://localhost:9001", 
+        "Niccolo Machiavelli": "http://localhost:9001",
         "Steve Jobs": "http://localhost:9001",
         "Peter Drucker": "http://localhost:9001",
         "Chief Of Staff": "http://localhost:9001",
@@ -278,7 +278,7 @@ Please respond as {agent_name} would, drawing on your expertise and perspective.
         )
 
         # Return the complete structured SimulationOutput instead of just text
-        return nested_output
+        return nested_output  # type: ignore[no-any-return]
 
     except Exception as e:
         logger.error(
@@ -346,8 +346,13 @@ async def invoke_multiple_agents(
         for (agent_name, _), response in zip(tasks, responses):
             if isinstance(response, Exception):
                 # FAIL FAST: Re-raise first agent failure instead of graceful degradation
-                logger.error(f"Agent {agent_name} failed - failing entire multi-agent coordination", structured_data={"error": str(response)})
-                raise RuntimeError(f"Multi-agent coordination failed: {agent_name} returned error: {str(response)}") from response
+                logger.error(
+                    f"Agent {agent_name} failed - failing entire multi-agent coordination",
+                    structured_data={"error": str(response)},
+                )
+                raise RuntimeError(
+                    f"Multi-agent coordination failed: {agent_name} returned error: {str(response)}"
+                ) from response
             else:
                 # Type guard: response should be SimulationOutput if not an Exception
                 assert isinstance(response, mantis_core_pb2.SimulationOutput), (
@@ -393,7 +398,9 @@ async def _call_agent_directly_a2a(
     except Exception as validation_error:
         logger.error(f"❌ HOTFIX: Agent {agent_name} at {agent_url} is not available: {validation_error}")
         # FAIL FAST: Raise exception instead of graceful degradation
-        raise RuntimeError(f"Agent {agent_name} is not available at {agent_url}: {str(validation_error)}") from validation_error
+        raise RuntimeError(
+            f"Agent {agent_name} is not available at {agent_url}: {str(validation_error)}"
+        ) from validation_error
 
     try:
         # Format query with context
@@ -414,12 +421,10 @@ Please respond as {agent_name} would, drawing on your expertise and perspective.
                     "message": {
                         "role": "user",
                         "parts": [{"kind": "text", "text": full_query}],
-                        "kind": "message", 
+                        "kind": "message",
                         "messageId": str(uuid.uuid4()),
                     },
-                    "metadata": {
-                        "request_type": "direct_agent_request"
-                    }
+                    "metadata": {"request_type": "direct_agent_request"},
                 },
                 "id": str(uuid.uuid4()),
             }
