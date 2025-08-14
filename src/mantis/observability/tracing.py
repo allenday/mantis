@@ -12,6 +12,7 @@ from functools import wraps
 
 from opentelemetry import trace, baggage  # type: ignore[import-untyped]
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter  # type: ignore[import-untyped]
+
 # Jaeger exporter removed due to Python 3.13 compatibility issues
 # from opentelemetry.exporter.jaeger.thrift import JaegerExporter  # type: ignore[import-untyped]
 from opentelemetry.sdk.trace import TracerProvider  # type: ignore[import-untyped]
@@ -30,14 +31,14 @@ logger = get_structured_logger(__name__)
 class MantisTracer:
     """
     Mantis-specific OpenTelemetry tracer configuration.
-    
+
     Provides distributed tracing across agent coordination workflows with:
     - Cross-service trace propagation
-    - Agent-specific span attributes  
+    - Agent-specific span attributes
     - Integration with existing structured logging
     - Support for multiple exporters (OTLP, Jaeger, Console)
     """
-    
+
     def __init__(self, service_name: str, service_version: str = "1.0.0"):
         """Initialize Mantis tracer with service identification."""
         self.service_name = service_name
@@ -45,38 +46,40 @@ class MantisTracer:
         self.tracer_provider: Optional[TracerProvider] = None
         self.tracer: Optional[trace.Tracer] = None
         self._initialize_tracing()
-    
+
     def _initialize_tracing(self) -> None:
         """Initialize OpenTelemetry tracing with Mantis-specific configuration."""
         try:
             # Create resource with service identification
-            resource = Resource.create({
-                "service.name": self.service_name,
-                "service.version": self.service_version,
-                "service.namespace": "mantis.ai",
-                "deployment.environment": os.environ.get("MANTIS_ENV", "development"),
-            })
-            
+            resource = Resource.create(
+                {
+                    "service.name": self.service_name,
+                    "service.version": self.service_version,
+                    "service.namespace": "mantis.ai",
+                    "deployment.environment": os.environ.get("MANTIS_ENV", "development"),
+                }
+            )
+
             # Create tracer provider
             self.tracer_provider = TracerProvider(resource=resource)
             trace.set_tracer_provider(self.tracer_provider)
-            
+
             # Configure exporters based on environment
             self._configure_exporters()
-            
+
             # Set up trace propagation
             set_global_textmap(B3MultiFormat())
-            
+
             # Get tracer instance
             self.tracer = trace.get_tracer(
                 instrumenting_module_name="mantis.observability.tracing",
                 instrumenting_library_version=self.service_version,
             )
-            
+
             # Auto-instrument HTTP clients for agent-to-agent communication
             AioHttpClientInstrumentor().instrument()
             RequestsInstrumentor().instrument()
-            
+
             logger.info(
                 "OpenTelemetry tracing initialized for Mantis",
                 structured_data={
@@ -85,17 +88,17 @@ class MantisTracer:
                     "environment": os.environ.get("MANTIS_ENV", "development"),
                 },
             )
-            
+
         except Exception as e:
             logger.error(f"Failed to initialize OpenTelemetry tracing: {e}")
             # Continue without tracing rather than failing
             self.tracer = trace.get_tracer("mantis.no-op")
-    
+
     def _configure_exporters(self) -> None:
         """Configure span exporters based on environment variables."""
         if not self.tracer_provider:
             return
-            
+
         # OTLP Exporter (preferred for production)
         otlp_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
         if otlp_endpoint:
@@ -107,46 +110,47 @@ class MantisTracer:
             )
             self.tracer_provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
             logger.info(f"OTLP exporter configured: {otlp_endpoint}")
-        
+
         # Jaeger Exporter removed due to Python 3.13 compatibility issues
         # Use OTLP exporter instead for Jaeger integration via collector
         jaeger_endpoint = os.environ.get("JAEGER_COLLECTOR_ENDPOINT")
         if jaeger_endpoint:
             logger.info("Jaeger exporter disabled - use OTLP exporter with collector instead")
-        
+
         # Console Exporter (development/debugging)
         if os.environ.get("OTEL_CONSOLE_EXPORTER", "false").lower() == "true":
             console_exporter = ConsoleSpanExporter()
             self.tracer_provider.add_span_processor(BatchSpanProcessor(console_exporter))
             logger.info("Console exporter enabled for debugging")
-        
+
         # Default to console if no other exporters configured
         if not any([otlp_endpoint, jaeger_endpoint]):
             console_exporter = ConsoleSpanExporter()
             self.tracer_provider.add_span_processor(BatchSpanProcessor(console_exporter))
             logger.info("No exporters configured, using console exporter as default")
-    
+
     @contextmanager
     def start_span(self, name: str, attributes: Optional[Dict[str, Any]] = None) -> Generator[Any, None, None]:
         """Start a new span with Mantis-specific attributes."""
         if not self.tracer:
             yield None
             return
-            
+
         with self.tracer.start_as_current_span(name) as span:
             # Add default Mantis attributes
             span.set_attribute("mantis.service", self.service_name)
             span.set_attribute("mantis.version", self.service_version)
-            
+
             # Add custom attributes
             if attributes:
                 for key, value in attributes.items():
                     span.set_attribute(key, value)
-            
+
             yield span
-    
+
     def trace_agent_call(self, agent_name: str, operation: str = "process") -> Callable:
         """Decorator for tracing agent method calls."""
+
         def decorator(func: Callable) -> Callable:
             @wraps(func)
             async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -165,12 +169,10 @@ class MantisTracer:
                         return result
                     except Exception as e:
                         if span:
-                            span.set_status(
-                                trace.Status(trace.StatusCode.ERROR, str(e))
-                            )
+                            span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
                             span.record_exception(e)
                         raise
-                        
+
             @wraps(func)
             def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
                 with self.start_span(
@@ -188,21 +190,20 @@ class MantisTracer:
                         return result
                     except Exception as e:
                         if span:
-                            span.set_status(
-                                trace.Status(trace.StatusCode.ERROR, str(e))
-                            )
+                            span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
                             span.record_exception(e)
                         raise
-            
-            return async_wrapper if hasattr(func, '__code__') and func.__code__.co_flags & 0x80 else sync_wrapper
+
+            return async_wrapper if hasattr(func, "__code__") and func.__code__.co_flags & 0x80 else sync_wrapper
+
         return decorator
-    
+
     def add_agent_context(self, agent_id: str, agent_name: str, context_id: str) -> None:
         """Add agent context to current trace baggage."""
         baggage.set_baggage("agent.id", agent_id)
-        baggage.set_baggage("agent.name", agent_name) 
+        baggage.set_baggage("agent.name", agent_name)
         baggage.set_baggage("context.id", context_id)
-    
+
     def get_trace_context(self) -> Dict[str, str]:
         """Get current trace context for propagation to other services."""
         carrier: Dict[str, str] = {}
@@ -218,15 +219,16 @@ _tracers: Dict[str, MantisTracer] = {}
 def get_tracer(service_name: str, service_version: str = "1.0.0") -> MantisTracer:
     """Get or create a tracer for the specified service."""
     tracer_key = f"{service_name}:{service_version}"
-    
+
     if tracer_key not in _tracers:
         _tracers[tracer_key] = MantisTracer(service_name, service_version)
-    
+
     return _tracers[tracer_key]
 
 
 def trace_simulation(context_id: str, execution_strategy: str = "unknown") -> Callable:
     """Decorator for tracing complete simulation workflows."""
+
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -244,9 +246,9 @@ def trace_simulation(context_id: str, execution_strategy: str = "unknown") -> Ca
                     if span:
                         span.set_status(trace.Status(trace.StatusCode.OK))
                         # Add result metadata
-                        if hasattr(result, 'final_state'):
+                        if hasattr(result, "final_state"):
                             span.set_attribute("simulation.final_state", str(result.final_state))
-                        if hasattr(result, 'team_size'):
+                        if hasattr(result, "team_size"):
                             span.set_attribute("simulation.team_size", result.team_size)
                     return result
                 except Exception as e:
@@ -254,7 +256,7 @@ def trace_simulation(context_id: str, execution_strategy: str = "unknown") -> Ca
                         span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
                         span.record_exception(e)
                     raise
-                    
+
         @wraps(func)
         def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
             tracer = get_tracer("mantis.orchestrator")
@@ -276,6 +278,7 @@ def trace_simulation(context_id: str, execution_strategy: str = "unknown") -> Ca
                         span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
                         span.record_exception(e)
                     raise
-        
-        return async_wrapper if hasattr(func, '__code__') and func.__code__.co_flags & 0x80 else sync_wrapper
+
+        return async_wrapper if hasattr(func, "__code__") and func.__code__.co_flags & 0x80 else sync_wrapper
+
     return decorator

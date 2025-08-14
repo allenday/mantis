@@ -137,7 +137,7 @@ class ADKA2AServer:
 
             # Get model from mantis config and translate to ADK format
             from ..config import DEFAULT_MODEL
-            
+
             def translate_model_to_adk(mantis_model: str) -> str:
                 """Translate mantis model format to ADK-compatible model."""
                 # Handle mantis model format: "provider:model-name" or just "model-name"
@@ -159,7 +159,7 @@ class ADKA2AServer:
                 else:
                     # Assume it's already a Google model name
                     return mantis_model
-            
+
             model_config = translate_model_to_adk(DEFAULT_MODEL)
             logger.info(f"Using ADK model: {model_config} (translated from mantis config: {DEFAULT_MODEL})")
 
@@ -371,7 +371,7 @@ work with appropriate agents."""
             # Parse message/send parameters with metadata
             params = MessageSendParams(**request.params)
             message = params.message
-            
+
             # Extract metadata for request typing (following A2A spec)
             request_metadata = request.params.get("metadata", {})
 
@@ -428,7 +428,7 @@ work with appropriate agents."""
                         # Protobuf simulation response (binary)
                         from google.protobuf.json_format import MessageToDict
                         from ..proto.mantis.v1 import mantis_core_pb2
-                        
+
                         # Deserialize protobuf and convert to dict
                         simulation_output = mantis_core_pb2.SimulationOutput()
                         simulation_output.ParseFromString(task.result)
@@ -457,28 +457,32 @@ work with appropriate agents."""
 
             # Extract text content from A2A message
             text_content = message.parts[0].text if message.parts else ""
-            
+
             # Check request type from A2A metadata (proper approach)
             request_type = request_metadata.get("request_type", "unknown")
             proto_type = request_metadata.get("proto_type")
-            
-            logger.info(f"🔍 A2A REQUEST ANALYSIS: request_type={request_type}, proto_type={proto_type}, metadata_keys={list(request_metadata.keys())}")
+
+            logger.info(
+                f"🔍 A2A REQUEST ANALYSIS: request_type={request_type}, proto_type={proto_type}, metadata_keys={list(request_metadata.keys())}"
+            )
 
             # Handle different request types properly
             if request_type == "simulation_request" and proto_type == "mantis.v1.SimulationInput":
                 # Parse structured simulation request from JSON
                 try:
                     import json
+
                     simulation_params = json.loads(text_content)
                     logger.info(f"Parsed simulation input: {list(simulation_params.keys())}")
                 except Exception as e:
                     raise ValueError(f"Failed to parse SimulationInput JSON: {e}")
-                    
+
             elif "JSON-RPC Call: process_simulation_input" in text_content:
                 # Legacy support for old format (from simulation_proper_demo.py)
                 try:
                     import json
                     import re
+
                     params_match = re.search(r"with params:\s*(\{.*\})", text_content, re.DOTALL)
                     if params_match:
                         params_str = params_match.group(1)
@@ -577,38 +581,43 @@ work with appropriate agents."""
                         "text_content_preview": text_content[:100] + "..." if len(text_content) > 100 else text_content,
                     },
                 )
-                
+
                 # Use ADK agent directly for simple agent-to-agent requests
                 from google.genai import types
-                
+
                 # Convert text to ADK message format
-                adk_message = types.Content(
-                    role="user",
-                    parts=[types.Part(text=text_content)]
-                )
-                
+                adk_message = types.Content(role="user", parts=[types.Part(text=text_content)])
+
                 # Generate a session for this request
                 user_id = f"a2a-user-{task_id}"
                 session_id = f"a2a-session-{task_id}"
-                
+
                 # CRITICAL FIX: Create session in session service first (async)
-                session = await self.session_service.create_session(app_name=self.app_name, user_id=user_id, session_id=session_id)
-                logger.info(f"Created ADK session {session_id} for user {user_id} with app {self.app_name} - session object: {session.id}")
-                
+                session = await self.session_service.create_session(
+                    app_name=self.app_name, user_id=user_id, session_id=session_id
+                )
+                logger.info(
+                    f"Created ADK session {session_id} for user {user_id} with app {self.app_name} - session object: {session.id}"
+                )
+
                 # Run ADK agent
                 adk_events = await self._run_adk_agent_async(user_id, session_id, adk_message)
                 response_text = self._extract_response_from_events(adk_events)
-                
-                if not response_text or response_text == "I processed your request but was unable to generate a visible response. Please try again.":
+
+                if (
+                    not response_text
+                    or response_text
+                    == "I processed your request but was unable to generate a visible response. Please try again."
+                ):
                     raise RuntimeError(f"ADK agent failed to generate response for task {task_id}")
-                
+
                 # Create structured response for compatibility
                 response_data = {
                     "text_response": response_text,
                     "direct_agent_response": True,
                     "context_id": f"direct-{task_id}",
                 }
-                
+
                 logger.info(
                     "🎯 A2A SERVER: Direct agent request processed successfully via metadata",
                     structured_data={
@@ -621,15 +630,17 @@ work with appropriate agents."""
             else:
                 # Unknown request type - fail fast
                 logger.error(
-                    "Unknown request type - failing fast", 
+                    "Unknown request type - failing fast",
                     structured_data={
                         "task_id": task_id,
                         "request_type": request_type,
                         "proto_type": proto_type,
                         "available_metadata": list(request_metadata.keys()),
-                    }
+                    },
                 )
-                raise ValueError(f"Unsupported request type '{request_type}' with proto_type '{proto_type}'. Use proper A2A metadata.")
+                raise ValueError(
+                    f"Unsupported request type '{request_type}' with proto_type '{proto_type}'. Use proper A2A metadata."
+                )
 
             # Update task with structured result
             if "response_data" in locals():
@@ -646,7 +657,7 @@ work with appropriate agents."""
                     simulation_output = mantis_core_pb2.SimulationOutput()
                     if response_data.get("simulation_output"):
                         ParseDict(response_data["simulation_output"], simulation_output)
-                    
+
                     # Store serialized protobuf instead of JSON
                     task.result = simulation_output.SerializeToString()
                     logger.info(f"Stored simulation protobuf response for task {task_id}")
@@ -685,7 +696,9 @@ work with appropriate agents."""
         events = []
 
         try:
-            logger.info(f"Starting ADK runner with user_id={user_id}, session_id={session_id}, app_name={self.app_name}")
+            logger.info(
+                f"Starting ADK runner with user_id={user_id}, session_id={session_id}, app_name={self.app_name}"
+            )
             # ADK runner.run_async returns an async generator - collect events properly
             async_events = self.adk_runner.run_async(user_id=user_id, session_id=session_id, new_message=message)
 

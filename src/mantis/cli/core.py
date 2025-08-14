@@ -92,7 +92,7 @@ def validate_model_string(ctx: click.Context, param: click.Parameter, value: Opt
             # Get available models for suggestion
             available_models = manager.get_all_models()
             model_names = [m.full_name for m in available_models]
-            
+
             logger.warning(
                 "Invalid model specified in CLI",
                 structured_data={

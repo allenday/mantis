@@ -59,7 +59,7 @@ def generate(input_path: str, model: Optional[str] = None) -> "MantisAgentCard":
 
     # Enhance with LLM (required)
     enhanced_card = _enhance_with_llm(base_card, content, persona_name, model)
-    
+
     logger.info(
         "Agent card generation completed successfully",
         structured_data={
@@ -67,7 +67,7 @@ def generate(input_path: str, model: Optional[str] = None) -> "MantisAgentCard":
             "extensions_count": len(enhanced_card.agent_card.extensions),
         },
     )
-    
+
     return enhanced_card
 
 

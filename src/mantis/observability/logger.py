@@ -15,6 +15,7 @@ from pydantic import BaseModel
 # OpenTelemetry trace correlation (optional import)
 try:
     from opentelemetry import trace
+
     OTEL_AVAILABLE = True
 except ImportError:
     OTEL_AVAILABLE = False
