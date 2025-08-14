@@ -6,9 +6,13 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional, Dict, Any, TYPE_CHECKING
 
+from ..observability.logger import get_structured_logger
+
 if TYPE_CHECKING:
     from ..proto.mantis.v1.mantis_persona_pb2 import MantisAgentCard
     from ..proto.a2a_pb2 import AgentCard
+
+logger = get_structured_logger(__name__)
 
 
 def generate(input_path: str, model: Optional[str] = None) -> "MantisAgentCard":
@@ -24,19 +28,46 @@ def generate(input_path: str, model: Optional[str] = None) -> "MantisAgentCard":
     """
     from pathlib import Path
 
+    logger.info(
+        "Starting agent card generation",
+        structured_data={
+            "input_path": input_path,
+            "model": model,
+        },
+    )
+
     path = Path(input_path)
     if not path.exists():
+        logger.error("Persona file not found", structured_data={"input_path": input_path})
         raise FileNotFoundError(f"Persona file not found: {input_path}")
 
     # Read markdown content
     content = path.read_text(encoding="utf-8")
     persona_name = path.stem.replace("_", " ").title()
 
+    logger.debug(
+        "Loaded persona content",
+        structured_data={
+            "persona_name": persona_name,
+            "content_length": len(content),
+            "file_size_bytes": path.stat().st_size,
+        },
+    )
+
     # Create base AgentCard
     base_card = _create_base_agent_card(persona_name, content, path)
 
     # Enhance with LLM (required)
     enhanced_card = _enhance_with_llm(base_card, content, persona_name, model)
+
+    logger.info(
+        "Agent card generation completed successfully",
+        structured_data={
+            "persona_name": persona_name,
+            "extensions_count": len(enhanced_card.agent_card.extensions),
+        },
+    )
+
     return enhanced_card
 
 
@@ -146,10 +177,20 @@ def _enhance_with_llm(
         SkillsSummary,
     )
 
+    logger.info(
+        "Starting LLM enhancement of agent card",
+        structured_data={
+            "persona_name": persona_name,
+            "model_spec": model_spec,
+            "content_length": len(content),
+        },
+    )
+
     try:
         extractor = get_structured_extractor(model_spec)
 
         # Extract persona characteristics
+        logger.debug("Extracting persona characteristics via LLM")
         characteristics = extractor.extract_protobuf_sync(
             content=content,
             protobuf_type=PersonaCharacteristics,
@@ -351,12 +392,29 @@ Be specific to the persona. Focus on what makes them uniquely valuable.""",
                 extension.params.Clear()
                 extension.params.update(skills_dict)
 
+        logger.info(
+            "LLM enhancement completed successfully",
+            structured_data={
+                "persona_name": persona_name,
+                "extensions_added": len(mantis_card.agent_card.extensions),
+            },
+        )
+
         return mantis_card
 
     except ImportError:
         # LLM dependencies not available
+        logger.error("LLM dependencies not available for agent card enhancement")
         raise Exception("LLM dependencies not available")
     except Exception as e:
+        logger.error(
+            "LLM enhancement failed",
+            structured_data={
+                "persona_name": persona_name,
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+            },
+        )
         raise Exception(f"LLM enhancement failed: {e}")
 
 
@@ -509,7 +567,7 @@ def get_parsed_extensions(agent_card: "AgentCard") -> Dict[str, Any]:
     parsed_extensions = {}
 
     for extension in agent_card.capabilities.extensions:
-        parsed_data = parse_extension_data(extension.uri, extension.params)
+        parsed_data = parse_extension_data(extension.uri, extension.params)  # type: ignore[arg-type]
         if parsed_data:
             parsed_extensions[extension.uri] = parsed_data
 
@@ -753,3 +811,55 @@ def protobuf_to_json_agent_card(
         return convert_keys(data)  # type: ignore[no-any-return]
     else:
         return data  # type: ignore[no-any-return]
+
+
+def load_leader_agent_card(leader_card_name: str) -> Optional["MantisAgentCard"]:
+    """
+    Load a leader agent card from the agents/cards/ directory structure.
+
+    Args:
+        leader_card_name: Name of the leader card (e.g., "chief_of_staff", "elon_musk")
+
+    Returns:
+        MantisAgentCard if found, None otherwise
+    """
+    import os
+    import json
+
+    try:
+        # Get the project root directory
+        current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # src/mantis
+        project_root = os.path.dirname(os.path.dirname(current_dir))  # mantis project root
+        agents_cards_dir = os.path.join(project_root, "agents", "cards")
+
+        # Search for the leader card recursively
+        leader_card_path = None
+        for root, dirs, files in os.walk(agents_cards_dir):
+            for file in files:
+                if file.endswith(".json"):
+                    # Check if filename matches (with or without .json)
+                    file_stem = file.replace(".json", "")
+                    if file_stem.lower() == leader_card_name.lower() or file_stem.lower().replace(
+                        "_", " "
+                    ) == leader_card_name.lower().replace("_", " "):
+                        leader_card_path = os.path.join(root, file)
+                        break
+            if leader_card_path:
+                break
+
+        if not leader_card_path:
+            print(f"Leader card '{leader_card_name}' not found in {agents_cards_dir}")
+            return None
+
+        # Load and parse the JSON agent card
+        with open(leader_card_path, "r", encoding="utf-8") as f:
+            agent_card_json = json.load(f)
+
+        # Convert to MantisAgentCard
+        mantis_card = load_agent_card_from_json(agent_card_json)
+        print(f"✓ Loaded leader agent card: {mantis_card.agent_card.name} from {leader_card_path}")
+        return mantis_card
+
+    except Exception as e:
+        print(f"Error loading leader card '{leader_card_name}': {e}")
+        return None

@@ -17,7 +17,8 @@ DEFAULT_HOST = "0.0.0.0"
 DEFAULT_TIMEOUT = 300.0
 
 # Registry
-DEFAULT_REGISTRY = "http://localhost:8080"
+# Use environment variable or fallback to localhost
+DEFAULT_REGISTRY = os.environ.get("REGISTRY_URL", "http://localhost:8080")
 DEFAULT_REGISTRY_SIMILARITY_THRESHOLD = 0.1
 
 # Redis configuration

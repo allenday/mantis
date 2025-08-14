@@ -74,7 +74,7 @@ class MantisServiceServicer(mantis_core_pb2_grpc.MantisServiceServicer):
             result = await self.orchestrator.execute_simulation(request)
 
             logger.info(f"Simulation completed successfully for context: {request.context_id}")
-            return result
+            return result  # type: ignore[no-any-return]
 
         except Exception as e:
             logger.error(f"Error in ProcessSimulationInput: {e}", exc_info=True)
@@ -194,7 +194,7 @@ class MantisServiceServicer(mantis_core_pb2_grpc.MantisServiceServicer):
 
             # Return minimal error response
             error_response = mantis_core_pb2.AgentResponse()
-            error_response.text_response = f"Error in narrator processing: {str(e)}"
+            # error_response.text_response = f"Error in narrator processing: {str(e)}"  # text_response not in current protobuf
             return error_response
 
 

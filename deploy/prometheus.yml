@@ -1,0 +1,85 @@
+# Prometheus Configuration for Mantis Multi-Agent System
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+
+  external_labels:
+    system: 'mantis-agent-coordination'
+    cluster: 'local-development'
+
+# Rule files for alerting (optional)
+rule_files:
+  # - "alert_rules.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    metrics_path: /metrics
+    scrape_interval: 30s
+
+  # OpenTelemetry Collector metrics
+  - job_name: 'otel-collector'
+    static_configs:
+      - targets: ['otel-collector:8888']
+    metrics_path: /metrics
+    scrape_interval: 15s
+    
+  # OpenTelemetry Collector exported metrics (from Mantis services)
+  - job_name: 'mantis-metrics'
+    static_configs:
+      - targets: ['otel-collector:8889']
+    metrics_path: /metrics
+    scrape_interval: 15s
+    metric_relabel_configs:
+      # Keep only Mantis-related metrics
+      - source_labels: [__name__]
+        regex: 'mantis_.*|agent_.*|simulation_.*|coordination_.*'
+        action: keep
+
+  # A2A Registry metrics (if exposed)
+  - job_name: 'a2a-registry'
+    static_configs:
+      - targets: ['a2a-registry:8080']
+    metrics_path: /metrics
+    scrape_interval: 30s
+    scrape_timeout: 5s
+    # Only scrape if metrics endpoint exists
+    honor_labels: true
+
+  # Agent Server metrics (if exposed)  
+  - job_name: 'agent-server'
+    static_configs:
+      - targets: ['agent-server:9001']
+    metrics_path: /metrics
+    scrape_interval: 30s
+    scrape_timeout: 5s
+
+  # JSON-RPC Service metrics (if exposed)
+  - job_name: 'jsonrpc-service'
+    static_configs:
+      - targets: ['jsonrpc-service:8081']
+    metrics_path: /metrics  
+    scrape_interval: 30s
+    scrape_timeout: 5s
+
+  # Jaeger metrics
+  - job_name: 'jaeger'
+    static_configs:
+      - targets: ['jaeger:14269']
+    metrics_path: /metrics
+    scrape_interval: 30s
+
+# Remote write configuration (optional - for external storage)
+# remote_write:
+#   - url: "https://your-remote-prometheus-endpoint/api/v1/write"
+#     headers:
+#       Authorization: "Bearer YOUR_TOKEN"
+#     write_relabel_configs:
+#       - source_labels: [__name__]
+#         regex: 'mantis_.*'
+#         action: keep

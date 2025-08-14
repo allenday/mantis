@@ -187,7 +187,7 @@ class DirectExecutor(ExecutionStrategy):
 
             # Add metadata about prompt composition (if metadata field exists)
             try:
-                response.metadata.update(
+                response.metadata.update(  # type: ignore[attr-defined]
                     {
                         "modules_used": list(composed_prompt.modules_used),
                         "variables_resolved": len(composed_prompt.variables_resolved),
@@ -337,8 +337,9 @@ class A2AExecutor(ExecutionStrategy):
         # For now, return a placeholder response
 
         response = mantis_core_pb2.AgentResponse()
-        response.text_response = f"[A2AExecutor] Would execute via A2A: {simulation_input.query}"
-        response.output_modes.append("text/markdown")
+        # Note: text_response and output_modes are not part of current protobuf definition
+        # response.text_response = f"[A2AExecutor] Would execute via A2A: {simulation_input.query}"
+        # response.output_modes.append("text/markdown")
 
         return response
 

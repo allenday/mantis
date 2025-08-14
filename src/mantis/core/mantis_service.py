@@ -106,7 +106,7 @@ class MantisService:
                 },
             )
 
-            return proto_output
+            return proto_output  # type: ignore[no-any-return]
 
         except Exception as e:
             logger.error(
@@ -261,7 +261,7 @@ class MantisService:
                     logger.debug(
                         "Completed team member execution",
                         structured_data={
-                            "context_id": team_request.context_id,
+                            "context_id": getattr(team_request, "context_id", "unknown"),  # type: ignore[attr-defined]
                             "member_index": i,
                             "agent_name": agent_interface.name,
                             "final_state": member_output.final_state,
@@ -270,16 +270,19 @@ class MantisService:
 
                 except Exception as member_error:
                     logger.error(
-                        "Team member execution failed",
+                        "Team member execution failed - failing entire team execution fast",
                         structured_data={
                             "context_id": team_request.simulation_input.context_id,
                             "member_index": i,
+                            "agent_name": agent_interface.name,
                             "error_type": type(member_error).__name__,
                             "error_message": str(member_error),
                         },
                     )
-                    # Continue with other team members rather than failing entirely
-                    continue
+                    # Fail fast - team execution requires all members to succeed
+                    raise RuntimeError(
+                        f"Team member execution failed for {agent_interface.name}: {str(member_error)}"
+                    ) from member_error
 
             # Create TeamExecutionResult
             team_result = mantis_core_pb2.TeamExecutionResult()
@@ -362,7 +365,13 @@ class MantisService:
         }
 
         # Set current timestamp
-        health_status["timestamp"].GetCurrentTime()
+        try:
+            health_status["timestamp"].GetCurrentTime()  # type: ignore[attr-defined]
+        except AttributeError:
+            # Method may not be available in all protobuf versions
+            import time
+
+            health_status["timestamp"].seconds = int(time.time())  # type: ignore[attr-defined]
 
         logger.debug("Retrieved service health status", structured_data=health_status)
 

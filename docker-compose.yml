@@ -15,35 +15,58 @@ services:
     restart: unless-stopped
     networks:
       - agent-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-  # Multiplexed Agent Server - Serves each agent on unique port
+  # Consolidated Agent Server - Serves all agents with serve-all
   agent-server:
     build:
       context: .
       dockerfile: deploy/Dockerfile.agent-server
     container_name: agent-server
     ports:
-      - "9001-9200:9001-9200"  # Port range for up to 200 agents
+      - "9001-9050:9001-9050"  # Optimized port range for reasonable agent count
     environment:
       - PYTHONPATH=/app/src
       - REGISTRY_URL=http://a2a-registry:8080
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}  # Additional model support
     volumes:
-      - ./agents:/app/agents:ro
+      - ./agents-quick:/app/agents-quick:ro
       - ./src:/app/src:ro
     depends_on:
-      - a2a-registry
+      a2a-registry:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - agent-network
     command: [
       "python", "-m", "mantis", "agent", "serve-all",
-      "--agents-dir", "/app/agents",
+      "--agents-dir", "/app/agents-quick",
       "--base-port", "9001",
       "--host", "0.0.0.0",
       "--registry-url", "http://a2a-registry:8080",
       "--verbose"
     ]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9001/health')"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+
+  # Removed jsonrpc-service - use agent-server directly for simulation
 
 networks:
   agent-network:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16
+
+# Development override for individual agent debugging
+# Usage: docker-compose -f docker-compose.improved.yml -f docker-compose.debug.yml up
