@@ -159,15 +159,18 @@ async def invoke_agent_by_name(
         },
     )
 
-    # Map actual Docker agent names to their container ports
-    # These are the agents running in Docker containers with proper registry registration
+    # Simple fix: Just use port 9001 for all agents - they all work
+    # The agents will adapt their persona based on the query content
     agent_url_map = {
-        "John Malone": "http://localhost:9202",
-        "Steve Jobs": "http://localhost:9203",
-        "Peter Drucker": "http://localhost:9204",
-        "Chief Of Staff": "http://localhost:9201",
-        # Note: Other agents like Niccolo Machiavelli, Andrew Carnegie are available via agent-server multiplex
-        # but we'll use direct container agents first for reliability
+        "John Malone": "http://localhost:9001",
+        "Niccolo Machiavelli": "http://localhost:9001", 
+        "Steve Jobs": "http://localhost:9001",
+        "Peter Drucker": "http://localhost:9001",
+        "Chief Of Staff": "http://localhost:9001",
+        "Marcus Aurelius": "http://localhost:9001",
+        "John D Rockefeller": "http://localhost:9001",
+        "Cornelius Vanderbilt": "http://localhost:9001",
+        # All agents use the same port - agent adapts based on query
     }
 
     if agent_name in agent_url_map:
@@ -342,21 +345,9 @@ async def invoke_multiple_agents(
         results: Dict[str, mantis_core_pb2.SimulationOutput] = {}
         for (agent_name, _), response in zip(tasks, responses):
             if isinstance(response, Exception):
-                # Create error SimulationOutput for failed agents
-                error_output = mantis_core_pb2.SimulationOutput()
-                error_output.context_id = f"error-{agent_name}"
-                error_output.final_state = a2a_pb2.TASK_STATE_FAILED
-
-                # Create error message
-                error_msg = a2a_pb2.Message()
-                error_msg.role = a2a_pb2.ROLE_AGENT
-                error_part = a2a_pb2.Part()
-                error_part.text = f"Error: {str(response)}"
-                error_msg.content.append(error_part)
-                error_output.response_message.CopyFrom(error_msg)
-
-                results[agent_name] = error_output
-                logger.error(f"Agent {agent_name} failed", structured_data={"error": str(response)})
+                # FAIL FAST: Re-raise first agent failure instead of graceful degradation
+                logger.error(f"Agent {agent_name} failed - failing entire multi-agent coordination", structured_data={"error": str(response)})
+                raise RuntimeError(f"Multi-agent coordination failed: {agent_name} returned error: {str(response)}") from response
             else:
                 # Type guard: response should be SimulationOutput if not an Exception
                 assert isinstance(response, mantis_core_pb2.SimulationOutput), (
@@ -401,7 +392,8 @@ async def _call_agent_directly_a2a(
         await _validate_agent_availability(agent_url, agent_name)
     except Exception as validation_error:
         logger.error(f"❌ HOTFIX: Agent {agent_name} at {agent_url} is not available: {validation_error}")
-        return _create_unavailable_agent_output(agent_name, str(validation_error))
+        # FAIL FAST: Raise exception instead of graceful degradation
+        raise RuntimeError(f"Agent {agent_name} is not available at {agent_url}: {str(validation_error)}") from validation_error
 
     try:
         # Format query with context
@@ -414,7 +406,7 @@ async def _call_agent_directly_a2a(
 Please respond as {agent_name} would, drawing on your expertise and perspective. Keep your response focused and authentic to your role."""
 
         async with aiohttp.ClientSession() as session:
-            # Step 1: Send message/send
+            # Step 1: Send message/send with proper A2A typing
             message_request = {
                 "jsonrpc": "2.0",
                 "method": "message/send",
@@ -422,8 +414,11 @@ Please respond as {agent_name} would, drawing on your expertise and perspective.
                     "message": {
                         "role": "user",
                         "parts": [{"kind": "text", "text": full_query}],
-                        "kind": "message",
+                        "kind": "message", 
                         "messageId": str(uuid.uuid4()),
+                    },
+                    "metadata": {
+                        "request_type": "direct_agent_request"
                     }
                 },
                 "id": str(uuid.uuid4()),
@@ -503,20 +498,8 @@ Please respond as {agent_name} would, drawing on your expertise and perspective.
 
     except Exception as e:
         logger.error(f"❌ HOTFIX: Direct A2A call to {agent_name} failed: {e}")
-
-        # Return error SimulationOutput
-        error_output = mantis_core_pb2.SimulationOutput()
-        error_output.context_id = f"error-{agent_name.lower().replace(' ', '-')}"
-        error_output.final_state = a2a_pb2.TASK_STATE_FAILED
-
-        error_msg = a2a_pb2.Message()
-        error_msg.role = a2a_pb2.ROLE_AGENT
-        error_part = a2a_pb2.Part()
-        error_part.text = f"Error calling {agent_name}: {str(e)}"
-        error_msg.content.append(error_part)
-        error_output.response_message.CopyFrom(error_msg)
-
-        return error_output
+        # FAIL FAST: Raise exception instead of graceful degradation
+        raise RuntimeError(f"Agent coordination failed for {agent_name} at {agent_url}: {str(e)}") from e
 
 
 async def _validate_agent_availability(agent_url: str, agent_name: str) -> None:
@@ -551,20 +534,7 @@ async def _validate_agent_availability(agent_url: str, agent_name: str) -> None:
         raise Exception(f"Health check failed: {e}")
 
 
-def _create_unavailable_agent_output(agent_name: str, error_msg: str) -> mantis_core_pb2.SimulationOutput:
-    """Create SimulationOutput for unavailable agent."""
-    error_output = mantis_core_pb2.SimulationOutput()
-    error_output.context_id = f"unavailable-{agent_name.lower().replace(' ', '-')}"
-    error_output.final_state = a2a_pb2.TASK_STATE_FAILED
-
-    error_msg_obj = a2a_pb2.Message()
-    error_msg_obj.role = a2a_pb2.ROLE_AGENT
-    error_part = a2a_pb2.Part()
-    error_part.text = f"Agent {agent_name} is not available for coordination: {error_msg}"
-    error_msg_obj.content.append(error_part)
-    error_output.response_message.CopyFrom(error_msg_obj)
-
-    return error_output
+# Removed _create_unavailable_agent_output - replaced with fail-fast behavior
 
 
 async def _validate_agent_exists(agent_name: str) -> None:
