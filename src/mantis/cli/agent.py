@@ -706,7 +706,7 @@ def serve_single(
         # Load AgentCard data
         with open(actual_input, "r") as f:
             agent_data = json.load(f)
-            
+
         logger.debug(
             "Loaded agent card data",
             structured_data={"file": actual_input, "data_keys": list(agent_data.keys())},
@@ -718,7 +718,11 @@ def serve_single(
         agent_card = load_agent_card_from_json(agent_data)
 
         if verbose:
-            agent_name = agent_card.agent_card.name if hasattr(agent_card, "agent_card") else getattr(agent_card, 'name', 'Unknown Agent')  # type: ignore[attr-defined]
+            agent_name = (
+                agent_card.agent_card.name
+                if hasattr(agent_card, "agent_card")
+                else getattr(agent_card, "name", "Unknown Agent")
+            )  # type: ignore[attr-defined]
             console.print(f"[dim]Loaded agent: {agent_name}[/dim]")
 
         # Load custom system prompt if provided (not yet implemented for single serve)
@@ -837,7 +841,7 @@ def serve_single(
             structured_data={"agent_name": base_card.name, "host": host, "port": port},  # type: ignore[union-attr]
         )
         uvicorn.run(app, host=host, port=port)
-        
+
         logger.info("Agent server stopped", structured_data={"agent_name": base_card.name})  # type: ignore[union-attr]
         return 0
 
@@ -965,11 +969,6 @@ def serve_all(
         )
         console.print(f"[yellow]📋 Will register each agent with A2A registry at: {registry_url}[/yellow]")
         console.print("\n[dim]Press Ctrl+C to stop all servers[/dim]")
-
-        # Get model specification
-        from ..config import DEFAULT_MODEL
-
-        model_spec = model or DEFAULT_MODEL
 
         # Create server tasks using native ADK implementation (like serve-single)
 
