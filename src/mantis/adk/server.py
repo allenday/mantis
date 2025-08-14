@@ -1,7 +1,7 @@
 """
 ADK Router FastAPI Server
 
-Wraps the ChiefOfStaffRouter in a FastAPI application with A2A-compatible endpoints.
+Wraps the AgentRouter in a FastAPI application with A2A-compatible endpoints.
 """
 
 from typing import Dict, Any, Union
@@ -9,7 +9,7 @@ from typing import Dict, Any, Union
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 
-from .router import ChiefOfStaffRouter
+from .router import AgentRouter
 from ..proto.mantis.v1 import mantis_core_pb2
 from ..observability.logger import get_structured_logger
 from ..config import DEFAULT_MODEL
@@ -17,12 +17,12 @@ from ..config import DEFAULT_MODEL
 logger = get_structured_logger(__name__)
 
 
-def create_adk_router_app(router: ChiefOfStaffRouter, name: str = "ADK Chief of Staff Router") -> FastAPI:
+def create_adk_router_app(router: AgentRouter, name: str = "ADK Agent Router") -> FastAPI:
     """
     Create FastAPI application for ADK router.
 
     Args:
-        router: ChiefOfStaffRouter instance
+        router: AgentRouter instance
         name: Server name for identification
 
     Returns:

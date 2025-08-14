@@ -11,8 +11,10 @@ from rich.console import Console
 from rich.table import Table
 
 from .core import cli, use_global_options
+from ..observability.logger import get_structured_logger
 
 console = Console()
+logger = get_structured_logger(__name__)
 
 
 def display_registry_table(agents_data: List[Any], verbose: bool = False, show_scores: bool = False) -> None:
@@ -127,6 +129,17 @@ def list(
         if query:
             console.print(f"[dim]Search query: {query} (vector search, threshold: {similarity_threshold})[/dim]")
 
+    logger.info(
+        "Connecting to agent registry",
+        structured_data={
+            "registry_url": registry_url,
+            "query": query,
+            "limit": limit,
+            "similarity_threshold": similarity_threshold,
+            "operation": "search_agents" if query else "list_agents",
+        },
+    )
+
     try:
         import requests
 
@@ -160,6 +173,15 @@ def list(
 
         if "error" in result:
             console.print(f"[red]❌ Registry error: {result['error']['message']}[/red]")
+            logger.error(
+                "Registry operation failed",
+                structured_data={
+                    "registry_url": registry_url,
+                    "error_code": result["error"].get("code"),
+                    "error_message": result["error"]["message"],
+                    "operation": "search_agents" if query else "list_agents",
+                },
+            )
             return 1
 
         # Extract agent data from response
@@ -189,6 +211,16 @@ def list(
             if verbose:
                 console.print(f"[dim]Showing first {limit} agents (use --limit to change)[/dim]")
 
+        logger.info(
+            "Registry operation completed successfully",
+            structured_data={
+                "registry_url": registry_url,
+                "agents_found": len(agents_data),
+                "operation": "search_agents" if query else "list_agents",
+                "format": format,
+            },
+        )
+
         if format == "json":
             # Output raw JSON
             print(json.dumps(agents_data, indent=2))
@@ -200,10 +232,26 @@ def list(
 
     except requests.exceptions.RequestException as e:
         console.print(f"[red]❌ Failed to connect to registry: {e}[/red]")
+        logger.error(
+            "Failed to connect to registry",
+            structured_data={
+                "registry_url": registry_url,
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+            },
+        )
         if verbose:
             console.print_exception()
         return 1
     except Exception as e:
+        logger.error(
+            "Registry inspection failed with unexpected error",
+            structured_data={
+                "registry_url": registry_url,
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+            },
+        )
         console.print(f"[red]❌ Registry inspection failed: {e}[/red]")
         if verbose:
             console.print_exception()

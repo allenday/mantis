@@ -4,7 +4,10 @@ Simplified to only support pydantic-ai integration.
 """
 
 import logging
-from duckduckgo_search import DDGS
+try:
+    from duckduckgo_search import DDGS
+except ImportError:
+    from ddgs import DDGS
 from .base import log_tool_invocation, log_tool_result
 
 logger = logging.getLogger(__name__)

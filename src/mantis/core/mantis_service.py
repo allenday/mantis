@@ -270,16 +270,19 @@ class MantisService:
 
                 except Exception as member_error:
                     logger.error(
-                        "Team member execution failed",
+                        "Team member execution failed - failing entire team execution fast",
                         structured_data={
                             "context_id": team_request.simulation_input.context_id,
                             "member_index": i,
+                            "agent_name": agent_interface.name,
                             "error_type": type(member_error).__name__,
                             "error_message": str(member_error),
                         },
                     )
-                    # Continue with other team members rather than failing entirely
-                    continue
+                    # Fail fast - team execution requires all members to succeed
+                    raise RuntimeError(
+                        f"Team member execution failed for {agent_interface.name}: {str(member_error)}"
+                    ) from member_error
 
             # Create TeamExecutionResult
             team_result = mantis_core_pb2.TeamExecutionResult()

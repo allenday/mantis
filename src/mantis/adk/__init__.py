@@ -5,6 +5,6 @@ This module provides integration between Mantis and Google's Agent Development K
 It implements the ADK router pattern using A2A as the external protocol boundary.
 """
 
-from .router import ChiefOfStaffRouter
+from .router import AgentRouter
 
-__all__ = ["ChiefOfStaffRouter"]
+__all__ = ["AgentRouter"]

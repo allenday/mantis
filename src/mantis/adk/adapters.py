@@ -32,9 +32,9 @@ class ADKFastA2ABridge:
 
     def _initialize_adk_router(self) -> None:
         """Initialize the ADK router with tools."""
-        from .router import ChiefOfStaffRouter
+        from .router import AgentRouter
 
-        self.adk_router = ChiefOfStaffRouter(tools=self.tools)
+        self.adk_router = AgentRouter(tools=self.tools)
         logger.info("ADK router initialized for FastA2A bridge")
 
     async def handle_skill_request(self, skill_name: str, request: str, context: Optional[str] = None) -> str:
@@ -205,7 +205,7 @@ def create_adk_enhanced_skills(base_skills: list, tools: Optional[Dict[str, Any]
     Create ADK-enhanced FastA2A skills from base agent skills.
 
     This function converts regular agent skills to ADK-enhanced skills that
-    use the ChiefOfStaffRouter for orchestration while maintaining FastA2A
+    use the AgentRouter for orchestration while maintaining FastA2A
     compatibility.
 
     Args:
